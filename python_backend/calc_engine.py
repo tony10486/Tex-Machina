@@ -121,9 +121,19 @@ def preprocess_latex_ode(latex_str):
     latex_str = re.sub(r'\\frac\{dy\}\{dx\}', "y'", latex_str)
     return latex_str
 
-def fix_ode_expression(expr, dep_var_name='y', indep_var_name='x'):
+def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     """파싱된 SymPy 수식을 ODE 풀이가 가능한 형태로 변환합니다."""
-    x = sp.Symbol(indep_var_name)
+    # 독립 변수 감지 (기본값 x, t 등 표현식에 있는 것 우선)
+    if indep_var_name is None:
+        # expr의 모든 자유 변수 중 dep_var_name이 아닌 것 중 하나 선택
+        other_symbols = [s for s in expr.free_symbols if not s.name.startswith(dep_var_name)]
+        if other_symbols:
+            x = other_symbols[0]
+        else:
+            x = sp.Symbol('x')
+    else:
+        x = sp.Symbol(indep_var_name)
+        
     y = sp.Function(dep_var_name)(x)
     
     substitutions = {}
@@ -268,6 +278,88 @@ def fix_pde_expression(expr, dep_var_name='u'):
     fixed_expr = expr.subs(substitutions)
     return fixed_expr, u
 
+import numpy as np
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
+
+def op_num_solve(expr, args):
+    """ODE를 수치적으로 풀고 결과를 반환하거나 그래프를 생성합니다."""
+    # 1. 초기 조건 및 범위 파싱
+    ics_dict = {}
+    t_span = [0, 10]
+    show_plot = False
+    
+    if args:
+        for arg in args:
+            if 'ic=' in arg:
+                parts = arg.replace('ic=', '').split(':')
+                if len(parts) == 2:
+                    t0_str = re.search(r'\((.*?)\)', parts[0])
+                    t0 = float(t0_str.group(1)) if t0_str else 0
+                    ics_dict[t0] = float(parts[1])
+            elif 't_span=' in arg:
+                parts = arg.replace('t_span=', '').split(',')
+                if len(parts) == 2:
+                    t_span = [float(parts[0]), float(parts[1])]
+            elif 'plot=true' in arg:
+                show_plot = True
+                    
+    if not ics_dict:
+        return "Error: Numerical solving requires initial conditions (e.g., ic=y(0):1)"
+
+    # 2. ODE 변환
+    fixed_expr, y_func, t_var = fix_ode_expression(expr)
+    
+    # y'에 대해 정리
+    y_prime = y_func.diff(t_var)
+    sol_expr = sp.solve(fixed_expr, y_prime)
+    if not sol_expr:
+        return "Error: Could not solve for y' explicitly."
+    
+    # t_var(독립 변수)를 t로, y_func를 y로 lambdify
+    # 수식 내의 t_var를 실제 t_var Symbol로 치환 (가끔 parse_latex가 x, t 혼용할 때 대비)
+    f_np = sp.lambdify((t_var, y_func), sol_expr[0], 'numpy')
+    def odefun(t, y): return f_np(t, y[0])
+    
+    # 3. 수치적 통합
+    t0_val = list(ics_dict.keys())[0]
+    y0 = [ics_dict[t0_val]]
+    t_eval = np.linspace(t_span[0], t_span[1], 100)
+    
+    try:
+        sol = solve_ivp(odefun, t_span, y0, t_eval=t_eval)
+    except Exception as e:
+        return f"Error in numerical solver: {str(e)}"
+    
+    if show_plot:
+        # 그래프 생성
+        plt.figure(figsize=(6, 4))
+        plt.plot(sol.t, sol.y[0], 'b-', label='y(t)')
+        plt.title(f'Numerical Solution: ${sp.latex(expr)}$')
+        plt.xlabel('t')
+        plt.ylabel('y(t)')
+        plt.grid(True)
+        plt.legend()
+        
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        plt.close()
+        img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        # JSON 형태로 반환하여 웹뷰에서 안전하게 처리
+        return json.dumps({"type": "plot", "data": f"data:image/png;base64,{img_base64}"})
+    else:
+        # 결과값만 반환 (샘플 포인트 5개)
+        indices = [0, 24, 49, 74, 99] # 시작, 1/4, 중간, 3/4, 끝
+        res_parts = []
+        for idx in indices:
+            t_val = round(sol.t[idx], 2)
+            y_val = round(sol.y[0][idx], 4)
+            res_parts.append(f"y({t_val}) \\approx {y_val}")
+        
+        return " \\\\ ".join(res_parts)
+
 def op_pde(expr, args):
     """편미분방정식(PDE) 해 도출 [cite: 33]"""
     dep_var_name = 'u'
@@ -327,6 +419,7 @@ def get_calc_operations():
         
         # 5. 미분방정식 및 변환 [cite: 28, 41]
         "ode": lambda x, v, p: op_ode(x, v),
+        "num_solve": lambda x, v, p: op_num_solve(x, v),
         "pde": lambda x, v, p: op_pde(x, v),
         "laplace": lambda x, v, p: sp.laplace_transform(x.subs(sp.Symbol('e'), sp.E), sp.Symbol(v[0]) if v else sp.Symbol('t'), sp.Symbol('s'), noconds=True),
         # ... (이후 코드 동일)
@@ -433,7 +526,7 @@ def execute_calc(parsed_json_str):
         step_level = next((int(p.split('=')[1]) for p in parallels if p.startswith('step=')), 0)
         
         # 변수 목록 추출
-        if action in ["ode", "pde"]:
+        if action in ["ode", "pde", "num_solve"]:
             # 연립 방정식인 경우 모든 변수 합치기
             all_vars = set()
             parts = re.split(r'[,;]|\r?\n', selection)
