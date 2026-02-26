@@ -1,5 +1,6 @@
 import json
 import sympy as sp
+import re
 
 def handle_matrix(sub_cmds, parallels):
     """
@@ -57,10 +58,106 @@ def handle_matrix(sub_cmds, parallels):
                 actual_data_parts.append(p_strip)
         
         full_content = "/".join(actual_data_parts)
-
-        # 3. 행렬 데이터 구조화
         matrix_data = []
-        if full_content == 'id':
+
+        # 2.5 특별 행렬 생성 (Rotation, etc.)
+        if full_content.startswith('rot'):
+            # rot > 30 (2D) or rot3 > x, 45 (3D)
+            try:
+                if full_content.startswith('rot3'):
+                    params = full_content.replace('rot3', '').strip(' >').split(',')
+                    axis = params[0].strip() if params else 'z'
+                    angle_str = params[1].strip() if len(params) > 1 else 'theta'
+                    
+                    angle = sp.sympify(angle_str)
+                    # 각도가 숫자인 경우 라디안 변환 (도 단위 입력 가정)
+                    if angle.is_number:
+                        angle = angle * sp.pi / 180
+                    
+                    if axis == 'x':
+                        sp_mat = sp.Matrix([
+                            [1, 0, 0],
+                            [0, sp.cos(angle), -sp.sin(angle)],
+                            [0, sp.sin(angle), sp.cos(angle)]
+                        ])
+                    elif axis == 'y':
+                        sp_mat = sp.Matrix([
+                            [sp.cos(angle), 0, sp.sin(angle)],
+                            [0, 1, 0],
+                            [-sp.sin(angle), 0, sp.cos(angle)]
+                        ])
+                    else: # z
+                        sp_mat = sp.Matrix([
+                            [sp.cos(angle), -sp.sin(angle), 0],
+                            [sp.sin(angle), sp.cos(angle), 0],
+                            [0, 0, 1]
+                        ])
+                else: # 2D Rotation
+                    angle_str = full_content.replace('rot', '').strip(' >')
+                    if not angle_str: angle_str = 'theta'
+                    angle = sp.sympify(angle_str)
+                    if angle.is_number:
+                        angle = angle * sp.pi / 180
+                    sp_mat = sp.Matrix([
+                        [sp.cos(angle), -sp.sin(angle)],
+                        [sp.sin(angle), sp.cos(angle)]
+                    ])
+                
+                rows, cols = sp_mat.shape
+                for i in range(rows):
+                    matrix_data.append([sp.latex(sp_mat[i, j]) for j in range(cols)])
+            except Exception as e:
+                return json.dumps({"status": "error", "message": f"Special matrix error: {str(e)}"})
+        
+        elif full_content.startswith('trans'):
+            # trans > i:1,2, j:3,4 (2D linear transformation)
+            try:
+                sp_mat = sp.eye(2)
+                # key:value 형태를 정규식으로 추출 (i, j, k, u, v 등을 키로 허용)
+                params = re.findall(r'([ijkuv]):\s*([^ijkuv/]+)', full_content)
+                for key, val in params:
+                    key = key.strip()
+                    val = val.strip().strip(',') # 끝의 콤마 제거
+                    # 콤마나 공백으로 값 분리
+                    vals = [sp.sympify(v.strip()) for v in re.split(r'[, ]+', val) if v.strip()]
+                    if key == 'i':
+                        if len(vals) > 0: sp_mat[0, 0] = vals[0]
+                        if len(vals) > 1: sp_mat[1, 0] = vals[1]
+                    elif key == 'j':
+                        if len(vals) > 0: sp_mat[0, 1] = vals[0]
+                        if len(vals) > 1: sp_mat[1, 1] = vals[1]
+                
+                rows, cols = sp_mat.shape
+                for i in range(rows):
+                    matrix_data.append([sp.latex(sp_mat[i, j]) for j in range(cols)])
+            except Exception as e:
+                return json.dumps({"status": "error", "message": f"Transformation matrix error: {str(e)}"})
+
+        elif full_content.startswith('cols'):
+            # matrix > cols > 1,2 / 3,4 (1,2 and 3,4 as columns)
+            try:
+                col_data_parts = full_content.replace('cols', '').strip(' >').split('/')
+                col_vectors = []
+                for part in col_data_parts:
+                    if not part.strip(): continue
+                    vals = [v.strip() for v in re.split(r'[, ]+', part.strip()) if v.strip()]
+                    col_vectors.append(vals)
+                
+                if not col_vectors:
+                    raise ValueError("No column data provided")
+                
+                rows = max(len(c) for c in col_vectors)
+                cols = len(col_vectors)
+                matrix_data = [["0"] * cols for _ in range(rows)]
+                
+                for j, col in enumerate(col_vectors):
+                    for i, val in enumerate(col):
+                        matrix_data[i][j] = val
+            except Exception as e:
+                return json.dumps({"status": "error", "message": f"Column matrix error: {str(e)}"})
+
+        # 3. 행렬 데이터 구조화 (기존 로직 유지, if full_content... 가 특별 행렬이 아닐 때만)
+        elif full_content == 'id':
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
         elif full_content:

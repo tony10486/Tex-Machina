@@ -479,25 +479,46 @@ def strip_latex_delimiters(text):
 def preprocess_matrix_latex(latex_str):
     r"""
     \begin{bmatrix} ... \end{bmatrix} 형태를 SymPy Matrix 문자열로 변환합니다.
+    또한 행렬 간 연산 기호(\times, ^T, ^-1 등)를 SymPy 형식으로 변환합니다.
     """
-    matrix_match = re.search(r'\\begin\{(?:b|p|v|V|B)matrix\}(.*?)\\end\{(?:b|p|v|V|B)matrix\}', latex_str, re.DOTALL)
-    if not matrix_match:
-        return latex_str
-        
-    content = matrix_match.group(1).strip()
-    # \\ 를 기준으로 행을 나눔
-    raw_rows = content.split('\\\\')
+    # 1. 행렬 환경을 먼저 Matrix()로 변환
+    def repl(match):
+        content = match.group(1).strip()
+        raw_parts = content.split('\\')
+        matrix_rows = []
+        for part in raw_parts:
+            part = part.strip()
+            part = re.sub(r'^cr|^\[.*?\]', '', part).strip()
+            if not part: continue
+            cells = [c.strip() for c in part.split('&')]
+            if any(cells):
+                matrix_rows.append("[" + ", ".join(cells) + "]")
+        return "Matrix([" + ", ".join(matrix_rows) + "])"
+
+    pattern = r'\\begin\{[bpvVB]matrix\}(.*?)\\end\{[bpvVB]matrix\}'
+    processed = re.sub(pattern, repl, latex_str, flags=re.DOTALL)
     
-    matrix_rows = []
-    for r in raw_rows:
-        r = r.strip()
-        if not r: continue
-        # & 구분자로 셀 분리 및 각 셀의 불필요한 문자 제거
-        cells = [c.strip().replace('\\', '').strip() for c in r.split('&')]
-        if not any(cells): continue # 빈 행 무시
-        matrix_rows.append("[" + ", ".join(cells) + "]")
+    # 2. 행렬 연산자 및 특수 기호 변환
+    if 'Matrix' in processed:
+        # 역행렬: ^{-1} -> .inv()
+        processed = re.sub(r'\^\{\s*-\s*1\s*\}', '.inv()', processed)
+        # 전치행렬: ^T, ^\top, ^\intercal -> .T (백슬래시 유무와 상관없이 매칭)
+        processed = re.sub(r'\^\{\s*\\*(?:T|top|intercal)\s*\}|\^\\*(?:T|top|intercal)', '.T', processed)
+        # 거듭제곱: ^{n} -> **n
+        processed = re.sub(r'\^\{\s*(\d+)\s*\}|\^(\d+)', r'**\1\2', processed)
         
-    return "Matrix([" + ", ".join(matrix_rows) + "])"
+        # 곱셈 및 기타 LaTeX 명령어 처리
+        # 모든 \command 형태에서 \를 제거하고 times/cdot은 *로 교환
+        processed = re.sub(r'\\+(times|cdot)', '*', processed)
+        processed = re.sub(r'\\+([a-zA-Z]+)', r'\1', processed)
+        
+        # 특정 명령어들을 연산자로 변환 (이미 \ 가 제거된 경우 대비)
+        processed = processed.replace('times', '*').replace('cdot', '*')
+        
+        # 중괄호 제거 및 일반화
+        processed = processed.replace('{', '(').replace('}', ')')
+        
+    return processed
 
 def execute_calc(parsed_json_str):
     try:
@@ -539,7 +560,7 @@ def execute_calc(parsed_json_str):
             return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
 
         if action == "ode":
-            # 연립 방정식 분리 (쉼표나 세미콜론)
+            # ... (기존 ODE 로직)
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
             for p in parts:
@@ -577,10 +598,14 @@ def execute_calc(parsed_json_str):
             if 'matrix' in selection:
                 processed_selection = preprocess_matrix_latex(selection)
                 # Matrix([...]) 형태는 parse_latex 대신 sympify 사용
-                if processed_selection.startswith('Matrix'):
-                    expr = sp.sympify(processed_selection, locals={'Matrix': sp.Matrix})
-                else:
-                    expr = parse_latex(processed_selection)
+                # locals에 Matrix와 기본 함수들 추가
+                calc_locals = {
+                    'Matrix': sp.Matrix,
+                    'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
+                    'exp': sp.exp, 'log': sp.log, 'sqrt': sp.sqrt,
+                    'pi': sp.pi, 'theta': sp.Symbol('theta'), 'phi': sp.Symbol('phi')
+                }
+                expr = sp.sympify(processed_selection, locals=calc_locals)
             else:
                 expr = parse_latex(selection)
             
