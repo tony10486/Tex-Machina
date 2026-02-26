@@ -9,7 +9,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:tex-machina.preview"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
@@ -33,6 +35,24 @@
         "title": "Open TeX-Machina CLI"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tex-machina-explorer",
+          "title": "TeX-Machina",
+          "icon": "$(edit)"
+        }
+      ]
+    },
+    "views": {
+      "tex-machina-explorer": [
+        {
+          "type": "webview",
+          "id": "tex-machina.preview",
+          "name": "Math Preview"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "tex-machina.openCLI",

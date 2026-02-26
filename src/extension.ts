@@ -30,44 +30,51 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Python 실행 실패! 컴퓨터에 파이썬이 설치되어 있는지 확인하세요. 상세: ${err.message}`);
     });
 
-    // Python 내부 연산 오류 감지용
+    // Python 연산 및 시스템 오류 감지
     pythonProcess.stderr?.on('data', (data: Buffer) => {
-        vscode.window.showErrorMessage(`Python 연산 에러: ${data.toString()}`);
-    });
-
-    // Python 오류 감지용 (디버깅)
-    pythonProcess.stderr?.on('data', (data: Buffer) => {
-        console.error(`Python Error: ${data.toString()}`);
-        vscode.window.showErrorMessage(`Python 에러: ${data.toString()}`);
+        const errorMsg = data.toString();
+        console.error(`Python Error: ${errorMsg}`);
+        vscode.window.showErrorMessage(`Python 에러: ${errorMsg}`);
     });
 
     // 3. Python 연산 결과를 받았을 때의 처리 (에디터 삽입 & 웹뷰 업데이트)
+    let stdoutBuffer = "";
 	pythonProcess.stdout?.on('data', async (data: Buffer) => {
-		try {
-			const response = JSON.parse(data.toString());
-			if (response.status === 'success' && currentEditor && currentSelection) {
-				const resultLatex = response.latex;
-				let outputText = "";
+        stdoutBuffer += data.toString();
+        let lines = stdoutBuffer.split('\n');
+        stdoutBuffer = lines.pop() || ""; // 마지막 조각은 보관
 
-				//  제안서의 출력 포맷팅 설정 반영
-				if (currentParallels.includes("newline")) {
-					// 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
-					outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
-				} else {
-					// 기본값: 기존 수식 + " = " + 결과물 
-					outputText = `${currentOriginalText} = ${resultLatex}`;
-				}
+        for (const line of lines) {
+            if (!line.trim()) {continue;}
+            console.log(`Python Output: ${line}`);
+            try {
+                const response = JSON.parse(line);
+                if (response.status === 'success' && currentEditor && currentSelection) {
+                    const resultLatex = response.latex;
+                    let outputText = "";
 
-				await currentEditor.edit(editBuilder => {
-					editBuilder.replace(currentSelection!, outputText);
-				});
-				
-				// Webview 업데이트
-				provider.updatePreview(resultLatex, response.vars);
-			}
-		} catch (e) {
-			console.error("결과 삽입 중 오류:", e);
-		}
+                    //  제안서의 출력 포맷팅 설정 반영
+                    if (currentParallels.includes("newline")) {
+                        // 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
+                        outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
+                    } else {
+                        // 기본값: 기존 수식 + " = " + 결과물 
+                        outputText = `${currentOriginalText} = ${resultLatex}`;
+                    }
+
+                    await currentEditor.edit(editBuilder => {
+                        editBuilder.replace(currentSelection!, outputText);
+                    });
+                    
+                    // Webview 업데이트
+                    provider.updatePreview(resultLatex, response.vars);
+                } else if (response.status === 'error') {
+                    vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
+                }
+            } catch (e) {
+                console.error("결과 삽입 중 오류:", e, "원본 데이터:", line);
+            }
+        }
 	});
 
     // 4. Cmd + Shift + ; 단축키 커맨드 등록
