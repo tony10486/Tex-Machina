@@ -42,40 +42,36 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // 3. Python 연산 결과를 받았을 때의 처리 (에디터 삽입 & 웹뷰 업데이트)
-    pythonProcess.stdout?.on('data', async (data: Buffer) => {
-        try {
-            const response = JSON.parse(data.toString());
-            
-            if (response.status === 'success') {
-                const resultLatex = response.latex;
-				// Python 백엔드에서 넘겨주는 변수 리스트(free_symbols 또는 vars)를 안전하게 추출
-				const vars = response.free_symbols || response.vars || []; 
+	pythonProcess.stdout?.on('data', async (data: Buffer) => {
+		try {
+			const response = JSON.parse(data.toString());
+			if (response.status === 'success' && currentEditor && currentSelection) {
+				const resultLatex = response.latex;
+				let outputText = "";
 
-				// 우측 Webview 미리보기 업데이트 (인수 2개 완벽 충족!)
-				provider.updatePreview(resultLatex, vars);
+				//  제안서의 출력 포맷팅 설정 반영
+				if (currentParallels.includes("append")) {
+					// 기존 수식 + " = " + 결과물 
+					outputText = `${currentOriginalText} = ${resultLatex}`;
+				} else if (currentParallels.includes("newline")) {
+					// 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
+					outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
+				} else {
+					// 기본값: replace (기존 수식 덮어쓰기) 
+					outputText = resultLatex;
+				}
 
-                // 에디터에 수식 삽입 로직
-                if (currentEditor && currentSelection) {
-                    let outputText = "";
-                    if (currentParallels.includes("append")) {
-                        outputText = `${currentOriginalText} = ${resultLatex}`;
-                    } else if (currentParallels.includes("newline")) {
-                        outputText = `${currentOriginalText}\n\n$$\n${resultLatex}\n$$`;
-                    } else {
-                        outputText = resultLatex; // 기본값: replace
-                    }
-
-                    await currentEditor.edit(editBuilder => {
-                        editBuilder.replace(currentSelection!, outputText);
-                    });
-                }
-            } else {
-                vscode.window.showErrorMessage(`계산 오류: ${response.message}`);
-            }
-        } catch (e) {
-            console.error("Python JSON 파싱 에러:", e);
-        }
-    });
+				await currentEditor.edit(editBuilder => {
+					editBuilder.replace(currentSelection!, outputText);
+				});
+				
+				// Webview 업데이트
+				provider.updatePreview(resultLatex, response.free_symbols);
+			}
+		} catch (e) {
+			console.error("결과 삽입 중 오류:", e);
+		}
+	});
 
     // 4. Cmd + Shift + ; 단축키 커맨드 등록
     let cliCommand = vscode.commands.registerCommand('tex-machina.openCLI', () => {

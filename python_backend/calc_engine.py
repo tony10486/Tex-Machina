@@ -178,65 +178,45 @@ def get_calc_operations():
 # ==========================================
 
 def execute_calc(parsed_json_str):
-    """Node.js에서 넘겨받은 JSON을 파싱하여 연산을 수행하는 메인 함수"""
     try:
-        request = json.loads(parsed_json_str)
-        selection = request.get('rawSelection', '')
-        sub_cmds = request.get('subCommands', [])
-        parallels = request.get('parallelOptions', [])
+        req = json.loads(parsed_json_str)
+        selection = req.get('rawSelection', '')
+        sub_cmds = req.get('subCommands', [])
+        parallels = req.get('parallelOptions', [])
         
-        # 1. 수식 파싱 (SymPy 공식 내장 파서로 교체!)
+        # 1. 수식 파싱
         expr = parse_latex(selection)
         
-        # 2. 명령어 식별
+        # 2. 명령어 실행
         action = sub_cmds[0] if sub_cmds else "simplify"
-        args = sub_cmds[1:] if len(sub_cmds) > 1 else []
+        ops = get_calc_operations()
         
-        operations = get_calc_operations()
-        
-        if action not in operations:
-            raise ValueError(f"지원하지 않는 calc 연산입니다: {action}")
+        if action not in ops:
+            raise ValueError(f"Unknown action: {action}")
             
-        # 3. 연산 수행
-        func = operations[action]
-        
-        # error_prop은 병치 옵션(parallels) 데이터가 필요하므로 예외 처리
         if action == "error_prop":
-            result_expr = func(expr, args, parallels)
+            result = ops[action](expr, sub_cmds[1:], parallels)
         else:
-            result_expr = func(expr, args)
+            result = ops[action](expr, sub_cmds[1:])
             
-        # 4. 단계별 풀이 (Step-by-Step) 처리 [cite: 43]
-        steps_output = []
-        step_level = 0
-        for p in parallels:
-            if p.startswith('step='):
-                step_level = int(p.split('=')[1]) # 풀이의 상세도 결정 [cite: 43]
-                
-        if step_level > 0:
-            # Level 1: 핵심 공식 적용 및 최종 답안 [cite: 44]
-            # Level 2~3 구현을 위해서는 AST 트리 순회(Walk) 알고리즘 추가 필요 [cite: 45, 145]
-            steps_output.append(r"\begin{aligned}")
-            steps_output.append(f"&\\text{{Apply }} {action} \\text{{ operation...}} \\\\")
-            steps_output.append(f"&= {sp.latex(result_expr)}")
-            steps_output.append(r"\end{aligned}")
-
-        # 5. 결과 반환 (JSON)
-        response = {
-            "status": "success",
-            "latex": sp.latex(result_expr),
-            "action_performed": action,
-            "steps": steps_output if step_level > 0 else None,
-            "free_symbols": [str(s) for s in expr.free_symbols] if hasattr(expr, 'free_symbols') else []
-        }
-        return json.dumps(response)
+        # 3. 단계별 풀이 (Step-by-Step) [cite: 43, 144]
+        steps = []
+        step_level = next((int(p.split('=')[1]) for p in parallels if p.startswith('step=')), 0)
         
-    except Exception as e:
+        if step_level > 0:
+            # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공) [cite: 46, 145]
+            steps.append(r"\text{Step 1: Parse input LaTeX}")
+            steps.append(r"\text{Step 2: Apply " + action + r" operation}")
+            steps.append(sp.latex(result))
+            
         return json.dumps({
-            "status": "error",
-            "message": str(e)
+            "status": "success",
+            "latex": sp.latex(result),
+            "steps": steps if step_level > 0 else None,
+            "vars": [str(s) for s in expr.free_symbols]
         })
-
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)})
 # 단독 실행 테스트용
 if __name__ == "__main__":
     # 테스트 1: 다변수 편미분 [cite: 32]
