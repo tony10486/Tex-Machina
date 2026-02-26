@@ -74,41 +74,52 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
     // 4. Cmd + Shift + ; 단축키 커맨드 등록
-    let cliCommand = vscode.commands.registerCommand('tex-machina.openCLI', () => {
-        currentEditor = vscode.window.activeTextEditor;
-        if (!currentEditor) {
-            vscode.window.showWarningMessage('LaTeX 파일을 먼저 열어주세요.');
-            return;
-        }
+	let cliCommand = vscode.commands.registerCommand('tex-machina.openCLI', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {return;}
 
-        currentSelection = currentEditor.selection;
-        currentOriginalText = currentEditor.document.getText(currentSelection);
+        // 명령 실행 시점의 상태를 캡처 (매우 중요)
+        const selection = editor.selection;
+        const originalText = editor.document.getText(selection);
 
-        if (!currentOriginalText.trim()) {
-            vscode.window.showWarningMessage('계산할 수식을 드래그(선택)해주세요.');
-            return;
-        }
-
-        // Quick Pick (명령줄 창) 띄우기
         const quickPick = vscode.window.createQuickPick();
-        quickPick.placeholder = "명령어를 입력하세요 (예: calc > diff / append)";
+        quickPick.placeholder = "calc > diff / append";
         quickPick.show();
 
-        // 사용자가 엔터를 쳤을 때
-        quickPick.onDidAccept(() => {
+        quickPick.onDidAccept(async () => {
             const userInput = quickPick.value;
             quickPick.hide();
 
-            // 명령어 파싱
-            const parsed = parseUserCommand(userInput, currentOriginalText);
-            currentParallels = parsed.parallelOptions; // 출력 포맷 상태 저장
+            const parsed = parseUserCommand(userInput, originalText);
+            
+            // 일회성 응답 리스너 등록 (익명 함수로 상태 고정)
+            const responseHandler = async (data: Buffer) => {
+                const response = JSON.parse(data.toString());
+                if (response.status === 'success') {
+                    const resultLatex = response.latex;
+                    let outputText = "";
 
-            // Python 백엔드로 JSON 데이터 전송
+                    // 병치 옵션 판별 
+                    if (parsed.parallelOptions.includes("append")) {
+                        outputText = `${originalText} = ${resultLatex}`;
+                    } else if (parsed.parallelOptions.includes("newline")) {
+                        outputText = `${originalText}\n\n\\[\n${resultLatex}\n\\]`;
+                    } else {
+                        outputText = resultLatex;
+                    }
+
+                    await editor.edit(editBuilder => {
+                        editBuilder.replace(selection, outputText);
+                    });
+                }
+                // 리스너 제거 (중복 실행 방지)
+                pythonProcess?.stdout?.removeListener('data', responseHandler);
+            };
+
+            pythonProcess?.stdout?.on('data', responseHandler);
+
             if (pythonProcess?.stdin) {
-                const requestPayload = JSON.stringify(parsed) + '\n';
-                pythonProcess.stdin.write(requestPayload);
-            } else {
-                vscode.window.showErrorMessage('Python 백엔드와 연결되지 않았습니다.');
+                pythonProcess.stdin.write(JSON.stringify(parsed) + '\n');
             }
         });
     });
