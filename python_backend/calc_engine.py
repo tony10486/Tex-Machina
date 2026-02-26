@@ -487,7 +487,9 @@ def execute_calc(parsed_json_str):
         selection = strip_latex_delimiters(selection)
         
         # 1. 수식 전처리 및 액션 결정
-        if main_cmd:
+        if main_cmd == "calc" and sub_cmds:
+            action = sub_cmds.pop(0)
+        elif main_cmd:
             action = main_cmd
         elif sub_cmds:
             action = sub_cmds.pop(0)

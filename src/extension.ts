@@ -88,31 +88,60 @@ export function activate(context: vscode.ExtensionContext) {
         currentOriginalText = editor.document.getText(currentSelection);
 
         const quickPick = vscode.window.createQuickPick();
-        quickPick.placeholder = "명령어를 입력하세요 (예: matrix > b > 3x3)";
+        quickPick.placeholder = "명령어를 입력하세요 (예: calc >, matrix >)";
         
-        // 명령어 목록 정의 [cite: 150]
-        const items: vscode.QuickPickItem[] = [
-            { label: "matrix", description: "행렬 생성 (예: matrix > b > 3x3 > 1,2,3/4,5,6)" },
-            { label: "simplify", description: "수식 단순화" },
-            { label: "solve", description: "방정식 풀이" },
-            { label: "diff", description: "미분 (예: diff > x)" },
-            { label: "int", description: "적분 (예: int > x,0,1)" },
-            { label: "limit", description: "극한 (예: limit > x,0)" },
-            { label: "taylor", description: "테일러 급수 (예: taylor / 5)" },
-            { label: "ode", description: "미분방정식 (예: ode / ic=y(0):1)" },
-            { label: "laplace", description: "라플라스 변환" },
-            { label: "num_solve", description: "수치적 해법 및 그래프 (예: num_solve / plot=true)" }
-        ];
-        
-        quickPick.items = items;
+        // 명령어 라이브러리 정의
+        const commandLib = {
+            root: [
+                { label: "calc >", description: "수학 연산 명령어 (미분, 적분, 단순화 등)" },
+                { label: "matrix >", description: "행렬 생성 및 분석" }
+            ],
+            calc: [
+                { label: "calc > simplify", description: "수식 단순화" },
+                { label: "calc > solve", description: "방정식 풀이" },
+                { label: "calc > diff", description: "미분 (예: calc > diff > x)" },
+                { label: "calc > int", description: "적분 (예: calc > int > x,0,1)" },
+                { label: "calc > limit", description: "극한 (예: calc > limit > x,0)" },
+                { label: "calc > taylor", description: "테일러 급수 (예: calc > taylor / 5)" },
+                { label: "calc > ode", description: "미분방정식 (예: calc > ode / ic=y(0):1)" },
+                { label: "calc > laplace", description: "라플라스 변환" },
+                { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
+            ],
+            matrix: [
+                { label: "matrix > b > 3x3", description: "3x3 대괄호 행렬 (bmatrix)" },
+                { label: "matrix > p > 3x3", description: "3x3 소괄호 행렬 (pmatrix)" },
+                { label: "matrix > v > 3x3", description: "3x3 행렬식 형태 (vmatrix)" },
+                { label: "matrix > b > 3x3 > id", description: "3x3 단위 행렬" },
+                { label: "matrix > b > 3x3 > 1,2,3/4,5,6/7,8,9", description: "데이터 입력 예시" }
+            ]
+        };
+
+        quickPick.items = commandLib.root;
+
+        // 입력값이 변할 때마다 하위 메뉴 노출
+        quickPick.onDidChangeValue(value => {
+            if (value.startsWith("calc >")) {
+                quickPick.items = commandLib.calc;
+            } else if (value.startsWith("matrix >")) {
+                quickPick.items = commandLib.matrix;
+            } else if (value === "") {
+                quickPick.items = commandLib.root;
+            }
+        });
+
         quickPick.show();
 
         // 사용자가 아이템을 선택하거나 엔터를 쳤을 때 처리
         quickPick.onDidAccept(async () => {
-            const userInput = quickPick.selectedItems.length > 0 
-                ? quickPick.selectedItems[0].label 
-                : quickPick.value;
+            const selected = quickPick.selectedItems[0];
+            let userInput = selected ? selected.label : quickPick.value;
             
+            // 만약 끝이 '>'로 끝나면 (그룹 선택), 입력창에 채워주고 계속 진행
+            if (userInput.endsWith(">")) {
+                quickPick.value = userInput + " ";
+                return;
+            }
+
             quickPick.hide();
 
             if (!userInput) {return;}
