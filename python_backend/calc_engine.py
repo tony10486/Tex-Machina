@@ -572,7 +572,11 @@ def execute_calc(parsed_json_str):
                 "status": "success",
                 "latex": plot_res["latex"],
                 "vars": plot_res.get("vars", []),
-                "x3d_data": plot_res.get("x3d_data")
+                "x3d_data": plot_res.get("x3d_data"),
+                "warning": plot_res.get("warning"),
+                "dat_content": plot_res.get("dat_content"),
+                "dat_filename": plot_res.get("dat_filename"),
+                "preview_img": plot_res.get("preview_img")
             })
 
         # 다른 명령어는 선택 영역이 필요함 

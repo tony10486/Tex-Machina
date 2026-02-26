@@ -35,6 +35,20 @@
           ],
           "default": "deg",
           "description": "회전변환 시 각도의 기본 단위. (deg: 도, rad: 라디안)"
+        },
+        "tex-machina.plot.datDensity": {
+          "type": "integer",
+          "default": 500,
+          "minimum": 10,
+          "maximum": 5000,
+          "description": "2D PGFPlots .dat 파일 생성 시 계산할 점의 개수 (밀도)"
+        },
+        "tex-machina.plot.yMultiplier": {
+          "type": "number",
+          "default": 5.0,
+          "minimum": 1.0,
+          "maximum": 50.0,
+          "description": "2D 그래프 데이터(.dat) 생성 시 y축 표시 범위를 넘어서 계산할 배수 (Clipping Limit)"
         }
       }
     },

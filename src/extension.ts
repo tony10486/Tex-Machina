@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { parseUserCommand } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
@@ -9,6 +11,8 @@ let currentSelection: vscode.Selection | undefined;
 let currentOriginalText: string = "";
 let currentMainCommand: string = "";
 let currentParallels: string[] = [];
+let isExportingPdf: boolean = false;
+let pdfTargetDir: string = "";
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
@@ -51,6 +55,36 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const response = JSON.parse(line);
                 if (response.status === 'success' && currentEditor && currentSelection) {
+                    
+                    // PDF 내보내기 모드인 경우 파일 저장 및 Figure 삽입
+                    if (isExportingPdf && response.pdf_content) {
+                        const pdfBuffer = Buffer.from(response.pdf_content, 'base64');
+                        const imagesDir = path.join(pdfTargetDir, 'images');
+                        const pdfPath = path.join(imagesDir, 'plot_3d.pdf');
+
+                        try {
+                            if (!fs.existsSync(imagesDir)) {
+                                fs.mkdirSync(imagesDir, { recursive: true });
+                            }
+                            fs.writeFileSync(pdfPath, pdfBuffer);
+                            
+                            // LaTeX Figure 코드 생성 및 삽입
+                            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/plot_3d.pdf}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                            
+                            await currentEditor.edit(editBuilder => {
+                                // 현재 선택 영역 다음 줄에 삽입
+                                editBuilder.insert(currentSelection!.end, figureCode);
+                            });
+                            
+                            vscode.window.showInformationMessage(`그래프가 PDF로 저장되고 Figure가 삽입되었습니다: images/plot_3d.pdf`);
+                        } catch (err: any) {
+                            vscode.window.showErrorMessage(`PDF 저장 실패: ${err.message}`);
+                        } finally {
+                            isExportingPdf = false;
+                        }
+                        continue;
+                    }
+
                     const resultLatex = response.latex;
                     let outputText = "";
 
@@ -70,8 +104,38 @@ export function activate(context: vscode.ExtensionContext) {
                         editBuilder.replace(currentSelection!, outputText);
                     });
                     
-                    // Webview 업데이트
-                    provider.updatePreview(resultLatex, response.vars, response.analysis, response.x3d_data);
+                    // .dat 파일 생성 요청이 있는 경우 처리
+                    if (response.dat_content) {
+                        const texDir = path.dirname(currentEditor.document.uri.fsPath);
+                        const dataDir = path.join(texDir, 'data');
+                        const datFilename = response.dat_filename || 'plot_data.dat';
+                        const datPath = path.join(dataDir, datFilename);
+
+                        const answer = await vscode.window.showInformationMessage(
+                            `PGFPlots 데이터 파일을 생성하시겠습니까?\n경로: data/${datFilename}`,
+                            "예", "아니오"
+                        );
+
+                        if (answer === "예") {
+                            try {
+                                if (!fs.existsSync(dataDir)) {
+                                    fs.mkdirSync(dataDir, { recursive: true });
+                                }
+                                fs.writeFileSync(datPath, response.dat_content);
+                                vscode.window.showInformationMessage(`데이터 파일이 저장되었습니다: ${datPath}`);
+                            } catch (err: any) {
+                                vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                            }
+                        }
+                    }
+                    
+                    // Webview 업데이트 (preview_img 포함)
+                    provider.updatePreview(resultLatex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
+
+                    // 경고 메시지가 있으면 출력
+                    if (response.warning) {
+                        vscode.window.showWarningMessage(response.warning);
+                    }
                 } else if (response.status === 'error') {
                     vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
                 }
@@ -129,6 +193,7 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "plot > 3d", description: "3D 그래프 (x3dom 및 PDF)" },
                 { label: "plot > complex", description: "복소 평면 Domain Coloring" },
                 { label: "plot > 2d > -5,5", description: "범위 지정 (예: -5에서 5까지)" },
+                { label: "plot > 2d / ymin=-10, ymax=10", description: "y축 범위 지정" },
                 { label: "plot > 3d / export", description: "3D 그래프 PDF 내보내기" }
             ]
         };
@@ -222,12 +287,16 @@ export function activate(context: vscode.ExtensionContext) {
                 target: config.get('laplace.targetVariable', 's')
             };
             const angleUnit = config.get('angleUnit', 'deg');
+            const datDensity = config.get('plot.datDensity', 500);
+            const yMultiplier = config.get('plot.yMultiplier', 5.0);
 
             const payload = {
                 ...parsed,
                 config: {
                     laplace: laplaceConfig,
-                    angleUnit: angleUnit
+                    angleUnit: angleUnit,
+                    datDensity: datDensity,
+                    yMultiplier: yMultiplier
                 }
             };
 
@@ -240,6 +309,64 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(cliCommand);
+
+    // 5. 웹뷰에서 보낸 재랜더링(해상도 조절) 요청 처리 커맨드
+    let rerenderCommand = vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string) => {
+        if (!pythonProcess?.stdin) {return;}
+        
+        // plot > 3d / samples=... 형태의 가상 명령어를 파싱하여 전달
+        const userInput = `plot > 3d / samples=${samples}`;
+        const parsed = parseUserCommand(userInput, exprLatex);
+        
+        currentMainCommand = parsed.mainCommand;
+        currentParallels = parsed.parallelOptions;
+
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        const payload = {
+            ...parsed,
+            config: {
+                angleUnit: config.get('angleUnit', 'deg'),
+                datDensity: config.get('plot.datDensity', 500)
+            }
+        };
+
+        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+    });
+
+    context.subscriptions.push(rerenderCommand);
+
+    // 6. 3D 그래프 PDF 내보내기 커맨드
+    let exportCommand = vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string) => {
+        if (!pythonProcess?.stdin || !currentEditor) {return;}
+
+        const answer = await vscode.window.showInformationMessage(
+            "현재 3D 그래프를 PDF로 저장하고 Figure를 삽입하시겠습니까?",
+            "예 (images 폴더 생성 및 저장)", "아니오"
+        );
+
+        if (answer !== "예 (images 폴더 생성 및 저장)") {return;}
+
+        // 내보내기 상태 설정
+        isExportingPdf = true;
+        pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
+
+        // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
+        const userInput = `plot > 3d / samples=${samples}, export, color=${color}`;
+        const parsed = parseUserCommand(userInput, exprLatex);
+        
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        const payload = {
+            ...parsed,
+            config: {
+                angleUnit: config.get('angleUnit', 'deg'),
+                datDensity: config.get('plot.datDensity', 500)
+            }
+        };
+
+        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+    });
+
+    context.subscriptions.push(exportCommand);
 }
 
 export function deactivate() {
