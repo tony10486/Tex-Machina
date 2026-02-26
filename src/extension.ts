@@ -152,41 +152,45 @@ export function activate(context: vscode.ExtensionContext) {
             // 행렬 명령어일 경우 빈 칸 확인 팝업 (Interactive Popup)
             if (userInput.includes("matrix")) {
                 const parts = userInput.split(">").map(p => p.trim());
-                let lastPart = parts[parts.length - 1];
+                const lastPart = parts[parts.length - 1];
                 
-                // 만약 / 가 포함되어 있다면 (병렬 옵션), 옵션 앞부분만 추출하여 검사
-                let commandPart = lastPart;
-                if (lastPart.includes("/")) {
-                    commandPart = lastPart.split("/")[0].trim();
-                }
+                // 이미 fill_dots가 포함되어 있다면 묻지 않음
+                if (!lastPart.includes("fill_dots")) {
+                    let shouldAsk = false;
 
-                let shouldAsk = false;
-
-                // 1. 크기만 지정하고 데이터를 안 적은 경우 (예: matrix > 3x3)
-                if (parts.length <= 3 && /^\d+x\d+$/.test(commandPart)) {
-                    // 단, 이미 fill_dots가 있으면 묻지 않음
-                    if (!lastPart.includes("fill_dots")) {
+                    // 1. 크기만 지정하고 데이터를 안 적은 경우 (예: matrix > 3x3)
+                    // 첫 번째 세그먼트(데이터 시작부분)가 NxM 형태인지 확인
+                    const firstSegment = lastPart.split("/")[0].trim();
+                    if (parts.length <= 3 && /^\d+x\d+$/.test(firstSegment)) {
                         shouldAsk = true;
                     }
-                }
-                // 2. 명시적으로 빈 칸이 있는 경우 (예: 1,,3 또는 1//3 또는 마지막이 구분자)
-                else if (commandPart.includes(",,") || commandPart.includes("//") || 
-                         commandPart.endsWith(",") || commandPart.endsWith("/") ||
-                         commandPart.split(/[/,;]/).some(cell => cell.trim() === "")) {
-                    shouldAsk = true;
-                }
-                // 3. 데이터 없이 스타일만 지정한 경우 (예: matrix > b)
-                else if (parts.length <= 2 && !commandPart.includes(",") && !commandPart.includes("/") && !commandPart.includes(" ") && !commandPart.includes("x")) {
-                    shouldAsk = true;
-                }
+                    
+                    // 2. 명시적으로 빈 칸이 있는 경우 (데이터 입력 중)
+                    // / / (빈 행) 또는 ,, (빈 열) 또는 마지막이 구분자로 끝나는 경우
+                    if (!shouldAsk) {
+                        const cells = lastPart.split(/[/,;]/).map(c => c.trim());
+                        const knownOptions = ["analyze", "fill_dots", "newline"];
+                        
+                        // 구분자 사이가 비어있거나, 마지막이 구분자인 경우
+                        if (cells.some(c => c === "" && !knownOptions.includes(c)) || 
+                            lastPart.endsWith(",") || lastPart.endsWith("/") || lastPart.endsWith(";")) {
+                            shouldAsk = true;
+                        }
+                    }
 
-                if (shouldAsk) {
-                    const answer = await vscode.window.showInformationMessage(
-                        "행렬에 빈 공간이 감지되었습니다. 스마트 점(Dots)으로 자동 채우시겠습니까?",
-                        "예 (스마트 점)", "아니오 (0으로 채움)"
-                    );
-                    if (answer === "예 (스마트 점)") {
-                        userInput += " / fill_dots";
+                    // 3. 데이터 없이 스타일만 지정한 경우 (예: matrix > b)
+                    if (!shouldAsk && parts.length <= 2 && !lastPart.includes(",") && !lastPart.includes("/") && !lastPart.includes("x")) {
+                        shouldAsk = true;
+                    }
+
+                    if (shouldAsk) {
+                        const answer = await vscode.window.showInformationMessage(
+                            "행렬에 빈 공간이 감지되었습니다. 스마트 점(Dots)으로 자동 채우시겠습니까?",
+                            "예 (스마트 점)", "아니오 (0으로 채움)"
+                        );
+                        if (answer === "예 (스마트 점)") {
+                            userInput += " / fill_dots";
+                        }
                     }
                 }
             }

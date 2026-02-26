@@ -30,7 +30,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
             continue;
         }
         if (char === '/' && isParallelSection) {
-            if (buffer.trim()) {parallels.push(buffer.trim());}
+            parallels.push(buffer.trim());
             buffer = "";
             continue;
         }
@@ -48,7 +48,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     }
 
     pushToCmds();
-    if (isParallelSection && buffer.trim()) {parallels.push(buffer.trim());}
+    if (isParallelSection) {parallels.push(buffer.trim());}
 
     return { mainCommand: mainCmd, subCommands: subCmds, parallelOptions: parallels, rawSelection: selection };
 }
