@@ -91,8 +91,22 @@ export function activate(context: vscode.ExtensionContext) {
             const parsed = parseUserCommand(userInput, currentOriginalText);
             currentParallels = parsed.parallelOptions;
 
+            // 라플라스 설정 가져오기
+            const config = vscode.workspace.getConfiguration('tex-machina');
+            const laplaceConfig = {
+                source: config.get('laplace.sourceVariable', 't'),
+                target: config.get('laplace.targetVariable', 's')
+            };
+
+            const payload = {
+                ...parsed,
+                config: {
+                    laplace: laplaceConfig
+                }
+            };
+
             if (pythonProcess?.stdin) {
-                pythonProcess.stdin.write(JSON.stringify(parsed) + '\n');
+                pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
             }
         });
     });

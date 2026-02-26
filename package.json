@@ -12,6 +12,21 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "TeX-Machina",
+      "properties": {
+        "tex-machina.laplace.sourceVariable": {
+          "type": "string",
+          "default": "t",
+          "description": "라플라스 변환의 기본 소스 변수 (예: t)"
+        },
+        "tex-machina.laplace.targetVariable": {
+          "type": "string",
+          "default": "s",
+          "description": "라플라스 변환의 결과 대상 변수 (예: s)"
+        }
+      }
+    },
     "commands": [
       {
         "command": "tex-machina.openCLI",
