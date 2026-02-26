@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
                     // 2. 명시적으로 빈 칸이 있는 경우 (데이터 입력 중)
                     // / / (빈 행) 또는 ,, (빈 열) 또는 마지막이 구분자로 끝나는 경우
                     if (!shouldAsk) {
-                        const cells = lastPart.split(/[/,;]/).map(c => c.trim());
+                        const cells = lastPart.split(/[\/,;]/).map(c => c.trim());
                         const knownOptions = ["analyze", "fill_dots", "newline"];
                         
                         // 구분자 사이가 비어있거나, 마지막이 구분자인 경우
