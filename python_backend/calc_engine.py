@@ -114,7 +114,7 @@ def op_limit(expr, args):
     return sp.limit(expr, var, target, dir=direction)
 
 def preprocess_latex_ode(latex_str):
-    """\\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
+    r"""\\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
     # \\frac{d^2y}{dx^2} -> y''
     latex_str = re.sub(r'\\frac\{d\^(\d+)y\}\{dx\^\1\}', lambda m: 'y' + "'" * int(m.group(1)), latex_str)
     # \\frac{dy}{dx} -> y'
@@ -476,6 +476,29 @@ def strip_latex_delimiters(text):
         return text[1:-1].strip()
     return text
 
+def preprocess_matrix_latex(latex_str):
+    r"""
+    \begin{bmatrix} ... \end{bmatrix} 형태를 SymPy Matrix 문자열로 변환합니다.
+    """
+    matrix_match = re.search(r'\\begin\{(?:b|p|v|V|B)matrix\}(.*?)\\end\{(?:b|p|v|V|B)matrix\}', latex_str, re.DOTALL)
+    if not matrix_match:
+        return latex_str
+        
+    content = matrix_match.group(1).strip()
+    # \\ 를 기준으로 행을 나눔
+    raw_rows = content.split('\\\\')
+    
+    matrix_rows = []
+    for r in raw_rows:
+        r = r.strip()
+        if not r: continue
+        # & 구분자로 셀 분리 및 각 셀의 불필요한 문자 제거
+        cells = [c.strip().replace('\\', '').strip() for c in r.split('&')]
+        if not any(cells): continue # 빈 행 무시
+        matrix_rows.append("[" + ", ".join(cells) + "]")
+        
+    return "Matrix([" + ", ".join(matrix_rows) + "])"
+
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
@@ -550,7 +573,16 @@ def execute_calc(parsed_json_str):
                 result = op_ode(exprs[0], sub_cmds)
         else:
             # 2. 일반 수식 파싱
-            expr = parse_latex(selection)
+            # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
+            if 'matrix' in selection:
+                processed_selection = preprocess_matrix_latex(selection)
+                # Matrix([...]) 형태는 parse_latex 대신 sympify 사용
+                if processed_selection.startswith('Matrix'):
+                    expr = sp.sympify(processed_selection, locals={'Matrix': sp.Matrix})
+                else:
+                    expr = parse_latex(processed_selection)
+            else:
+                expr = parse_latex(selection)
             
             # 3. 명령어 실행
             ops = get_calc_operations()
