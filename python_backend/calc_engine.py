@@ -389,6 +389,8 @@ def op_laplace(expr, args, config):
     calc_expr = expr.subs(sp.Symbol('e'), sp.E)
     return sp.laplace_transform(calc_expr, source_sym, target_sym, noconds=True)
 
+from matrix import handle_matrix
+
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
 # ==========================================
@@ -396,6 +398,9 @@ def op_laplace(expr, args, config):
 def get_calc_operations():
     """제안서에 명시된 모든 연산자를 매핑하는 딕셔너리 """
     return {
+        # 0. 행렬 생성 및 분석
+        "matrix": lambda x, v, p, c: handle_matrix(v, p),
+
         # 1. 기본 대수 및 해석 
         "simplify": lambda x, v, p, c: sp.simplify(x),
         "expand": lambda x, v, p, c: sp.expand(x),
@@ -474,19 +479,36 @@ def strip_latex_delimiters(text):
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
-        selection = req.get('rawSelection', '').strip()
-        selection = strip_latex_delimiters(selection)
-        
-        if not selection:
-            return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
-            
         sub_cmds = req.get('subCommands', [])
         parallels = req.get('parallelOptions', [])
         config = req.get('config', {})
+        selection = req.get('rawSelection', '').strip()
+        selection = strip_latex_delimiters(selection)
         
         # 1. 수식 전처리 (ODE의 경우)
         action = sub_cmds[0] if sub_cmds else "simplify"
+        
+        if action == "matrix":
+            # 행렬 명령은 수식 파싱 없이 바로 처리 (matrix.py 내부에서 파싱)
+            matrix_res_json = handle_matrix(sub_cmds[1:], parallels)
+            matrix_res = json.loads(matrix_res_json)
+            
+            if matrix_res["status"] == "error":
+                return matrix_res_json
+                
+            return json.dumps({
+                "status": "success",
+                "latex": matrix_res["latex"],
+                "analysis": matrix_res.get("analysis"),
+                "vars": []
+            })
+
+        # 다른 명령어는 선택 영역이 필요함 
+        if not selection:
+            return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
+
         if action == "ode":
+            # ... (rest of the code unchanged)
             # 연립 방정식 분리 (쉼표나 세미콜론)
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []

@@ -67,7 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
                     });
                     
                     // Webview 업데이트
-                    provider.updatePreview(resultLatex, response.vars);
+                    provider.updatePreview(resultLatex, response.vars, response.analysis);
                 } else if (response.status === 'error') {
                     vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
                 }
@@ -88,12 +88,34 @@ export function activate(context: vscode.ExtensionContext) {
         currentOriginalText = editor.document.getText(currentSelection);
 
         const quickPick = vscode.window.createQuickPick();
-        quickPick.placeholder = "calc > diff";
+        quickPick.placeholder = "명령어를 입력하세요 (예: matrix > b > 3x3)";
+        
+        // 명령어 목록 정의 [cite: 150]
+        const items: vscode.QuickPickItem[] = [
+            { label: "matrix", description: "행렬 생성 (예: matrix > b > 3x3 > 1,2,3/4,5,6)" },
+            { label: "simplify", description: "수식 단순화" },
+            { label: "solve", description: "방정식 풀이" },
+            { label: "diff", description: "미분 (예: diff > x)" },
+            { label: "int", description: "적분 (예: int > x,0,1)" },
+            { label: "limit", description: "극한 (예: limit > x,0)" },
+            { label: "taylor", description: "테일러 급수 (예: taylor / 5)" },
+            { label: "ode", description: "미분방정식 (예: ode / ic=y(0):1)" },
+            { label: "laplace", description: "라플라스 변환" },
+            { label: "num_solve", description: "수치적 해법 및 그래프 (예: num_solve / plot=true)" }
+        ];
+        
+        quickPick.items = items;
         quickPick.show();
 
+        // 사용자가 아이템을 선택하거나 엔터를 쳤을 때 처리
         quickPick.onDidAccept(async () => {
-            const userInput = quickPick.value;
+            const userInput = quickPick.selectedItems.length > 0 
+                ? quickPick.selectedItems[0].label 
+                : quickPick.value;
+            
             quickPick.hide();
+
+            if (!userInput) return;
 
             const parsed = parseUserCommand(userInput, currentOriginalText);
             currentParallels = parsed.parallelOptions;
@@ -116,6 +138,8 @@ export function activate(context: vscode.ExtensionContext) {
                 pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
             }
         });
+
+        // 텍스트가 바뀔 때 필터링은 QuickPick이 자동으로 수행함
     });
 
     context.subscriptions.push(cliCommand);

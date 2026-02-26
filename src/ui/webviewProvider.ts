@@ -24,17 +24,19 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
     private _lastLatex: string = "";
     private _lastVars: string[] = [];
+    private _lastAnalysis: any = null;
 
-    public updatePreview(latex: string, vars: string[]) {
+    public updatePreview(latex: string, vars: string[], analysis?: any) {
         this._lastLatex = latex;
         this._lastVars = vars;
+        this._lastAnalysis = analysis;
         
         if (!this._view) {
             // 뷰가 아직 로드되지 않았으면 명령어로 강제 노출 시도 가능
             vscode.commands.executeCommand('tex-machina.preview.focus');
         }
         
-        this._view?.webview.postMessage({ type: 'update', latex, vars });
+        this._view?.webview.postMessage({ type: 'update', latex, vars, analysis });
         if (this._view) {
             this._view.show?.(true); // 뷰 강제 표시
         }
@@ -54,21 +56,28 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 #img-container img { max-width: 100%; height: auto; margin-top: 10px; border: 1px solid #ccc; }
                 body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; }
                 #out { margin-bottom: 10px; font-size: 1.1em; }
+                .analysis-container { margin-top: 20px; border-top: 1px solid var(--vscode-panel-border); padding-top: 10px; }
+                .analysis-item { margin-bottom: 8px; }
+                .analysis-key { font-weight: bold; font-size: 0.9em; opacity: 0.8; text-transform: uppercase; }
             </style>
         </head>
         <body>
             <div id="out">계산 대기 중...</div>
             <div id="img-container"></div>
             <div id="sliders"></div>
+            <div id="analysis" class="analysis-container" style="display:none;"></div>
             <script>
                 const vscode = acquireVsCodeApi();
                 window.addEventListener('message', e => {
-                    const { type, latex, vars } = e.data;
+                    const { type, latex, vars, analysis } = e.data;
                     if (type === 'update') {
                         const out = document.getElementById('out');
                         const imgContainer = document.getElementById('img-container');
+                        const analysisDiv = document.getElementById('analysis');
                         
                         imgContainer.innerHTML = '';
+                        analysisDiv.innerHTML = '';
+                        analysisDiv.style.display = 'none';
 
                         if (latex.trim().startsWith('{')) {
                             try {
@@ -82,6 +91,18 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         }
 
                         out.innerHTML = '\\\\[' + latex + '\\\\]';
+
+                        if (analysis) {
+                            analysisDiv.style.display = 'block';
+                            analysisDiv.innerHTML = '<b>Matrix Analysis:</b>';
+                            for (const [key, value] of Object.entries(analysis)) {
+                                const item = document.createElement('div');
+                                item.className = 'analysis-item';
+                                item.innerHTML = '<span class="analysis-key">' + key + ':</span> \\\\[ ' + value + ' \\\\]';
+                                analysisDiv.appendChild(item);
+                            }
+                        }
+
                         if (window.MathJax && window.MathJax.typesetPromise) {
                             window.MathJax.typesetPromise();
                         }
