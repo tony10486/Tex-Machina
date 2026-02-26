@@ -108,12 +108,14 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
             ],
             matrix: [
-                { label: "matrix > b > 2x2", description: "2x2 대괄호 행렬" },
-                { label: "matrix > b > 3x3", description: "3x3 대괄호 행렬" },
-                { label: "matrix > b > 4x4", description: "4x4 대괄호 행렬" },
-                { label: "matrix > b > [NxM]", description: "임의 크기 지정 (예: matrix > b > 2x4)" },
-                { label: "matrix > b > id", description: "기본 3x3 단위 행렬" },
-                { label: "matrix > p > 1,2/3,4", description: "데이터 기반 자동 크기 추론 (2x2)" }
+                { label: "matrix > p >", description: "소괄호 (pmatrix) - ( )" },
+                { label: "matrix > b >", description: "대괄호 (bmatrix) - [ ] (기본값)" },
+                { label: "matrix > v >", description: "수직바 (vmatrix) - | | (행렬식)" },
+				{ label: "matrix > V >", description: "이중 수직바 (Vmatrix) - || ||" },
+		        { label: "matrix > B >", description: "중괄호 (Bmatrix) - { }" },
+                { label: "matrix > [데이터]", description: "데이터 바로 입력 (예: matrix > 1,2/3,4)" },
+                { label: "matrix > ... / analyze", description: "행렬 분석 (행렬식, 역행렬, RREF 결과 표시)" },
+                { label: "matrix > ... / aug=", description: "첨가 행렬 (예: / aug=2 -> 2열 뒤에 수직선 추가)" }
             ]
         };
 

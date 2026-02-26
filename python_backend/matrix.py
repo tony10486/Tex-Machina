@@ -49,24 +49,41 @@ def handle_matrix(sub_cmds, parallels):
             # 단위 행렬 자동 생성 
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
-        elif '/' in content_str or ',' in content_str:
-            # 1,2,3/4,5,6 포맷 파싱 
-            raw_rows = content_str.split('/')
+        elif content_str:
+            # 데이터 파싱 로직 개선 (행 구분: / 또는 ;  열 구분: , 또는 공백)
+            row_sep = ';' if ';' in content_str else '/'
+            raw_rows = content_str.split(row_sep)
             
+            parsed_data = []
+            for r in raw_rows:
+                col_sep = ',' if ',' in r else None # 공백 분할은 split()으로 처리
+                if col_sep:
+                    parsed_data.append([c.strip() for c in r.split(col_sep)])
+                else:
+                    parsed_data.append(r.split())
+
             # 크기가 명시되지 않았다면 데이터로부터 추론
             if not size_specified:
-                rows = len(raw_rows)
-                cols = max(len(r.split(',')) for r in raw_rows)
+                rows = len(parsed_data)
+                cols = max(len(r) for r in parsed_data) if parsed_data else 1
+                if rows == 1 and len(parsed_data[0]) == 1 and not (row_sep in content_str or ',' in content_str or ' ' in content_str.strip()):
+                    # 만약 구분자 없이 숫자 하나만 왔다면 (예: matrix > 5)
+                    # 사용자 의도에 따라 1x1로 볼지 3x3의 첫 원소로 볼지 결정. 
+                    # 여기서는 1x1로 추론함.
+                    pass 
 
             for i in range(rows):
-                if i < len(raw_rows):
-                    raw_cols = raw_rows[i].split(',')
-                    row_data = [raw_cols[j].strip() if j < len(raw_cols) else "0" for j in range(cols)]
-                    matrix_data.append(row_data)
+                row_data = []
+                if i < len(parsed_data):
+                    current_row = parsed_data[i]
+                    for j in range(cols):
+                        val = current_row[j] if j < len(current_row) else "0"
+                        row_data.append(val)
                 else:
-                    matrix_data.append(["0"] * cols)
+                    row_data = ["0"] * cols
+                matrix_data.append(row_data)
         else:
-            # 빈 행렬은 0으로 채움
+            # 데이터가 없는 경우 기본 크기로 0 채움
             matrix_data = [["0"] * cols for _ in range(rows)]
 
         # 4. 스마트 생략 기호 인식 (...) 
