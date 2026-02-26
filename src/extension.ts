@@ -50,10 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 				let outputText = "";
 
 				//  제안서의 출력 포맷팅 설정 반영
-				if (currentParallels.includes("append")) {
-					// 기존 수식 + " = " + 결과물 
-					outputText = `${currentOriginalText} = ${resultLatex}`;
-				} else if (currentParallels.includes("newline")) {
+				if (currentParallels.includes("newline")) {
 					// 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
 					outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
 				} else {
@@ -78,45 +75,21 @@ export function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {return;}
 
-        // 명령 실행 시점의 상태를 캡처 (매우 중요)
-        const selection = editor.selection;
-        const originalText = editor.document.getText(selection);
+        // 명령 실행 시점의 상태를 전역 변수에 저장 (비동기 응답 처리용)
+        currentEditor = editor;
+        currentSelection = editor.selection;
+        currentOriginalText = editor.document.getText(currentSelection);
 
         const quickPick = vscode.window.createQuickPick();
-        quickPick.placeholder = "calc > diff / append";
+        quickPick.placeholder = "calc > diff";
         quickPick.show();
 
         quickPick.onDidAccept(async () => {
             const userInput = quickPick.value;
             quickPick.hide();
 
-            const parsed = parseUserCommand(userInput, originalText);
-            
-            // 일회성 응답 리스너 등록 (익명 함수로 상태 고정)
-            const responseHandler = async (data: Buffer) => {
-                const response = JSON.parse(data.toString());
-                if (response.status === 'success') {
-                    const resultLatex = response.latex;
-                    let outputText = "";
-
-                    // 병치 옵션 판별 
-                    if (parsed.parallelOptions.includes("append")) {
-                        outputText = `${originalText} = ${resultLatex}`;
-                    } else if (parsed.parallelOptions.includes("newline")) {
-                        outputText = `${originalText}\n\n\\[\n${resultLatex}\n\\]`;
-                    } else {
-                        outputText = resultLatex;
-                    }
-
-                    await editor.edit(editBuilder => {
-                        editBuilder.replace(selection, outputText);
-                    });
-                }
-                // 리스너 제거 (중복 실행 방지)
-                pythonProcess?.stdout?.removeListener('data', responseHandler);
-            };
-
-            pythonProcess?.stdout?.on('data', responseHandler);
+            const parsed = parseUserCommand(userInput, currentOriginalText);
+            currentParallels = parsed.parallelOptions;
 
             if (pythonProcess?.stdin) {
                 pythonProcess.stdin.write(JSON.stringify(parsed) + '\n');

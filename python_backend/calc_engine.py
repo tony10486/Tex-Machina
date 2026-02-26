@@ -1,6 +1,7 @@
 import sympy as sp
 from sympy.parsing.latex import parse_latex  # 공식 파서 사용
 import json
+import re
 
 def op_tensor_expand(expr, args):
     """
@@ -36,10 +37,12 @@ def op_tensor_expand(expr, args):
 
 def op_diff(expr, args):
     """다변수 편미분 및 일반 미분 처리 [cite: 32]"""
+    # 변수가 명시되지 않으면 첫 번째 자유 변수(알파벳 순)로 미분 [cite: 139]
     if not args:
-        # 변수가 명시되지 않으면 첫 번째 자유 변수로 미분 [cite: 139]
-        symbols = list(expr.free_symbols)
-        return sp.diff(expr, symbols[0]) if symbols else 0
+        symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
+        if not symbols:
+            return 0
+        return sp.diff(expr, symbols[0])
     
     # diff > x, y 형태의 다변수 편미분 지원 [cite: 32]
     vars_to_diff = [sp.Symbol(v.strip()) for v in args[0].split(',')]
@@ -177,10 +180,26 @@ def get_calc_operations():
 # 3. 메인 핸들러 (Node.js 통신 엔트리)
 # ==========================================
 
+def strip_latex_delimiters(text):
+    """$...$, $$...$$, \[...\], \(...\) 등의 LaTeX 구분자를 제거합니다."""
+    text = text.strip()
+    # $$...$$ or \[...\]
+    if (text.startswith('$$') and text.endswith('$$')) or (text.startswith(r'\[') and text.endswith(r'\]')):
+        return text[2:-2].strip()
+    # $...$ or \(...\)
+    if (text.startswith('$') and text.endswith('$')) or (text.startswith(r'\(') and text.endswith(r'\)')):
+        return text[1:-1].strip()
+    return text
+
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
-        selection = req.get('rawSelection', '')
+        selection = req.get('rawSelection', '').strip()
+        selection = strip_latex_delimiters(selection)
+        
+        if not selection:
+            return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
+            
         sub_cmds = req.get('subCommands', [])
         parallels = req.get('parallelOptions', [])
         

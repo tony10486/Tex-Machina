@@ -38,6 +38,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     }
 
     function pushToCmds() {
+        if (isParallelSection) return; // 병렬 구역에서는 명령어를 추가하지 않음
         const trimmed = buffer.trim();
         if (trimmed) {
             if (!isMainCmdParsed) { mainCmd = trimmed; isMainCmdParsed = true; }
