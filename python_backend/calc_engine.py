@@ -2,6 +2,7 @@ import sympy as sp
 from sympy.parsing.latex import parse_latex  # 공식 파서 사용
 import json
 import re
+import os
 
 def op_tensor_expand(expr, args):
     """
@@ -393,6 +394,7 @@ def op_laplace(expr, args, config):
 
 from matrix import handle_matrix
 from dimcheck_engine import handle_dimcheck
+from plot_engine import handle_plot
 
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
@@ -452,7 +454,7 @@ def get_calc_operations():
         "conjugate": lambda x, v, p, c, s: sp.conjugate(x),
         "re": lambda x, v, p, c, s: sp.re(x),
         "im": lambda x, v, p, c, s: sp.im(x),
-        
+
         # 7. 정수론 및 이산수학 [cite: 30, 31, 39]
         "prime": lambda x, v, p, c, s: sp.isprime(int(sp.simplify(x))),
         "factorint": lambda x, v, p, c, s: sp.factorint(int(sp.simplify(x))),
@@ -461,7 +463,10 @@ def get_calc_operations():
         # 8. 물리 / 공학 유틸리티 [cite: 100, 115]
         "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
         "error_prop": lambda x, v, p, c, s: op_error_prop(x, v, p),
-        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v)
+        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v),
+
+        # 9. 시각화 (Plotting)
+        "plot": lambda x, v, p, c, s: handle_plot(s, v, p, c, os.getcwd())
     }
 
 # ==========================================
@@ -556,6 +561,18 @@ def execute_calc(parsed_json_str):
                 "latex": matrix_res["latex"],
                 "analysis": matrix_res.get("analysis"),
                 "vars": []
+            })
+
+        if action == "plot":
+            # Plot 명령도 전용 핸들러에서 직접 파싱 및 처리
+            plot_res = handle_plot(selection, sub_cmds, parallels, config, os.getcwd())
+            if plot_res.get("status") == "error":
+                return json.dumps(plot_res)
+            return json.dumps({
+                "status": "success",
+                "latex": plot_res["latex"],
+                "vars": plot_res.get("vars", []),
+                "x3d_data": plot_res.get("x3d_data")
             })
 
         # 다른 명령어는 선택 영역이 필요함 

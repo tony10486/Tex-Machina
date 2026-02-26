@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
                     });
                     
                     // Webview 업데이트
-                    provider.updatePreview(resultLatex, response.vars, response.analysis);
+                    provider.updatePreview(resultLatex, response.vars, response.analysis, response.x3d_data);
                 } else if (response.status === 'error') {
                     vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
                 }
@@ -98,7 +98,8 @@ export function activate(context: vscode.ExtensionContext) {
         const commandLib = {
             root: [
                 { label: "calc >", description: "수학 연산 명령어 (미분, 적분, 단순화 등)" },
-                { label: "matrix >", description: "행렬 생성 및 분석" }
+                { label: "matrix >", description: "행렬 생성 및 분석" },
+                { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" }
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
@@ -122,6 +123,13 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "matrix > [데이터]", description: "데이터 바로 입력 (예: matrix > 1,2/3,4)" },
                 { label: "matrix > ... / analyze", description: "행렬 분석 (행렬식, 역행렬, RREF 결과 표시)" },
                 { label: "matrix > ... / aug=", description: "첨가 행렬 (예: / aug=2 -> 2열 뒤에 수직선 추가)" }
+            ],
+            plot: [
+                { label: "plot > 2d", description: "2D 그래프 (PGFPlots)" },
+                { label: "plot > 3d", description: "3D 그래프 (x3dom 및 PDF)" },
+                { label: "plot > complex", description: "복소 평면 Domain Coloring" },
+                { label: "plot > 2d > -5,5", description: "범위 지정 (예: -5에서 5까지)" },
+                { label: "plot > 3d / export", description: "3D 그래프 PDF 내보내기" }
             ]
         };
 
@@ -133,6 +141,8 @@ export function activate(context: vscode.ExtensionContext) {
                 quickPick.items = commandLib.calc;
             } else if (value.startsWith("matrix >")) {
                 quickPick.items = commandLib.matrix;
+            } else if (value.startsWith("plot >")) {
+                quickPick.items = commandLib.plot;
             } else if (value === "") {
                 quickPick.items = commandLib.root;
             }

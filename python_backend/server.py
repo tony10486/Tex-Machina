@@ -1,8 +1,14 @@
 import sys
+import os
 import json
 import traceback
 import io
 import types
+
+# Absolute path of the directory containing this script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 # Ensure compatibility for antlr4 on Python 3.12+ (typing.io removal)
 if 'typing.io' not in sys.modules:
