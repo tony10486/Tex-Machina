@@ -24,9 +24,11 @@ def handle_matrix(sub_cmds, parallels):
             b_type = cmds.pop(0)
             
         # 두 번째 인자가 차원(NxM)인지 확인
-        if cmds and 'x' in cmds[0]:
+        size_specified = False
+        if cmds and 'x' in cmds[0] and not (',' in cmds[0] or '/' in cmds[0]):
             r_str, c_str = cmds.pop(0).split('x')
             rows, cols = int(r_str), int(c_str)
+            size_specified = True
             
         # 세 번째 인자는 내용 (id, diag 또는 데이터) 
         if cmds:
@@ -50,6 +52,12 @@ def handle_matrix(sub_cmds, parallels):
         elif '/' in content_str or ',' in content_str:
             # 1,2,3/4,5,6 포맷 파싱 
             raw_rows = content_str.split('/')
+            
+            # 크기가 명시되지 않았다면 데이터로부터 추론
+            if not size_specified:
+                rows = len(raw_rows)
+                cols = max(len(r.split(',')) for r in raw_rows)
+
             for i in range(rows):
                 if i < len(raw_rows):
                     raw_cols = raw_rows[i].split(',')

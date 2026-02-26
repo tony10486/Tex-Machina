@@ -108,11 +108,12 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
             ],
             matrix: [
-                { label: "matrix > b > 3x3", description: "3x3 대괄호 행렬 (bmatrix)" },
-                { label: "matrix > p > 3x3", description: "3x3 소괄호 행렬 (pmatrix)" },
-                { label: "matrix > v > 3x3", description: "3x3 행렬식 형태 (vmatrix)" },
-                { label: "matrix > b > 3x3 > id", description: "3x3 단위 행렬" },
-                { label: "matrix > b > 3x3 > 1,2,3/4,5,6/7,8,9", description: "데이터 입력 예시" }
+                { label: "matrix > b > 2x2", description: "2x2 대괄호 행렬" },
+                { label: "matrix > b > 3x3", description: "3x3 대괄호 행렬" },
+                { label: "matrix > b > 4x4", description: "4x4 대괄호 행렬" },
+                { label: "matrix > b > [NxM]", description: "임의 크기 지정 (예: matrix > b > 2x4)" },
+                { label: "matrix > b > id", description: "기본 3x3 단위 행렬" },
+                { label: "matrix > p > 1,2/3,4", description: "데이터 기반 자동 크기 추론 (2x2)" }
             ]
         };
 
