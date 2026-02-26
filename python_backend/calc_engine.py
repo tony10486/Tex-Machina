@@ -157,8 +157,50 @@ def parse_ics(ics_str, y, x):
             
     return ics
 
+def fix_system_ode(exprs, dep_var_names, indep_var_name='t'):
+    """여러 수식과 여러 종속 변수를 처리합니다."""
+    t = sp.Symbol(indep_var_name)
+    funcs = {name: sp.Function(name)(t) for name in dep_var_names}
+    
+    fixed_exprs = []
+    for expr in exprs:
+        substitutions = {}
+        for sym in expr.free_symbols:
+            name = sym.name
+            # x, y, z 등 종속 변수 감지
+            base_name = name.rstrip("'")
+            if base_name in funcs:
+                order = name.count("'")
+                if order == 0:
+                    substitutions[sym] = funcs[base_name]
+                else:
+                    substitutions[sym] = funcs[base_name].diff(t, order)
+        fixed_exprs.append(expr.subs(substitutions))
+        
+    return fixed_exprs, list(funcs.values()), t
+
 def op_ode(expr, args):
-    """상미분방정식 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
+    """상미분방정식(단일/연립) 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
+    # 1. 시스템 여부 확인 (쉼표나 세미콜론으로 구분된 경우)
+    # 현재 expr은 parse_latex 결과이므로, raw selection을 다시 확인하거나
+    # parse_latex가 단일 Eq만 반환한다면 호출부에서 분리해서 넘겨줘야 함.
+    # 여기서는 편의상 단일 expr 내의 free_symbols를 보고 판단
+    
+    # 기본 종속 변수 후보군
+    potential_dep_vars = ['y', 'x', 'z', 'u', 'v']
+    found_vars = set()
+    for sym in expr.free_symbols:
+        base_name = sym.name.rstrip("'")
+        if base_name in potential_dep_vars:
+            found_vars.add(base_name)
+            
+    # 연립 방정식 처리 (여러 변수가 발견된 경우)
+    if len(found_vars) > 1:
+        fixed_exprs, funcs, t = fix_system_ode([expr], list(found_vars))
+        # 만약 입력이 단일 Eq(x' - y, 0) 형태라면 하나만 풀림
+        return sp.dsolve(fixed_exprs, funcs)
+
+    # 단일 방정식 처리
     fixed_expr, y, x = fix_ode_expression(expr)
     
     ics = {}
@@ -204,6 +246,46 @@ def op_error_prop(expr, args, parallels):
             
     return sp.sqrt(variance)
 
+def fix_pde_expression(expr, dep_var_name='u'):
+    """u(x, t) 등 다변수 함수가 포함된 PDE 표현식을 보정합니다."""
+    # 자유 변수 중 종속 변수(u)를 제외한 것들을 독립 변수로 간주
+    symbols = list(expr.free_symbols)
+    indep_vars = [s for s in symbols if s.name != dep_var_name]
+    
+    if not indep_vars:
+        # 독립 변수가 감지되지 않으면 기본값 x, y 설정
+        indep_vars = [sp.Symbol('x'), sp.Symbol('y')]
+        
+    u = sp.Function(dep_var_name)(*indep_vars)
+    
+    substitutions = {}
+    for sym in symbols:
+        if sym.name == dep_var_name:
+            substitutions[sym] = u
+        # 이미 Derivative(u, x) 형태인 경우 내부는 u(x, y)로 바뀌어야 함
+            
+    # Derivative(u, x) -> Derivative(u(x, y), x) 처리를 위해 subs 수행
+    fixed_expr = expr.subs(substitutions)
+    return fixed_expr, u
+
+def op_pde(expr, args):
+    """편미분방정식(PDE) 해 도출 [cite: 33]"""
+    dep_var_name = 'u'
+    for sym in expr.free_symbols:
+        if sym.name in ['u', 'v', 'w']:
+            dep_var_name = sym.name
+            break
+            
+    fixed_expr, u = fix_pde_expression(expr, dep_var_name)
+    try:
+        return sp.pdsolve(fixed_expr, u)
+    except Exception as e:
+        # pdsolve 실패 시 dsolve 시도 (단일 변수 미분인 경우 dsolve가 처리 가능)
+        try:
+            return sp.dsolve(fixed_expr, u)
+        except:
+            raise e
+
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
 # ==========================================
@@ -245,7 +327,9 @@ def get_calc_operations():
         
         # 5. 미분방정식 및 변환 [cite: 28, 41]
         "ode": lambda x, v, p: op_ode(x, v),
-        "laplace": lambda x, v, p: sp.laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('t'), sp.Symbol('s'), noconds=True),
+        "pde": lambda x, v, p: op_pde(x, v),
+        "laplace": lambda x, v, p: sp.laplace_transform(x.subs(sp.Symbol('e'), sp.E), sp.Symbol(v[0]) if v else sp.Symbol('t'), sp.Symbol('s'), noconds=True),
+        # ... (이후 코드 동일)
         "ilaplace": lambda x, v, p: sp.inverse_laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('s'), sp.Symbol('t'), noconds=True),
         "fourier": lambda x, v, p: sp.fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('x'), sp.Symbol('k')),
         "ifourier": lambda x, v, p: sp.inverse_fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('k'), sp.Symbol('x')),
@@ -299,26 +383,72 @@ def execute_calc(parsed_json_str):
         # 1. 수식 전처리 (ODE의 경우)
         action = sub_cmds[0] if sub_cmds else "simplify"
         if action == "ode":
-            selection = preprocess_latex_ode(selection)
+            # 연립 방정식 분리 (쉼표나 세미콜론)
+            parts = re.split(r'[,;]|\r?\n', selection)
+            exprs = []
+            for p in parts:
+                if p.strip():
+                    preprocessed = preprocess_latex_ode(p.strip())
+                    exprs.append(parse_latex(preprocessed))
             
-        # 2. 수식 파싱
-        expr = parse_latex(selection)
-        
-        # 3. 명령어 실행
-        ops = get_calc_operations()
-        
-        if action not in ops:
-            raise ValueError(f"Unknown action: {action}")
+            # 수집된 모든 자유 변수 확인
+            all_symbols = set()
+            for e in exprs:
+                all_symbols.update(e.free_symbols)
+                
+            potential_dep_vars = ['y', 'x', 'z', 'u', 'v']
+            found_vars = set()
+            for sym in all_symbols:
+                base_name = sym.name.rstrip("'")
+                if base_name in potential_dep_vars:
+                    found_vars.add(base_name)
+                    
+            if len(found_vars) > 1 or len(exprs) > 1:
+                # 연립 미분방정식 처리
+                fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars))
+                
+                # 방정식 개수와 변수 개수 맞추기 (부족하면 0=0 추가하여 dsolve 에러 방지)
+                while len(fixed_exprs) < len(funcs):
+                    fixed_exprs.append(sp.Eq(0, 0))
+                
+                result = sp.dsolve(fixed_exprs, funcs)
+            else:
+                # 단일 미분방정식 처리
+                result = op_ode(exprs[0], sub_cmds[1:])
+        else:
+            # 2. 일반 수식 파싱
+            expr = parse_latex(selection)
             
-        result = ops[action](expr, sub_cmds[1:], parallels)
+            # 3. 명령어 실행
+            ops = get_calc_operations()
+            if action not in ops:
+                raise ValueError(f"Unknown action: {action}")
+            result = ops[action](expr, sub_cmds[1:], parallels)
         
-        # 3. 결과 포맷팅 (이미 문자열인 경우 그대로 사용)
+        # 4. 결과 포맷팅
         final_latex = result if isinstance(result, str) else sp.latex(result)
             
-        # 4. 단계별 풀이 (Step-by-Step) [cite: 43, 144]
+        # 5. 단계별 풀이 (Step-by-Step) [cite: 43, 144]
         steps = []
         step_level = next((int(p.split('=')[1]) for p in parallels if p.startswith('step=')), 0)
         
+        # 변수 목록 추출
+        if action in ["ode", "pde"]:
+            # 연립 방정식인 경우 모든 변수 합치기
+            all_vars = set()
+            parts = re.split(r'[,;]|\r?\n', selection)
+            for p in parts:
+                if p.strip():
+                    try:
+                        # PDE는 preprocess_latex_ode가 필요없을 수 있으나 
+                        # 미분 기호를 위해 공용 사용 가능
+                        e = parse_latex(preprocess_latex_ode(p.strip()))
+                        all_vars.update([str(s) for s in e.free_symbols])
+                    except: pass
+            vars_list = list(all_vars)
+        else:
+            vars_list = [str(s) for s in expr.free_symbols]
+
         if step_level > 0:
             # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공) [cite: 46, 145]
             steps.append(r"\text{Step 1: Parse input LaTeX}")
@@ -329,7 +459,7 @@ def execute_calc(parsed_json_str):
             "status": "success",
             "latex": final_latex,
             "steps": steps if step_level > 0 else None,
-            "vars": [str(s) for s in expr.free_symbols]
+            "vars": vars_list
         })
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
