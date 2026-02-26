@@ -542,7 +542,7 @@ def execute_calc(parsed_json_str):
         
         if action == "matrix":
             # 행렬 명령은 수식 파싱 없이 바로 처리 (matrix.py 내부에서 파싱)
-            matrix_res_json = handle_matrix(sub_cmds, parallels)
+            matrix_res_json = handle_matrix(sub_cmds, parallels, config)
             matrix_res = json.loads(matrix_res_json)
             
             if matrix_res["status"] == "error":

@@ -204,17 +204,19 @@ export function activate(context: vscode.ExtensionContext) {
             currentMainCommand = parsed.mainCommand;
             currentParallels = parsed.parallelOptions;
 
-            // 라플라스 설정 가져오기
+            // 라플라스 및 각도 설정 가져오기
             const config = vscode.workspace.getConfiguration('tex-machina');
             const laplaceConfig = {
                 source: config.get('laplace.sourceVariable', 't'),
                 target: config.get('laplace.targetVariable', 's')
             };
+            const angleUnit = config.get('angleUnit', 'deg');
 
             const payload = {
                 ...parsed,
                 config: {
-                    laplace: laplaceConfig
+                    laplace: laplaceConfig,
+                    angleUnit: angleUnit
                 }
             };
 

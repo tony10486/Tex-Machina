@@ -26,6 +26,15 @@
           "type": "string",
           "default": "s",
           "description": "라플라스 변환의 결과 대상 변수 (예: s)"
+        },
+        "tex-machina.angleUnit": {
+          "type": "string",
+          "enum": [
+            "deg",
+            "rad"
+          ],
+          "default": "deg",
+          "description": "회전변환 시 각도의 기본 단위. (deg: 도, rad: 라디안)"
         }
       }
     },

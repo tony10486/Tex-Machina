@@ -2,42 +2,35 @@ import json
 import sympy as sp
 import re
 
-def handle_matrix(sub_cmds, parallels):
+def handle_matrix(sub_cmds, parallels, config=None):
     """
     제안서의 행렬 입력 기능(matrix)을 처리하는 함수입니다.
-    예시 커맨드: matrix > b > 3x4 > 1,2,3,4/5,6,7,8/9,10,11,12 / aug=3
     """
     try:
-        # 1. 기본값 설정 및 옵션 파싱
+        if config is None: config = {}
+        global_unit = config.get('angleUnit', 'deg')
+
         bracket_map = {
             'p': 'pmatrix', 'b': 'bmatrix', 'v': 'vmatrix', 
             'V': 'Vmatrix', 'B': 'Bmatrix'
         }
-        b_type = 'b'  # 기본 괄호: bmatrix 
-        rows, cols = 3, 3 # 기본 크기: 3x3 
-        content_str = ""
-
-        # 파라미터 큐(Queue) 처리
-        cmds = sub_cmds.copy()
+        b_type = 'b'
+        rows, cols = 3, 3
         
-        # 첫 번째 인자가 괄호 타입인지 확인
+        cmds = sub_cmds.copy()
         if cmds and cmds[0] in bracket_map:
             b_type = cmds.pop(0)
             
-        # 두 번째 인자가 차원(NxM)인지 확인
         size_specified = False
-        if cmds and 'x' in cmds[0] and not (',' in cmds[0] or '/' in cmds[0]):
+        if cmds and re.match(r'^\d+x\d+$', cmds[0]):
             r_str, c_str = cmds.pop(0).split('x')
             rows, cols = int(r_str), int(c_str)
             size_specified = True
             
-        # 세 번째 인자부터는 내용 (id, diag 또는 데이터) 
         actual_data_parts = []
         while cmds:
             actual_data_parts.append(cmds.pop(0))
 
-        # 2. 파서에 의해 분리된 행 데이터 재조합 및 옵션 파싱
-        # parallels 처리
         aug_col = None
         analyze_mode = False
         fill_dots = False
@@ -50,148 +43,168 @@ def handle_matrix(sub_cmds, parallels):
                 analyze_mode = True
             elif p_strip == 'fill_dots':
                 fill_dots = True
-            elif p_strip.startswith('step='):
-                pass
             else:
                 actual_data_parts.append(p_strip)
         
         full_content = "/".join(actual_data_parts)
         matrix_data = []
 
-        # 2.5 특별 행렬 생성 (Rotation, etc.)
-        if full_content.startswith('rot') or (full_content.startswith('transform') and ':' not in full_content):
-            # rot > 30 (2D) or rot3 > x, 45 (3D) or transform > 30
+        is_special = any(p.startswith('rot') or p.startswith('transform') for p in actual_data_parts)
+        
+        if is_special:
             try:
-                def parse_angle(angle_str):
-                    if not angle_str: return sp.Symbol('theta')
+                def parse_expr(expr_str):
+                    if not expr_str: return sp.Symbol('theta')
                     
-                    # LaTeX 특수 문자를 SymPy 문자로 전처리
-                    # \theta, \phi 등을 theta, phi로 변환 (백슬래시 제거)
-                    s_angle_str = angle_str.replace(r'\pi', 'pi')
-                    s_angle_str = s_angle_str.replace(r'\theta', 'theta')
-                    s_angle_str = s_angle_str.replace(r'\phi', 'phi')
-                    s_angle_str = s_angle_str.replace(r'\alpha', 'alpha')
-                    s_angle_str = s_angle_str.replace(r'\beta', 'beta')
+                    orig_str = expr_str
+                    unit_override = None
+                    clean_str = expr_str.strip().lower()
+                    if clean_str.endswith('deg'):
+                        unit_override = 'deg'
+                        expr_str = expr_str[:-3].strip()
+                    elif clean_str.endswith('rad'):
+                        unit_override = 'rad'
+                        expr_str = expr_str[:-3].strip()
+
+                    # 그리스 문자 전처리
+                    s_expr_str = expr_str.replace(r'\pi', 'pi')
+                    s_expr_str = s_expr_str.replace(r'\theta', 'theta').replace(r'\phi', 'phi')
+                    s_expr_str = s_expr_str.replace(r'\alpha', 'alpha').replace(r'\beta', 'beta').replace(r'\gamma', 'gamma')
+                    s_expr_str = s_expr_str.replace('\\', '').replace('{', '').replace('}', '').strip()
                     
-                    # 남은 백슬래시 및 중괄호 정리
-                    s_angle_str = s_angle_str.replace('\\', '').replace('{', '').replace('}', '').strip()
+                    # 핵심: SymPy 내장 함수(beta, gamma 등)와 충돌을 피하기 위해 locals 강제 지정
+                    custom_locals = {
+                        'alpha': sp.Symbol('alpha'),
+                        'beta': sp.Symbol('beta'),
+                        'gamma': sp.Symbol('gamma'),
+                        'theta': sp.Symbol('theta'),
+                        'phi': sp.Symbol('phi'),
+                        'pi': sp.pi
+                    }
                     
                     from sympy.parsing.latex import parse_latex
                     try:
-                        # 기본적인 산술 기호 및 SymPy 내장 상수(pi)가 포함된 경우 sympify 시도
-                        if re.match(r'^[a-zA-Z0-9\s\+\-\*\/\(\)\.]+$', s_angle_str):
-                            angle = sp.sympify(s_angle_str)
+                        if re.match(r'^[a-zA-Z0-9\s\+\-\*\/\(\)\.]+$', s_expr_str):
+                            expr = sp.sympify(s_expr_str, locals=custom_locals)
                         else:
-                            angle = parse_latex(angle_str)
+                            expr = parse_latex(expr_str)
                     except:
                         try:
-                            # sympify 실패 시 원본 LaTeX 파싱 시도
-                            angle = parse_latex(angle_str)
+                            expr = parse_latex(expr_str)
                         except:
-                            # 최후의 수단: 단순히 심볼로 처리
-                            angle = sp.Symbol(s_angle_str)
+                            expr = sp.Symbol(s_expr_str)
 
-                    if angle.is_number:
-                        # 1. pi가 포함되어 있으면 무조건 라디안
-                        if any(s in angle_str for s in ['pi', '\\pi']):
-                            return angle
+                    # 각도 단위 변환 (순수 숫자인 경우에만)
+                    if hasattr(expr, 'is_number') and expr.is_number:
+                        if any(s in orig_str for s in ['pi', r'\pi']) and unit_override != 'deg':
+                            return expr
                         
-                        # 2. 숫자가 10 이상이면 (예: 30, 45, 90) 도 단위로 간주하여 라디안으로 변환
-                        #    숫자가 매우 작으면 (예: 0.5, 1.57) 이미 라디안일 가능성이 높음
-                        val = float(angle.evalf())
-                        if abs(val) >= 10:
-                            angle = angle * sp.pi / 180
+                        current_unit = unit_override if unit_override else global_unit
+                        if current_unit == 'deg':
+                            try:
+                                return expr * sp.pi / 180
+                            except:
+                                return expr
                             
-                    return angle
+                    return expr
 
-                if full_content.startswith('rot3'):
-                    params_str = full_content.replace('rot3', '').strip(' >/')
+                sp_mat = None
+                
+                # 1) Mapping Matrix
+                if len(actual_data_parts) >= 3 and actual_data_parts[1] == 'map':
+                    mapping_str = actual_data_parts[2]
+                    pattern = r"\(([^)]+)\)\s*(?:->|to)\s*\(([^)]+)\)"
+                    matches = re.findall(pattern, mapping_str)
+                    if not matches:
+                        raise ValueError("매핑 형식이 잘못되었습니다.")
+                    V_cols, W_cols = [], []
+                    for before_str, after_str in matches:
+                        v_elements = [parse_expr(e.strip()) for e in before_str.split(',')]
+                        w_elements = [parse_expr(e.strip()) for e in after_str.split(',')]
+                        V_cols.append(v_elements)
+                        W_cols.append(w_elements)
+                    V_matrix = sp.Matrix(V_cols).T
+                    W_matrix = sp.Matrix(W_cols).T
+                    sp_mat = W_matrix * V_matrix.inv()
+                
+                # 2) Single Axis Rotation
+                elif len(actual_data_parts) >= 3 and actual_data_parts[1] in ['rotx', 'roty', 'rotz', 'rot2d']:
+                    axis = actual_data_parts[1].replace('rot', '')
+                    angle = parse_expr(actual_data_parts[2])
+                    if axis == '2d':
+                        sp_mat = sp.Matrix([[sp.cos(angle), -sp.sin(angle)], [sp.sin(angle), sp.cos(angle)]])
+                    elif axis == 'x':
+                        sp_mat = sp.Matrix([[1, 0, 0], [0, sp.cos(angle), -sp.sin(angle)], [0, sp.sin(angle), sp.cos(angle)]])
+                    elif axis == 'y':
+                        sp_mat = sp.Matrix([[sp.cos(angle), 0, sp.sin(angle)], [0, 1, 0], [-sp.sin(angle), 0, sp.cos(angle)]])
+                    elif axis == 'z':
+                        sp_mat = sp.Matrix([[sp.cos(angle), -sp.sin(angle), 0], [sp.sin(angle), sp.cos(angle), 0], [0, 0, 1]])
+
+                # 3) Euler Rotation
+                elif len(actual_data_parts) >= 3 and actual_data_parts[1] == 'rotxyz':
+                    angle_parts = [p.strip() for p in actual_data_parts[2].split(',')]
+                    if len(angle_parts) != 3:
+                        raise ValueError("3개의 각도가 필요합니다.")
+                    ax, ay, az = [parse_expr(a) for a in angle_parts]
+                    rx = sp.Matrix([[1, 0, 0], [0, sp.cos(ax), -sp.sin(ax)], [0, sp.sin(ax), sp.cos(ax)]])
+                    ry = sp.Matrix([[sp.cos(ay), 0, sp.sin(ay)], [0, 1, 0], [-sp.sin(ay), 0, sp.cos(ay)]])
+                    rz = sp.Matrix([[sp.cos(az), -sp.sin(az), 0], [sp.sin(az), sp.cos(az), 0], [0, 0, 1]])
+                    # 행렬 곱셈 수행
+                    sp_mat = rz * ry * rx
+
+                # 4) Older rot3 format
+                elif any(p.startswith('rot3') for p in actual_data_parts):
+                    target_part = next(p for p in actual_data_parts if p.startswith('rot3'))
+                    params_str = target_part.replace('rot3', '').strip(' >/')
+                    if not params_str and len(actual_data_parts) > actual_data_parts.index(target_part) + 1:
+                        params_str = actual_data_parts[actual_data_parts.index(target_part) + 1]
                     params = params_str.split(',')
                     axis = params[0].strip() if params and params[0].strip() else 'z'
                     angle_str = params[1].strip() if len(params) > 1 else 'theta'
-                    angle = parse_angle(angle_str)
-                    
+                    angle = parse_expr(angle_str)
                     if axis == 'x':
-                        sp_mat = sp.Matrix([
-                            [1, 0, 0],
-                            [0, sp.cos(angle), -sp.sin(angle)],
-                            [0, sp.sin(angle), sp.cos(angle)]
-                        ])
+                        sp_mat = sp.Matrix([[1, 0, 0], [0, sp.cos(angle), -sp.sin(angle)], [0, sp.sin(angle), sp.cos(angle)]])
                     elif axis == 'y':
-                        sp_mat = sp.Matrix([
-                            [sp.cos(angle), 0, sp.sin(angle)],
-                            [0, 1, 0],
-                            [-sp.sin(angle), 0, sp.cos(angle)]
-                        ])
+                        sp_mat = sp.Matrix([[sp.cos(angle), 0, sp.sin(angle)], [0, 1, 0], [-sp.sin(angle), 0, sp.cos(angle)]])
                     else: # z
-                        sp_mat = sp.Matrix([
-                            [sp.cos(angle), -sp.sin(angle), 0],
-                            [sp.sin(angle), sp.cos(angle), 0],
-                            [0, 0, 1]
-                        ])
-                else: # 2D Rotation
-                    angle_str = full_content.replace('rot', '').replace('transform', '').strip(' >/')
-                    angle = parse_angle(angle_str)
-                    
-                    sp_mat = sp.Matrix([
-                        [sp.cos(angle), -sp.sin(angle)],
-                        [sp.sin(angle), sp.cos(angle)]
-                    ])
-                
-                rows, cols = sp_mat.shape
-                for i in range(rows):
-                    matrix_data.append([sp.latex(sp_mat[i, j].simplify()) for j in range(cols)])
+                        sp_mat = sp.Matrix([[sp.cos(angle), -sp.sin(angle), 0], [sp.sin(angle), sp.cos(angle), 0], [0, 0, 1]])
+
+                # 5) Default fallback
+                else:
+                    angle_str = ""
+                    for p in actual_data_parts:
+                        if p in ['transform', 'rot']: continue
+                        if p.startswith('transform'): 
+                            angle_str = p.replace('transform', '').strip(' >/')
+                            if angle_str: break
+                        if p.startswith('rot'):
+                            angle_str = p.replace('rot', '').strip(' >/')
+                            if angle_str: break
+                        angle_str = p
+                        break
+                    angle = parse_expr(angle_str)
+                    sp_mat = sp.Matrix([[sp.cos(angle), -sp.sin(angle)], [sp.sin(angle), sp.cos(angle)]])
+
+                if sp_mat is not None:
+                    # 심볼릭 계산 결과에 대해 과도한 simplify를 피해 안정성 확보
+                    rows, cols = sp_mat.shape
+                    for i in range(rows):
+                        row_data = []
+                        for j in range(cols):
+                            val = sp_mat[i, j]
+                            # 수치값(sin(pi/2) 등)만 정리하고 심볼릭은 최대한 유지
+                            if not val.free_symbols:
+                                try: val = sp.simplify(val)
+                                except: pass
+                            row_data.append(sp.latex(val))
+                        matrix_data.append(row_data)
+                else:
+                    raise ValueError("변환 행렬 생성 실패")
+
             except Exception as e:
-                return json.dumps({"status": "error", "message": f"Special matrix error: {str(e)}"})
+                return json.dumps({"status": "error", "message": f"Transformation error: {str(e)}"})
         
-        elif full_content.startswith('trans'):
-            # trans > i:1,2, j:3,4 (2D linear transformation)
-            try:
-                sp_mat = sp.eye(2)
-                # key:value 형태를 정규식으로 추출 (i, j, k, u, v 등을 키로 허용)
-                params = re.findall(r'([ijkuv]):\s*([^ijkuv/]+)', full_content)
-                for key, val in params:
-                    key = key.strip()
-                    val = val.strip().strip(',') # 끝의 콤마 제거
-                    # 콤마나 공백으로 값 분리
-                    vals = [sp.sympify(v.strip()) for v in re.split(r'[, ]+', val) if v.strip()]
-                    if key == 'i':
-                        if len(vals) > 0: sp_mat[0, 0] = vals[0]
-                        if len(vals) > 1: sp_mat[1, 0] = vals[1]
-                    elif key == 'j':
-                        if len(vals) > 0: sp_mat[0, 1] = vals[0]
-                        if len(vals) > 1: sp_mat[1, 1] = vals[1]
-                
-                rows, cols = sp_mat.shape
-                for i in range(rows):
-                    matrix_data.append([sp.latex(sp_mat[i, j].simplify()) for j in range(cols)])
-            except Exception as e:
-                return json.dumps({"status": "error", "message": f"Transformation matrix error: {str(e)}"})
-
-        elif full_content.startswith('cols'):
-            # matrix > cols > 1,2 / 3,4 (1,2 and 3,4 as columns)
-            try:
-                col_data_parts = full_content.replace('cols', '').strip(' >').split('/')
-                col_vectors = []
-                for part in col_data_parts:
-                    if not part.strip(): continue
-                    vals = [v.strip() for v in re.split(r'[, ]+', part.strip()) if v.strip()]
-                    col_vectors.append(vals)
-                
-                if not col_vectors:
-                    raise ValueError("No column data provided")
-                
-                rows = max(len(c) for c in col_vectors)
-                cols = len(col_vectors)
-                matrix_data = [["0"] * cols for _ in range(rows)]
-                
-                for j, col in enumerate(col_vectors):
-                    for i, val in enumerate(col):
-                        matrix_data[i][j] = val
-            except Exception as e:
-                return json.dumps({"status": "error", "message": f"Column matrix error: {str(e)}"})
-
-        # 3. 행렬 데이터 구조화 (기존 로직 유지, if full_content... 가 특별 행렬이 아닐 때만)
+        # 2.6 일반 행렬 데이터 파싱
         elif full_content == 'id':
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
@@ -222,7 +235,6 @@ def handle_matrix(sub_cmds, parallels):
                     row_data = [""] * cols
                 matrix_data.append(row_data)
         else:
-            # 데이터가 없고 fill_dots가 활성화된 경우 템플릿 생성
             if fill_dots and rows >= 2 and cols >= 2:
                 matrix_data = [[""] * cols for _ in range(rows)]
                 matrix_data[0][0] = "a_{11}"
@@ -232,49 +244,37 @@ def handle_matrix(sub_cmds, parallels):
             else:
                 matrix_data = [[""] * cols for _ in range(rows)]
 
-        # 4. 스마트 생략 기호 인식 (...) 
-        def is_real_val(v):
-            # 생략 기호나 빈 칸이 아닌 것을 실제 값으로 간주
-            dots = [r'.', r'..', r'...', r'\vdots', r'\cdots', r'\ddots']
-            return v.strip() and v not in dots
+        # 4. 스마트 생략 기호 및 빈 공간 처리
+        if not is_special:
+            def is_real_val(v):
+                dots = [r'.', r'..', r'...', r'\vdots', r'\cdots', r'\ddots']
+                return v.strip() and v not in dots
 
-        for i in range(rows):
-            for j in range(cols):
-                val = matrix_data[i][j]
-                if val in ['.', '..', '...', '']:
-                    # 빈 공간인데 fill_dots가 꺼져있으면 0으로 채우고 스킵
-                    if val == '' and not fill_dots:
-                        matrix_data[i][j] = "0"
-                        continue
-                    
-                    # 주변에 실제 원소가 있는지 확인 (상하좌우 방향 탐색)
-                    has_up = any(is_real_val(matrix_data[k][j]) for k in range(i))
-                    has_down = any(is_real_val(matrix_data[k][j]) for k in range(i+1, rows))
-                    has_left = any(is_real_val(matrix_data[i][k]) for k in range(j))
-                    has_right = any(is_real_val(matrix_data[i][k]) for k in range(j+1, cols))
-                    
-                    if has_up and has_down:
-                        matrix_data[i][j] = r"\vdots"
-                    elif has_left and has_right:
-                        matrix_data[i][j] = r"\cdots"
-                    elif (has_up or has_left) and (has_down or has_right):
-                        # 대각선 흐름 (위 또는 왼쪽이 있고, 아래 또는 오른쪽이 있는 경우)
-                        matrix_data[i][j] = r"\ddots"
-                    else:
-                        # 끝 부분 처리 (주변에 하나만 있거나 아예 없는 경우)
-                        if fill_dots:
-                            # 5x5 등에서 구석만 채워진 경우 가운데를 채우기 위한 기본값
-                            if (i > 0 and i < rows - 1) and (j > 0 and j < cols - 1):
-                                matrix_data[i][j] = r"\ddots"
-                            else:
-                                matrix_data[i][j] = "0"
-                        else:
+            for i in range(rows):
+                for j in range(cols):
+                    val = matrix_data[i][j]
+                    if val in ['.', '..', '...', '']:
+                        if val == '' and not fill_dots:
                             matrix_data[i][j] = "0"
+                            continue
+                        
+                        has_up = any(is_real_val(matrix_data[k][j]) for k in range(i))
+                        has_down = any(is_real_val(matrix_data[k][j]) for k in range(i+1, rows))
+                        has_left = any(is_real_val(matrix_data[i][k]) for k in range(j))
+                        has_right = any(is_real_val(matrix_data[i][k]) for k in range(j+1, cols))
+                        
+                        if has_up and has_down:
+                            matrix_data[i][j] = r"\vdots"
+                        elif has_left and has_right:
+                            matrix_data[i][j] = r"\cdots"
+                        elif (has_up or has_left) and (has_down or has_right):
+                            matrix_data[i][j] = r"\ddots"
+                        else:
+                            matrix_data[i][j] = r"\ddots" if fill_dots and (0 < i < rows-1 or 0 < j < cols-1) else "0"
 
         # 5. LaTeX 코드 조립
         env = bracket_map.get(b_type, 'bmatrix')
         
-        # 첨가 행렬의 경우 amsmath의 특성상 array 환경을 괄호로 감싸서 구현 
         if aug_col is not None and 0 < aug_col < cols:
             col_format = "c" * aug_col + "|" + "c" * (cols - aug_col)
             left_b = {'pmatrix': '(', 'bmatrix': '[', 'vmatrix': '|', 'Vmatrix': '\\|', 'Bmatrix': '\\{'}.get(env, '[')
@@ -290,20 +290,19 @@ def handle_matrix(sub_cmds, parallels):
                 latex_str += " & ".join(r) + " \\\\\n"
             latex_str += f"\\end{{{env}}}"
 
-        # 6. 행렬 분석 (옵션) [cite: 68, 71]
+        # 6. 행렬 분석
         analysis_data = None
         if analyze_mode:
             try:
-                # 심볼릭 처리를 위해 SymPy Matrix로 변환 시도
-                sp_mat = sp.Matrix(matrix_data)
+                sp_mat_anal = sp.Matrix(matrix_data)
                 analysis_data = {}
-                if sp_mat.is_square:
-                    analysis_data['det'] = sp.latex(sp_mat.det())
-                    try: analysis_data['inv'] = sp.latex(sp_mat.inv())
+                if sp_mat_anal.is_square:
+                    analysis_data['det'] = sp.latex(sp_mat_anal.det())
+                    try: analysis_data['inv'] = sp.latex(sp_mat_anal.inv())
                     except: analysis_data['inv'] = "\\text{Not invertible}"
-                analysis_data['rref'] = sp.latex(sp_mat.rref()[0])
-            except Exception:
-                analysis_data = {"error": "생략 기호나 변수가 포함되어 분석할 수 없습니다."}
+                analysis_data['rref'] = sp.latex(sp_mat_anal.rref()[0])
+            except:
+                analysis_data = {"error": "분석 실패"}
 
         return json.dumps({
             "status": "success",
