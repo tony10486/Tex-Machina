@@ -34,43 +34,53 @@ def handle_matrix(sub_cmds, parallels):
         if cmds:
             content_str = cmds.pop(0)
 
-        # 2. 첨가 행렬(Augmented Matrix) 옵션 파싱 [cite: 65]
+        # 2. 파서에 의해 분리된 행 데이터 재조합 및 옵션 파싱
+        # 파서가 '/'를 기준으로 parallels로 분리해버린 데이터를 다시 합칩니다.
+        actual_data_parts = []
+        if content_str:
+            actual_data_parts.append(content_str)
+            
         aug_col = None
         analyze_mode = False
+        
         for p in parallels:
-            if p.startswith('aug='):
-                aug_col = int(p.split('=')[1])
-            if p == 'analyze':
-                analyze_mode = True # 행렬 분석 옵션 켜기 [cite: 68, 71]
+            p_strip = p.strip()
+            if p_strip.startswith('aug='):
+                aug_col = int(p_strip.split('=')[1])
+            elif p_strip == 'analyze':
+                analyze_mode = True
+            elif p_strip.startswith('step='):
+                pass # step 옵션 무시
+            else:
+                # 옵션 형식이 아니면 잘려나간 행 데이터로 간주
+                actual_data_parts.append(p_strip)
+        
+        # 전체 데이터 문자열 재구축
+        full_content = "/".join(actual_data_parts)
 
         # 3. 행렬 데이터 구조화
         matrix_data = []
-        if content_str == 'id':
+        if full_content == 'id':
             # 단위 행렬 자동 생성 
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
-        elif content_str:
-            # 데이터 파싱 로직 개선 (행 구분: / 또는 ;  열 구분: , 또는 공백)
-            row_sep = ';' if ';' in content_str else '/'
-            raw_rows = content_str.split(row_sep)
+        elif full_content:
+            # 데이터 파싱 로직 (행 구분: / 또는 ;  열 구분: , 또는 공백)
+            row_sep = ';' if ';' in full_content else '/'
+            raw_rows = full_content.split(row_sep)
             
             parsed_data = []
             for r in raw_rows:
-                col_sep = ',' if ',' in r else None # 공백 분할은 split()으로 처리
+                col_sep = ',' if ',' in r else None
                 if col_sep:
                     parsed_data.append([c.strip() for c in r.split(col_sep)])
                 else:
                     parsed_data.append(r.split())
 
-            # 크기가 명시되지 않았다면 데이터로부터 추론
+            # 크기 추론
             if not size_specified:
                 rows = len(parsed_data)
                 cols = max(len(r) for r in parsed_data) if parsed_data else 1
-                if rows == 1 and len(parsed_data[0]) == 1 and not (row_sep in content_str or ',' in content_str or ' ' in content_str.strip()):
-                    # 만약 구분자 없이 숫자 하나만 왔다면 (예: matrix > 5)
-                    # 사용자 의도에 따라 1x1로 볼지 3x3의 첫 원소로 볼지 결정. 
-                    # 여기서는 1x1로 추론함.
-                    pass 
 
             for i in range(rows):
                 row_data = []
@@ -83,23 +93,25 @@ def handle_matrix(sub_cmds, parallels):
                     row_data = ["0"] * cols
                 matrix_data.append(row_data)
         else:
-            # 데이터가 없는 경우 기본 크기로 0 채움
             matrix_data = [["0"] * cols for _ in range(rows)]
 
         # 4. 스마트 생략 기호 인식 (...) 
-        # 주변 패턴과 인덱스를 파악하여 \cdots, \vdots, \ddots로 자동 치환합니다.
+        # 더 정교한 위치 기반 치환 로직
         for i in range(rows):
             for j in range(cols):
                 val = matrix_data[i][j]
                 if val in ['.', '..', '...']:
-                    if i == j: 
-                        # 주대각선 상에 있으면 ddots
+                    if i == j and rows > 1 and cols > 1: 
+                        # 주대각선
                         matrix_data[i][j] = r"\ddots"
-                    elif i == rows - 1 or (i > 0 and matrix_data[i-1][j] in [r"\vdots", r"\ddots"]): 
-                        # 마지막 행이거나, 위쪽이 수직/대각 생략이면 vdots
+                    elif i == rows - 1 and rows > 1: 
+                        # 마지막 행 (세로 점)
                         matrix_data[i][j] = r"\vdots"
+                    elif j == cols - 1 and cols > 1:
+                        # 행의 끝 (가로 점)
+                        matrix_data[i][j] = r"\cdots"
                     else:
-                        # 기본적으로 행 방향은 cdots
+                        # 기본값
                         matrix_data[i][j] = r"\cdots"
 
         # 5. LaTeX 코드 조립
