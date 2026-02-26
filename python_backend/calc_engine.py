@@ -113,13 +113,63 @@ def op_limit(expr, args):
     direction = params[2] if len(params) > 2 else '+'
     return sp.limit(expr, var, target, dir=direction)
 
+def preprocess_latex_ode(latex_str):
+    """\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
+    # \frac{d^2y}{dx^2} -> y''
+    latex_str = re.sub(r'\\frac\{d\^(\d+)y\}\{dx\^\1\}', lambda m: 'y' + "'" * int(m.group(1)), latex_str)
+    # \frac{dy}{dx} -> y'
+    latex_str = re.sub(r'\\frac\{dy\}\{dx\}', "y'", latex_str)
+    return latex_str
+
+def fix_ode_expression(expr, dep_var_name='y', indep_var_name='x'):
+    """파싱된 SymPy 수식을 ODE 풀이가 가능한 형태로 변환합니다."""
+    x = sp.Symbol(indep_var_name)
+    y = sp.Function(dep_var_name)(x)
+    
+    substitutions = {}
+    for sym in expr.free_symbols:
+        name = sym.name
+        if name == dep_var_name:
+            substitutions[sym] = y
+        elif name.startswith(dep_var_name) and all(c == "'" for c in name[len(dep_var_name):]):
+            order = name.count("'")
+            substitutions[sym] = y.diff(x, order)
+            
+    return expr.subs(substitutions), y, x
+
+def parse_ics(ics_str, y, x):
+    """ic=y(0):1,y'(0):0 형태의 초기조건을 파싱합니다."""
+    ics = {}
+    if not ics_str:
+        return ics
+        
+    pairs = ics_str.split(',')
+    for pair in pairs:
+        if ':' not in pair: continue
+        lhs_str, rhs_str = pair.split(':')
+        lhs_str = lhs_str.strip()
+        rhs = sp.sympify(rhs_str.strip())
+        
+        if lhs_str == 'y(0)':
+            ics[y.subs(x, 0)] = rhs
+        elif lhs_str == "y'(0)":
+            ics[y.diff(x).subs(x, 0)] = rhs
+            
+    return ics
+
 def op_ode(expr, args):
     """상미분방정식 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
-    if args and 'ic' in args[0]:
-        # ic=y(0):1,y'(0):0 형태 파싱 (단순화된 예시)
-        # 실제 구현시에는 dictionary 형태로 sp.dsolve에 ict 매개변수 전달
-        pass 
-    return sp.dsolve(expr)
+    fixed_expr, y, x = fix_ode_expression(expr)
+    
+    ics = {}
+    if args:
+        for arg in args:
+            if 'ic=' in arg:
+                ics_str = arg.replace('ic=', '').strip()
+                ics = parse_ics(ics_str, y, x)
+                break
+                
+    return sp.dsolve(fixed_expr, y, ics=ics if ics else None)
 
 def op_dimcheck(expr, args):
     """차원 및 단위 검사기 (Dimensional Analysis Check) [cite: 100]"""
@@ -246,11 +296,15 @@ def execute_calc(parsed_json_str):
         sub_cmds = req.get('subCommands', [])
         parallels = req.get('parallelOptions', [])
         
-        # 1. 수식 파싱
+        # 1. 수식 전처리 (ODE의 경우)
+        action = sub_cmds[0] if sub_cmds else "simplify"
+        if action == "ode":
+            selection = preprocess_latex_ode(selection)
+            
+        # 2. 수식 파싱
         expr = parse_latex(selection)
         
-        # 2. 명령어 실행
-        action = sub_cmds[0] if sub_cmds else "simplify"
+        # 3. 명령어 실행
         ops = get_calc_operations()
         
         if action not in ops:

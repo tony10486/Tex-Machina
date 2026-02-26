@@ -63,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
 				});
 				
 				// Webview 업데이트
-				provider.updatePreview(resultLatex, response.free_symbols);
+				provider.updatePreview(resultLatex, response.vars);
 			}
 		} catch (e) {
 			console.error("결과 삽입 중 오류:", e);
