@@ -7,6 +7,7 @@ let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
 let currentSelection: vscode.Selection | undefined;
 let currentOriginalText: string = "";
+let currentMainCommand: string = "";
 let currentParallels: string[] = [];
 
 export function activate(context: vscode.ExtensionContext) {
@@ -54,7 +55,10 @@ export function activate(context: vscode.ExtensionContext) {
                     let outputText = "";
 
                     //  제안서의 출력 포맷팅 설정 반영
-                    if (currentParallels.includes("newline")) {
+                    if (currentMainCommand === "matrix") {
+                        // 행렬 생성은 단독 삽입 (앞에 = 붙이지 않음)
+                        outputText = resultLatex;
+                    } else if (currentParallels.includes("newline")) {
                         // 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
                         outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
                     } else {
@@ -196,6 +200,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             const parsed = parseUserCommand(userInput, currentOriginalText);
+            currentMainCommand = parsed.mainCommand;
             currentParallels = parsed.parallelOptions;
 
             // 라플라스 설정 가져오기
