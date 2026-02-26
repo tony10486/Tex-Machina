@@ -181,7 +181,7 @@ def get_calc_operations():
 # ==========================================
 
 def strip_latex_delimiters(text):
-    """$...$, $$...$$, \[...\], \(...\) 등의 LaTeX 구분자를 제거합니다."""
+    r"""$...$, $$...$$, \[...\], \(...\) 등의 LaTeX 구분자를 제거합니다."""
     text = text.strip()
     # $$...$$ or \[...\]
     if (text.startswith('$$') and text.endswith('$$')) or (text.startswith(r'\[') and text.endswith(r'\]')):

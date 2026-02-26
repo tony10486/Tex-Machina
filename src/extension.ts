@@ -54,8 +54,8 @@ export function activate(context: vscode.ExtensionContext) {
 					// 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
 					outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
 				} else {
-					// 기본값: replace (기존 수식 덮어쓰기) 
-					outputText = resultLatex;
+					// 기본값: 기존 수식 + " = " + 결과물 
+					outputText = `${currentOriginalText} = ${resultLatex}`;
 				}
 
 				await currentEditor.edit(editBuilder => {
