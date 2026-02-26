@@ -35,13 +35,13 @@ def handle_matrix(sub_cmds, parallels):
             content_str = cmds.pop(0)
 
         # 2. 파서에 의해 분리된 행 데이터 재조합 및 옵션 파싱
-        # 파서가 '/'를 기준으로 parallels로 분리해버린 데이터를 다시 합칩니다.
         actual_data_parts = []
         if content_str:
             actual_data_parts.append(content_str)
             
         aug_col = None
         analyze_mode = False
+        fill_dots = False
         
         for p in parallels:
             p_strip = p.strip()
@@ -49,23 +49,21 @@ def handle_matrix(sub_cmds, parallels):
                 aug_col = int(p_strip.split('=')[1])
             elif p_strip == 'analyze':
                 analyze_mode = True
+            elif p_strip == 'fill_dots':
+                fill_dots = True
             elif p_strip.startswith('step='):
-                pass # step 옵션 무시
+                pass
             else:
-                # 옵션 형식이 아니면 잘려나간 행 데이터로 간주
                 actual_data_parts.append(p_strip)
         
-        # 전체 데이터 문자열 재구축
         full_content = "/".join(actual_data_parts)
 
         # 3. 행렬 데이터 구조화
         matrix_data = []
         if full_content == 'id':
-            # 단위 행렬 자동 생성 
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
         elif full_content:
-            # 데이터 파싱 로직 (행 구분: / 또는 ;  열 구분: , 또는 공백)
             row_sep = ';' if ';' in full_content else '/'
             raw_rows = full_content.split(row_sep)
             
@@ -77,7 +75,6 @@ def handle_matrix(sub_cmds, parallels):
                 else:
                     parsed_data.append(r.split())
 
-            # 크기 추론
             if not size_specified:
                 rows = len(parsed_data)
                 cols = max(len(r) for r in parsed_data) if parsed_data else 1
@@ -87,32 +84,60 @@ def handle_matrix(sub_cmds, parallels):
                 if i < len(parsed_data):
                     current_row = parsed_data[i]
                     for j in range(cols):
-                        val = current_row[j] if j < len(current_row) else "0"
+                        val = current_row[j] if j < len(current_row) else ""
                         row_data.append(val)
                 else:
-                    row_data = ["0"] * cols
+                    row_data = [""] * cols
                 matrix_data.append(row_data)
         else:
-            matrix_data = [["0"] * cols for _ in range(rows)]
+            # 데이터가 없고 fill_dots가 활성화된 경우 템플릿 생성
+            if fill_dots and rows >= 2 and cols >= 2:
+                matrix_data = [[""] * cols for _ in range(rows)]
+                matrix_data[0][0] = "a_{11}"
+                matrix_data[0][cols-1] = f"a_{{1{cols}}}"
+                matrix_data[rows-1][0] = f"a_{{{rows}1}}"
+                matrix_data[rows-1][cols-1] = f"a_{{{rows}{cols}}}"
+            else:
+                matrix_data = [[""] * cols for _ in range(rows)]
 
         # 4. 스마트 생략 기호 인식 (...) 
-        # 더 정교한 위치 기반 치환 로직
+        def is_real_val(v):
+            # 생략 기호나 빈 칸이 아닌 것을 실제 값으로 간주
+            dots = [r'.', r'..', r'...', r'\vdots', r'\cdots', r'\ddots']
+            return v.strip() and v not in dots
+
         for i in range(rows):
             for j in range(cols):
                 val = matrix_data[i][j]
-                if val in ['.', '..', '...']:
-                    if i == j and rows > 1 and cols > 1: 
-                        # 주대각선
-                        matrix_data[i][j] = r"\ddots"
-                    elif i == rows - 1 and rows > 1: 
-                        # 마지막 행 (세로 점)
+                if val in ['.', '..', '...', '']:
+                    # 빈 공간인데 fill_dots가 꺼져있으면 0으로 채우고 스킵
+                    if val == '' and not fill_dots:
+                        matrix_data[i][j] = "0"
+                        continue
+                    
+                    # 주변에 실제 원소가 있는지 확인 (상하좌우 방향 탐색)
+                    has_up = any(is_real_val(matrix_data[k][j]) for k in range(i))
+                    has_down = any(is_real_val(matrix_data[k][j]) for k in range(i+1, rows))
+                    has_left = any(is_real_val(matrix_data[i][k]) for k in range(j))
+                    has_right = any(is_real_val(matrix_data[i][k]) for k in range(j+1, cols))
+                    
+                    if has_up and has_down:
                         matrix_data[i][j] = r"\vdots"
-                    elif j == cols - 1 and cols > 1:
-                        # 행의 끝 (가로 점)
+                    elif has_left and has_right:
                         matrix_data[i][j] = r"\cdots"
+                    elif (has_up or has_left) and (has_down or has_right):
+                        # 대각선 흐름 (위 또는 왼쪽이 있고, 아래 또는 오른쪽이 있는 경우)
+                        matrix_data[i][j] = r"\ddots"
                     else:
-                        # 기본값
-                        matrix_data[i][j] = r"\cdots"
+                        # 끝 부분 처리 (주변에 하나만 있거나 아예 없는 경우)
+                        if fill_dots:
+                            # 5x5 등에서 구석만 채워진 경우 가운데를 채우기 위한 기본값
+                            if (i > 0 and i < rows - 1) and (j > 0 and j < cols - 1):
+                                matrix_data[i][j] = r"\ddots"
+                            else:
+                                matrix_data[i][j] = "0"
+                        else:
+                            matrix_data[i][j] = "0"
 
         # 5. LaTeX 코드 조립
         env = bracket_map.get(b_type, 'bmatrix')
