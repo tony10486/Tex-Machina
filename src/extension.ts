@@ -117,6 +117,7 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "matrix > v >", description: "수직바 (vmatrix) - | | (행렬식)" },
 				{ label: "matrix > V >", description: "이중 수직바 (Vmatrix) - || ||" },
 		        { label: "matrix > B >", description: "중괄호 (Bmatrix) - { }" },
+                { label: "matrix > transform > [각도]", description: "회전변환 행렬 생성 (예: transform > \pi/2)" },
                 { label: "matrix > [데이터]", description: "데이터 바로 입력 (예: matrix > 1,2/3,4)" },
                 { label: "matrix > ... / analyze", description: "행렬 분석 (행렬식, 역행렬, RREF 결과 표시)" },
                 { label: "matrix > ... / aug=", description: "첨가 행렬 (예: / aug=2 -> 2열 뒤에 수직선 추가)" }

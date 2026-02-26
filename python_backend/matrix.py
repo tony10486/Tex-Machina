@@ -31,15 +31,13 @@ def handle_matrix(sub_cmds, parallels):
             rows, cols = int(r_str), int(c_str)
             size_specified = True
             
-        # 세 번째 인자는 내용 (id, diag 또는 데이터) 
-        if cmds:
-            content_str = cmds.pop(0)
+        # 세 번째 인자부터는 내용 (id, diag 또는 데이터) 
+        actual_data_parts = []
+        while cmds:
+            actual_data_parts.append(cmds.pop(0))
 
         # 2. 파서에 의해 분리된 행 데이터 재조합 및 옵션 파싱
-        actual_data_parts = []
-        if content_str:
-            actual_data_parts.append(content_str)
-            
+        # parallels 처리
         aug_col = None
         analyze_mode = False
         fill_dots = False
@@ -61,18 +59,57 @@ def handle_matrix(sub_cmds, parallels):
         matrix_data = []
 
         # 2.5 특별 행렬 생성 (Rotation, etc.)
-        if full_content.startswith('rot'):
-            # rot > 30 (2D) or rot3 > x, 45 (3D)
+        if full_content.startswith('rot') or (full_content.startswith('transform') and ':' not in full_content):
+            # rot > 30 (2D) or rot3 > x, 45 (3D) or transform > 30
             try:
-                if full_content.startswith('rot3'):
-                    params = full_content.replace('rot3', '').strip(' >').split(',')
-                    axis = params[0].strip() if params else 'z'
-                    angle_str = params[1].strip() if len(params) > 1 else 'theta'
+                def parse_angle(angle_str):
+                    if not angle_str: return sp.Symbol('theta')
                     
-                    angle = sp.sympify(angle_str)
-                    # 각도가 숫자인 경우 라디안 변환 (도 단위 입력 가정)
+                    # LaTeX 특수 문자를 SymPy 문자로 전처리
+                    # \theta, \phi 등을 theta, phi로 변환 (백슬래시 제거)
+                    s_angle_str = angle_str.replace(r'\pi', 'pi')
+                    s_angle_str = s_angle_str.replace(r'\theta', 'theta')
+                    s_angle_str = s_angle_str.replace(r'\phi', 'phi')
+                    s_angle_str = s_angle_str.replace(r'\alpha', 'alpha')
+                    s_angle_str = s_angle_str.replace(r'\beta', 'beta')
+                    
+                    # 남은 백슬래시 및 중괄호 정리
+                    s_angle_str = s_angle_str.replace('\\', '').replace('{', '').replace('}', '').strip()
+                    
+                    from sympy.parsing.latex import parse_latex
+                    try:
+                        # 기본적인 산술 기호 및 SymPy 내장 상수(pi)가 포함된 경우 sympify 시도
+                        if re.match(r'^[a-zA-Z0-9\s\+\-\*\/\(\)\.]+$', s_angle_str):
+                            angle = sp.sympify(s_angle_str)
+                        else:
+                            angle = parse_latex(angle_str)
+                    except:
+                        try:
+                            # sympify 실패 시 원본 LaTeX 파싱 시도
+                            angle = parse_latex(angle_str)
+                        except:
+                            # 최후의 수단: 단순히 심볼로 처리
+                            angle = sp.Symbol(s_angle_str)
+
                     if angle.is_number:
-                        angle = angle * sp.pi / 180
+                        # 1. pi가 포함되어 있으면 무조건 라디안
+                        if any(s in angle_str for s in ['pi', '\\pi']):
+                            return angle
+                        
+                        # 2. 숫자가 10 이상이면 (예: 30, 45, 90) 도 단위로 간주하여 라디안으로 변환
+                        #    숫자가 매우 작으면 (예: 0.5, 1.57) 이미 라디안일 가능성이 높음
+                        val = float(angle.evalf())
+                        if abs(val) >= 10:
+                            angle = angle * sp.pi / 180
+                            
+                    return angle
+
+                if full_content.startswith('rot3'):
+                    params_str = full_content.replace('rot3', '').strip(' >/')
+                    params = params_str.split(',')
+                    axis = params[0].strip() if params and params[0].strip() else 'z'
+                    angle_str = params[1].strip() if len(params) > 1 else 'theta'
+                    angle = parse_angle(angle_str)
                     
                     if axis == 'x':
                         sp_mat = sp.Matrix([
@@ -93,11 +130,9 @@ def handle_matrix(sub_cmds, parallels):
                             [0, 0, 1]
                         ])
                 else: # 2D Rotation
-                    angle_str = full_content.replace('rot', '').strip(' >')
-                    if not angle_str: angle_str = 'theta'
-                    angle = sp.sympify(angle_str)
-                    if angle.is_number:
-                        angle = angle * sp.pi / 180
+                    angle_str = full_content.replace('rot', '').replace('transform', '').strip(' >/')
+                    angle = parse_angle(angle_str)
+                    
                     sp_mat = sp.Matrix([
                         [sp.cos(angle), -sp.sin(angle)],
                         [sp.sin(angle), sp.cos(angle)]
@@ -105,7 +140,7 @@ def handle_matrix(sub_cmds, parallels):
                 
                 rows, cols = sp_mat.shape
                 for i in range(rows):
-                    matrix_data.append([sp.latex(sp_mat[i, j]) for j in range(cols)])
+                    matrix_data.append([sp.latex(sp_mat[i, j].simplify()) for j in range(cols)])
             except Exception as e:
                 return json.dumps({"status": "error", "message": f"Special matrix error: {str(e)}"})
         
@@ -129,7 +164,7 @@ def handle_matrix(sub_cmds, parallels):
                 
                 rows, cols = sp_mat.shape
                 for i in range(rows):
-                    matrix_data.append([sp.latex(sp_mat[i, j]) for j in range(cols)])
+                    matrix_data.append([sp.latex(sp_mat[i, j].simplify()) for j in range(cols)])
             except Exception as e:
                 return json.dumps({"status": "error", "message": f"Transformation matrix error: {str(e)}"})
 
