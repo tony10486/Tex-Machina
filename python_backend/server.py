@@ -1,6 +1,15 @@
 import sys
 import json
 import traceback
+import io
+import types
+
+# Ensure compatibility for antlr4 on Python 3.12+ (typing.io removal)
+if 'typing.io' not in sys.modules:
+    m = types.ModuleType('typing.io')
+    m.TextIO = io.TextIOBase
+    m.BinaryIO = io.BufferedIOBase
+    sys.modules['typing.io'] = m
 
 def main():
     for line in sys.stdin:

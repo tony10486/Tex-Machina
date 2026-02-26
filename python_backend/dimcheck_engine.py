@@ -3,7 +3,7 @@ from typing import Dict, Any, Union
 import re
 
 # Vol 1. 5.1장 규격에 따른 안전한 파서
-from latex2sympy2 import latex2sympy
+from sympy.parsing.latex import parse_latex as latex2sympy
 
 # ---------------------------------------------------------------------------
 # [1] 기본 차원 기호(Base Dimensions) 및 표준 매핑 (Mechanics & Electromagnetism)
@@ -37,7 +37,8 @@ STANDARD_DIM_MAP = {
     'B': M / (I * T_dim**2),                        # 자기장
     
     # 4. 무차원 (Dimensionless) 상수 및 각도
-    'theta': sp.S.One, 'phi': sp.S.One, 'alpha': sp.S.One, 'beta': sp.S.One, 'pi': sp.S.One
+    'theta': sp.S.One, 'phi': sp.S.One, 'alpha': sp.S.One, 'beta': sp.S.One, 'pi': sp.S.One,
+    'constant': sp.S.One, 'text': sp.S.One
 }
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,9 @@ def _get_dimension(expr: sp.Expr, dim_map: Dict[str, sp.Expr]) -> sp.Expr:
     elif isinstance(expr, sp.Symbol):
         if expr.name in dim_map:
             return dim_map[expr.name]
+        # LaTeX \text{...} 이나 'constant' 처리
+        elif 'text' in expr.name or expr.name == 'constant':
+            return sp.S.One
         else:
             # 매핑에 없는 변수는 [var_name] 형태의 새로운 차원 기호로 간주
             return sp.Symbol(f"[{expr.name}]", positive=True)
@@ -118,7 +122,7 @@ def _get_dimension(expr: sp.Expr, dim_map: Dict[str, sp.Expr]) -> sp.Expr:
         arg_dim = _get_dimension(expr.args[0], dim_map)
         if sp.simplify(arg_dim) != sp.S.One and not isinstance(arg_dim, sp.Symbol):
             func_name = expr.func.__name__
-            raise ValueError(f"초월함수(\\{func_name})의 인자는 무차원이어야 합니다. 현재 인자 차원: ${sp.latex(arg_dim)}$")
+            raise ValueError(fr"초월함수(\\{func_name})의 인자는 무차원이어야 합니다. 현재 인자 차원: ${sp.latex(arg_dim)}$")
         return sp.S.One
         
     # 방정식 형태 (LHS = RHS)

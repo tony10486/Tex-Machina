@@ -223,17 +223,19 @@ def op_ode(expr, args):
                 
     return sp.dsolve(fixed_expr, y, ics=ics if ics else None)
 
-def op_dimcheck(expr, args):
+def op_dimcheck_wrapper(expr, args, parallels, selection):
     """차원 및 단위 검사기 (Dimensional Analysis Check) [cite: 100]"""
-    from sympy.physics.units import Dimension, dimensions
-    # 수식의 좌변과 우변이 분리되어 있다고 가정 (Eq 객체)
-    if isinstance(expr, sp.Eq):
-        lhs_dim = Dimension(expr.lhs)
-        rhs_dim = Dimension(expr.rhs)
-        if lhs_dim != rhs_dim:
-            return f"Error: [{lhs_dim}] != [{rhs_dim}]" # 단위 불일치 경고 [cite: 100]
-        return "Dimensions match."
-    return "Expression is not an equation."
+    # selection: 원본 LaTeX 수식
+    # parallels: 병렬 옵션 (예: set=v:L/T)
+    params = {
+        "rawSelection": selection,
+        "parallelOptions": parallels
+    }
+    res = handle_dimcheck(params)
+    if "error" in res:
+        # 에러가 발생하더라도 LaTeX 결과는 포함되어 있음 (% [DimCheck Error] ...)
+        return res["latex"]
+    return res["latex"]
 
 def op_error_prop(expr, args, parallels):
     """실험물리학자를 위한 오차 전파 계산기 [cite: 114, 115]"""
@@ -390,6 +392,7 @@ def op_laplace(expr, args, config):
     return sp.laplace_transform(calc_expr, source_sym, target_sym, noconds=True)
 
 from matrix import handle_matrix
+from dimcheck_engine import handle_dimcheck
 
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
@@ -399,66 +402,66 @@ def get_calc_operations():
     """제안서에 명시된 모든 연산자를 매핑하는 딕셔너리 """
     return {
         # 0. 행렬 생성 및 분석
-        "matrix": lambda x, v, p, c: handle_matrix(v, p),
+        "matrix": lambda x, v, p, c, s: handle_matrix(v, p),
 
         # 1. 기본 대수 및 해석 
-        "simplify": lambda x, v, p, c: sp.simplify(x),
-        "expand": lambda x, v, p, c: sp.expand(x),
-        "factor": lambda x, v, p, c: sp.factor(x),
-        "solve": lambda x, v, p, c: sp.solve(x),
-        "eval": lambda x, v, p, c: x.evalf(),
+        "simplify": lambda x, v, p, c, s: sp.simplify(x),
+        "expand": lambda x, v, p, c, s: sp.expand(x),
+        "factor": lambda x, v, p, c, s: sp.factor(x),
+        "solve": lambda x, v, p, c, s: sp.solve(x),
+        "eval": lambda x, v, p, c, s: x.evalf(),
         
         # 2. 분수 및 삼각함수 [cite: 25]
-        "apart": lambda x, v, p, c: sp.apart(x),
-        "together": lambda x, v, p, c: sp.together(x),
-        "trigsimp": lambda x, v, p, c: sp.trigsimp(x),
-        "expand_trig": lambda x, v, p, c: sp.expand_trig(x),
+        "apart": lambda x, v, p, c, s: sp.apart(x),
+        "together": lambda x, v, p, c, s: sp.together(x),
+        "trigsimp": lambda x, v, p, c, s: sp.trigsimp(x),
+        "expand_trig": lambda x, v, p, c, s: sp.expand_trig(x),
         
         # 3. 미적분 계층 [cite: 25, 32]
-        "diff": lambda x, v, p, c: op_diff(x, v),
-        "int": lambda x, v, p, c: op_int(x, v),
-        "limit": lambda x, v, p, c: op_limit(x, v),
-        "taylor": lambda x, v, p, c: op_taylor(x, v, p),
-        "asymp": lambda x, v, p, c: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개 [cite: 40]
+        "diff": lambda x, v, p, c, s: op_diff(x, v),
+        "int": lambda x, v, p, c, s: op_int(x, v),
+        "limit": lambda x, v, p, c, s: op_limit(x, v),
+        "taylor": lambda x, v, p, c, s: op_taylor(x, v, p),
+        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개 [cite: 40]
         
         # 4. 선형대수 행렬 연산 [cite: 26, 27, 35]
-        "det": lambda x, v, p, c: sp.Matrix(x).det(),
-        "inv": lambda x, v, p, c: sp.Matrix(x).inv(),
-        "eigen": lambda x, v, p, c: sp.Matrix(x).eigenvals(),
-        "rref": lambda x, v, p, c: sp.Matrix(x).rref()[0],
-        "rank": lambda x, v, p, c: sp.Matrix(x).rank(),
-        "trace": lambda x, v, p, c: sp.Matrix(x).trace(),
-        "transpose": lambda x, v, p, c: sp.Matrix(x).T,
-        "nullspace": lambda x, v, p, c: sp.Matrix(x).nullspace(),
-        "jacobian": lambda x, v, p, c: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x, # 야코비 행렬 [cite: 35]
-        "hessian": lambda x, v, p, c: sp.hessian(x, list(x.free_symbols)), # 헤세 행렬 [cite: 35]
+        "det": lambda x, v, p, c, s: sp.Matrix(x).det(),
+        "inv": lambda x, v, p, c, s: sp.Matrix(x).inv(),
+        "eigen": lambda x, v, p, c, s: sp.Matrix(x).eigenvals(),
+        "rref": lambda x, v, p, c, s: sp.Matrix(x).rref()[0],
+        "rank": lambda x, v, p, c, s: sp.Matrix(x).rank(),
+        "trace": lambda x, v, p, c, s: sp.Matrix(x).trace(),
+        "transpose": lambda x, v, p, c, s: sp.Matrix(x).T,
+        "nullspace": lambda x, v, p, c, s: sp.Matrix(x).nullspace(),
+        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x, # 야코비 행렬 [cite: 35]
+        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)), # 헤세 행렬 [cite: 35]
         
         # 5. 미분방정식 및 변환 [cite: 28, 41]
-        "ode": lambda x, v, p, c: op_ode(x, v),
-        "num_solve": lambda x, v, p, c: op_num_solve(x, v),
-        "pde": lambda x, v, p, c: op_pde(x, v),
-        "laplace": lambda x, v, p, c: op_laplace(x, v, c),
-        "ilaplace": lambda x, v, p, c: sp.inverse_laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('s'), sp.Symbol('t'), noconds=True),
-        "fourier": lambda x, v, p, c: sp.fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('x'), sp.Symbol('k')),
-        "ifourier": lambda x, v, p, c: sp.inverse_fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('k'), sp.Symbol('x')),
-        "ztrans": lambda x, v, p, c: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환 [cite: 41]
+        "ode": lambda x, v, p, c, s: op_ode(x, v),
+        "num_solve": lambda x, v, p, c, s: op_num_solve(x, v),
+        "pde": lambda x, v, p, c, s: op_pde(x, v),
+        "laplace": lambda x, v, p, c, s: op_laplace(x, v, c),
+        "ilaplace": lambda x, v, p, c, s: sp.inverse_laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('s'), sp.Symbol('t'), noconds=True),
+        "fourier": lambda x, v, p, c, s: sp.fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('x'), sp.Symbol('k')),
+        "ifourier": lambda x, v, p, c, s: sp.inverse_fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('k'), sp.Symbol('x')),
+        "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환 [cite: 41]
         
         # 6. 복소해석학 [cite: 29, 30]
-        "residue": lambda x, v, p, c: sp.residue(x, sp.Symbol(v[0]), sp.sympify(v[1]) if len(v)>1 else 0),
-        "laurent": lambda x, v, p, c: sp.series(x, sp.Symbol(v[0]), 0, 4, dir='+').removeO(),
-        "conjugate": lambda x, v, p, c: sp.conjugate(x),
-        "re": lambda x, v, p, c: sp.re(x),
-        "im": lambda x, v, p, c: sp.im(x),
+        "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), sp.sympify(v[1]) if len(v)>1 else 0),
+        "laurent": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]), 0, 4, dir='+').removeO(),
+        "conjugate": lambda x, v, p, c, s: sp.conjugate(x),
+        "re": lambda x, v, p, c, s: sp.re(x),
+        "im": lambda x, v, p, c, s: sp.im(x),
         
         # 7. 정수론 및 이산수학 [cite: 30, 31, 39]
-        "prime": lambda x, v, p, c: sp.isprime(int(sp.simplify(x))),
-        "factorint": lambda x, v, p, c: sp.factorint(int(sp.simplify(x))),
-        "logic": lambda x, v, p, c: sp.simplify_logic(x, form='cnf'), # 복잡한 논리식 최소화 [cite: 39]
+        "prime": lambda x, v, p, c, s: sp.isprime(int(sp.simplify(x))),
+        "factorint": lambda x, v, p, c, s: sp.factorint(int(sp.simplify(x))),
+        "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'), # 복잡한 논리식 최소화 [cite: 39]
         
         # 8. 물리 / 공학 유틸리티 [cite: 100, 115]
-        "dimcheck": lambda x, v, p, c: op_dimcheck(x, v),
-        "error_prop": lambda x, v, p, c: op_error_prop(x, v, p),
-        "tensor_expand": lambda x, v, p, c: op_tensor_expand(x, v)
+        "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
+        "error_prop": lambda x, v, p, c, s: op_error_prop(x, v, p),
+        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v)
     }
 
 # ==========================================
@@ -613,7 +616,7 @@ def execute_calc(parsed_json_str):
             ops = get_calc_operations()
             if action not in ops:
                 raise ValueError(f"Unknown action: {action}")
-            result = ops[action](expr, sub_cmds, parallels, config)
+            result = ops[action](expr, sub_cmds, parallels, config, selection)
         
         # 4. 결과 포맷팅
         final_latex = result if isinstance(result, str) else sp.latex(result)

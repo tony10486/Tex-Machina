@@ -29,7 +29,8 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
             pushToCmds();
             continue;
         }
-        if (char === '/' && isParallelSection) {
+        // 개선: 앞에 공백이 있는 '/'만 새로운 옵션 구분자로 인식 (예: " / set="는 OK, "M/(L*T)"는 무시)
+        if (char === '/' && isParallelSection && i > 0 && input[i-1] === ' ') {
             parallels.push(buffer.trim());
             buffer = "";
             continue;

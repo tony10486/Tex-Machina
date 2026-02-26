@@ -109,6 +109,7 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "calc > taylor", description: "테일러 급수 (예: calc > taylor / 5)" },
                 { label: "calc > ode", description: "미분방정식 (예: calc > ode / ic=y(0):1)" },
                 { label: "calc > laplace", description: "라플라스 변환" },
+                { label: "calc > dimcheck", description: "차원 및 단위 검사 (예: / set=v:L/T)" },
                 { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
             ],
             matrix: [
