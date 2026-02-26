@@ -19,8 +19,21 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // 2. Python 데몬 백그라운드 실행
+	const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
+    
+    // Python 데몬 백그라운드 실행
     const serverPath = context.asAbsolutePath('python_backend/server.py');
-    pythonProcess = spawn('python', [serverPath]);
+    pythonProcess = spawn(pythonCommand, [serverPath]);
+
+    // ✨ [핵심 추가] 파이썬 프로그램 자체가 실행되지 않았을 때 알림을 띄우는 기능
+    pythonProcess.on('error', (err) => {
+        vscode.window.showErrorMessage(`Python 실행 실패! 컴퓨터에 파이썬이 설치되어 있는지 확인하세요. 상세: ${err.message}`);
+    });
+
+    // Python 내부 연산 오류 감지용
+    pythonProcess.stderr?.on('data', (data: Buffer) => {
+        vscode.window.showErrorMessage(`Python 연산 에러: ${data.toString()}`);
+    });
 
     // Python 오류 감지용 (디버깅)
     pythonProcess.stderr?.on('data', (data: Buffer) => {

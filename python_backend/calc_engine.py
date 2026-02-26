@@ -1,8 +1,6 @@
-# calc.py
 import sympy as sp
-from latex2sympy2 import latex2sympy
+from sympy.parsing.latex import parse_latex  # 공식 파서 사용
 import json
-import re
 
 def op_tensor_expand(expr, args):
     """
@@ -187,8 +185,8 @@ def execute_calc(parsed_json_str):
         sub_cmds = request.get('subCommands', [])
         parallels = request.get('parallelOptions', [])
         
-        # 1. 수식 파싱 (latex2sympy2)
-        expr = latex2sympy(selection)
+        # 1. 수식 파싱 (SymPy 공식 내장 파서로 교체!)
+        expr = parse_latex(selection)
         
         # 2. 명령어 식별
         action = sub_cmds[0] if sub_cmds else "simplify"
@@ -243,7 +241,7 @@ def execute_calc(parsed_json_str):
 if __name__ == "__main__":
     # 테스트 1: 다변수 편미분 [cite: 32]
     test_json = json.dumps({
-        "rawSelection": "x^2 y + y^3 \sin(x)",
+        "rawSelection": r"x^2 y + y^3 \sin(x)",
         "subCommands": ["diff", "x, y"],
         "parallelOptions": []
     })
