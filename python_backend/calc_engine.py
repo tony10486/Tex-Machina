@@ -114,10 +114,10 @@ def op_limit(expr, args):
     return sp.limit(expr, var, target, dir=direction)
 
 def preprocess_latex_ode(latex_str):
-    """\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
-    # \frac{d^2y}{dx^2} -> y''
+    """\\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
+    # \\frac{d^2y}{dx^2} -> y''
     latex_str = re.sub(r'\\frac\{d\^(\d+)y\}\{dx\^\1\}', lambda m: 'y' + "'" * int(m.group(1)), latex_str)
-    # \frac{dy}{dx} -> y'
+    # \\frac{dy}{dx} -> y'
     latex_str = re.sub(r'\\frac\{dy\}\{dx\}', "y'", latex_str)
     return latex_str
 
@@ -479,18 +479,24 @@ def strip_latex_delimiters(text):
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
+        main_cmd = req.get('mainCommand', '').strip()
         sub_cmds = req.get('subCommands', [])
         parallels = req.get('parallelOptions', [])
         config = req.get('config', {})
         selection = req.get('rawSelection', '').strip()
         selection = strip_latex_delimiters(selection)
         
-        # 1. 수식 전처리 (ODE의 경우)
-        action = sub_cmds[0] if sub_cmds else "simplify"
+        # 1. 수식 전처리 및 액션 결정
+        if main_cmd:
+            action = main_cmd
+        elif sub_cmds:
+            action = sub_cmds.pop(0)
+        else:
+            action = "simplify"
         
         if action == "matrix":
             # 행렬 명령은 수식 파싱 없이 바로 처리 (matrix.py 내부에서 파싱)
-            matrix_res_json = handle_matrix(sub_cmds[1:], parallels)
+            matrix_res_json = handle_matrix(sub_cmds, parallels)
             matrix_res = json.loads(matrix_res_json)
             
             if matrix_res["status"] == "error":
@@ -508,7 +514,6 @@ def execute_calc(parsed_json_str):
             return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
 
         if action == "ode":
-            # ... (rest of the code unchanged)
             # 연립 방정식 분리 (쉼표나 세미콜론)
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
@@ -540,7 +545,7 @@ def execute_calc(parsed_json_str):
                 result = sp.dsolve(fixed_exprs, funcs)
             else:
                 # 단일 미분방정식 처리
-                result = op_ode(exprs[0], sub_cmds[1:])
+                result = op_ode(exprs[0], sub_cmds)
         else:
             # 2. 일반 수식 파싱
             expr = parse_latex(selection)
@@ -549,7 +554,7 @@ def execute_calc(parsed_json_str):
             ops = get_calc_operations()
             if action not in ops:
                 raise ValueError(f"Unknown action: {action}")
-            result = ops[action](expr, sub_cmds[1:], parallels, config)
+            result = ops[action](expr, sub_cmds, parallels, config)
         
         # 4. 결과 포맷팅
         final_latex = result if isinstance(result, str) else sp.latex(result)
@@ -589,6 +594,7 @@ def execute_calc(parsed_json_str):
         })
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
+
 # 단독 실행 테스트용
 if __name__ == "__main__":
     # 테스트 1: 다변수 편미분 [cite: 32]

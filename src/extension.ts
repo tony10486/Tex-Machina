@@ -115,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
             
             quickPick.hide();
 
-            if (!userInput) return;
+            if (!userInput) {return;}
 
             const parsed = parseUserCommand(userInput, currentOriginalText);
             currentParallels = parsed.parallelOptions;
