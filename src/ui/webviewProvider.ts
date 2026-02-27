@@ -19,6 +19,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 vscode.commands.executeCommand('tex-machina.rerenderPlot', data.expr, data.samples, data.options);
             } else if (data.command === 'exportPdf') {
                 vscode.commands.executeCommand('tex-machina.export3dPlot', data.expr, data.samples, data.color, data.options);
+            } else if (data.command === 'saveImage') {
+                const base64Data = data.imageData.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(base64Data, 'base64');
+                vscode.commands.executeCommand('tex-machina.internalSaveWebviewImage', buffer, data.format, data.expr);
             }
         });
 
@@ -139,13 +143,32 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                 <div class="btn-row full">
                     <button onclick="apply()">Apply Changes</button>
-                    <button class="secondary" onclick="exportPlot()">Export</button>
-                    <select id="exp-fmt" style="width:70px; flex:none"><option value="pdf">PDF</option><option value="png">PNG</option><option value="jpg">JPG</option></select>
+                </div>
+                <div class="btn-row full">
+                    <button class="secondary" onclick="exportPlot()">Capture View</button>
+                    <select id="exp-scale" style="width:50px; flex:none" title="Resolution Scale">
+                        <option value="1">1x</option>
+                        <option value="2">2x</option>
+                        <option value="3">3x</option>
+                        <option value="4">4x</option>
+                    </select>
+                    <select id="exp-fmt" style="width:60px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
+                </div>
+                <div class="btn-row full">
+                    <button class="secondary" onclick="hqExport()">HQ Export (Matplotlib PDF)</button>
                 </div>
             </div>
             <script>
                 const vscode = acquireVsCodeApi();
                 let last = "";
+                
+                function hqExport(){
+                    vscode.postMessage({
+                        command: 'exportPdf', expr: last, samples: document.getElementById('res').value,
+                        color: document.getElementById('col').value,
+                        options: { ...getOptions(), export: 'pdf' }
+                    });
+                }
                 function tab(n){
                     ['s','d','l','c'].forEach(t => document.getElementById(t).style.display = t===n?'grid':'none');
                     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.getAttribute('onclick').includes("'"+n+"'")));
@@ -179,12 +202,44 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     });
                 }
                 function exportPlot(){
+                    const x3d = document.getElementById('x');
+                    if (!x3d) return;
+                    
+                    const runtime = x3d.runtime;
+                    if (!runtime) return;
+
+                    const scale = parseInt(document.getElementById('exp-scale').value) || 1;
                     const fmt = document.getElementById('exp-fmt').value;
-                    vscode.postMessage({
-                        command: 'exportPdf', expr: last, samples: document.getElementById('res').value,
-                        color: document.getElementById('col').value,
-                        options: { ...getOptions(), export: fmt }
-                    });
+
+                    if (scale > 1) {
+                        const originalWidth = x3d.style.width;
+                        const originalHeight = x3d.style.height;
+                        const rect = x3d.getBoundingClientRect();
+                        
+                        x3d.style.width = (rect.width * scale) + 'px';
+                        x3d.style.height = (rect.height * scale) + 'px';
+                        
+                        setTimeout(() => {
+                            const imgData = runtime.getScreenshot();
+                            x3d.style.width = originalWidth;
+                            x3d.style.height = originalHeight;
+                            
+                            vscode.postMessage({
+                                command: 'saveImage',
+                                imageData: imgData,
+                                format: fmt,
+                                expr: last
+                            });
+                        }, 100);
+                    } else {
+                        const imgData = runtime.getScreenshot();
+                        vscode.postMessage({
+                            command: 'saveImage',
+                            imageData: imgData,
+                            format: fmt,
+                            expr: last
+                        });
+                    }
                 }
                 function hexToRgb(hex) {
                     const r = parseInt(hex.slice(1, 3), 16) / 255;

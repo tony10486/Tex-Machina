@@ -441,6 +441,36 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(exportCommand);
+
+    // 7. 웹뷰 캡처 이미지 저장 커맨드 (내부용)
+    let internalSaveCommand = vscode.commands.registerCommand('tex-machina.internalSaveWebviewImage', async (buffer: Buffer, format: string, expr: string) => {
+        if (!currentEditor) return;
+        
+        const targetDir = path.dirname(currentEditor.document.uri.fsPath);
+        const imagesDir = path.join(targetDir, 'images');
+        const ext = format || 'png';
+        const timestamp = new Date().getTime();
+        const filename = `plot_3d_${timestamp}.${ext}`;
+        const exportPath = path.join(imagesDir, filename);
+
+        try {
+            if (!fs.existsSync(imagesDir)) {
+                fs.mkdirSync(imagesDir, { recursive: true });
+            }
+            fs.writeFileSync(exportPath, buffer);
+            
+            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
+            
+            await currentEditor.edit(editBuilder => {
+                editBuilder.insert(currentEditor!.selection.end, figureCode);
+            });
+            
+            vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
+        }
+    });
+    context.subscriptions.push(internalSaveCommand);
 }
 
 export function deactivate() {
