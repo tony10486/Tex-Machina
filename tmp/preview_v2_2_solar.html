@@ -184,17 +184,23 @@
             const options = {
                 physics: {
                     enabled: true,
-                    timestep: 0.2, // Slower, smoother movement
+                    timestep: 0.3, 
+                    minVelocity: 0.02, 
                     solver: 'barnesHut',
                     barnesHut: {
-                        gravitationalConstant: -10000, // Stronger repulsion for wider spacing
-                        centralGravity: 0.1,
-                        springLength: 350, // Significantly increased spacing between nodes
-                        springConstant: 0.02,
-                        damping: 0.15,
+                        gravitationalConstant: -2500, 
+                        centralGravity: 0.2,
+                        springLength: 160, 
+                        springConstant: 0.05,
+                        damping: 0.12, 
                         avoidOverlap: 1
                     },
-                    stabilization: { iterations: 1000 } // Allows more time to settle
+                    stabilization: { 
+                        enabled: true,
+                        iterations: 2000,
+                        updateInterval: 50,
+                        onlyDynamic: false
+                    }
                 },
                 interaction: { 
                     hover: true, 

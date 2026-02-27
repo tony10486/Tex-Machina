@@ -16,11 +16,12 @@ from rich.progress import (
 from rich.panel import Panel
 
 # 설정 및 카테고리 매핑 (위키데이터 QID)
-# 더 넓은 범위를 커버하기 위해 QID 및 쿼리 전략을 강화했습니다.
+# 더 넓은 범위를 커버하고 정확한 항목을 가져오기 위해 QID를 최신화했습니다.
 CATEGORY_MAP = {
     "방정식": "Q11345",     # Equation
-    "항등식": "Q41138",     # Mathematical identity
-    "정리": "Q11012",       # Theorem (Mathematical theorem 포함)
+    "항등식": "Q4116214",   # Mathematical identity
+    "정리": "Q65943",       # Theorem
+    "공식": "Q191167",     # Formula
     "함수": "Q11348",       # Function
     "부등식": "Q165309",    # Inequality
     "물리법칙": "Q462061",  # Physical law
@@ -35,7 +36,6 @@ def get_total_count(category_name, qid):
     url = 'https://query.wikidata.org/sparql'
     
     # P2534(Defining formula) 또는 P1901(Formula) 중 하나라도 있는 항목을 찾습니다.
-    # 또한 정리(Theorem)의 경우 수학적 정리(Q1064567) 인스턴스도 많으므로 이를 고려합니다.
     query = f"""
     SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{
       ?item wdt:P31/wdt:P279* wd:{qid}.
@@ -43,40 +43,34 @@ def get_total_count(category_name, qid):
     }}
     """
     headers = {
-        'User-Agent': 'MathFormulaScraper/2.2 (Gemini CLI; honey@example.com)',
+        'User-Agent': 'MathFormulaScraper/2.3 (Gemini CLI)',
         'Accept': 'application/sparql-results+json'
     }
     try:
-        # 타임아웃을 30초로 대폭 늘림 (Theorem 같은 거대 카테고리 대응)
         response = requests.get(url, params={'query': query, 'format': 'json'}, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
         return int(data['results']['bindings'][0]['count']['value'])
     except Exception as e:
-        # 타임아웃이나 오류 발생 시 콘솔에 로그 출력 (사용자 확인용)
-        # console.print(f"[dim red]조회 실패 ({category_name}): {e}[/dim red]")
-        return -1 # 실패 표시
+        return -1
 
 def fetch_wikidata(category_name, qid, limit):
     """지정된 카테고리의 공식을 위키데이터에서 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
     
-    # 데이터 수집 시에도 P2534와 P1901을 모두 고려하며, 수식이 있는 것을 우선순위로 가져옴
+    # 쿼리 수정: 
+    # 1. SERVICE wikibase:label 블록에서 구체적인 변수 지정을 빼서 설명이 없는 항목도 포함되게 함.
+    # 2. ko,en 순서로 언어 폴백(Fallback) 보장.
     query = f"""
     SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
       ?item wdt:P31/wdt:P279* wd:{qid}.
       {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
-      SERVICE wikibase:label {{ 
-        bd:serviceParam wikibase:language "ko,en". 
-        ?item rdfs:label ?itemLabel.
-        ?item schema:description ?itemDescription.
-      }}
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
     }}
-    ORDER BY DESC(?formula)
     LIMIT {limit}
     """
     headers = {
-        'User-Agent': 'MathFormulaScraper/2.2 (Gemini CLI)',
+        'User-Agent': 'MathFormulaScraper/2.3 (Gemini CLI)',
         'Accept': 'application/sparql-results+json'
     }
     try:
