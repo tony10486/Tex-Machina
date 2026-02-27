@@ -45,6 +45,7 @@ def get_total_count(category_name, qid):
         query = """
         SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {
           { ?item wdt:P2534 ?formula. } UNION { ?item wdt:P1901 ?formula. }
+          MINUS { ?item wdt:P31/wdt:P279* wd:Q49008. }
         }
         """
     else:
@@ -52,6 +53,7 @@ def get_total_count(category_name, qid):
         SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{
           ?item wdt:P31/wdt:P279* wd:{qid}.
           {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+          MINUS {{ ?item wdt:P31/wdt:P279* wd:Q49008. }}
         }}
         """
     
@@ -67,27 +69,63 @@ def get_total_count(category_name, qid):
     except Exception as e:
         return -1
 
+def fetch_wikipedia_summary(title, lang='ko', level="Medium"):
+    """위키백과 API를 사용하여 요약문을 가져옵니다."""
+    if not title:
+        return None
+    
+    # level: "Short" (Wikidata), "Medium" (First sentence), "Long" (Full intro)
+    api_url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(title)}"
+    try:
+        response = requests.get(api_url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            extract = data.get('extract', '')
+            
+            if level == "Medium":
+                # 첫 문장만 추출 (마침표 기준)
+                match = re.split(r'(?<=[.!?])\s+', extract)
+                return match[0] if match else extract
+            return extract # "Long" 인 경우 전체 문단 반환
+    except:
+        pass
+    return None
+
 def fetch_wikidata(category_name, qid, limit):
     """지정된 카테고리의 공식을 위키데이터에서 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
     
-    # '전체' 카테고리인 경우 수식이 있는 어떤 항목이든 가져옴
+    # 서브쿼리를 사용하여 LIMIT을 먼저 적용함으로써 성능을 극대화합니다.
     if category_name == "전체":
         query = f"""
-        SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
-          {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+        SELECT ?item ?itemLabel ?itemDescription ?formula ?title_ko ?title_en WHERE {{
+          {{
+            SELECT DISTINCT ?item ?formula WHERE {{
+              {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+              FILTER NOT EXISTS {{ ?item wdt:P31/wdt:P279* wd:Q49008. }}
+            }}
+            LIMIT {limit}
+          }}
+          OPTIONAL {{ ?art_ko schema:about ?item; schema:isPartOf <https://ko.wikipedia.org/>; schema:name ?title_ko. }}
+          OPTIONAL {{ ?art_en schema:about ?item; schema:isPartOf <https://en.wikipedia.org/>; schema:name ?title_en. }}
           SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
         }}
-        LIMIT {limit}
         """
     else:
         query = f"""
-        SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
-          ?item wdt:P31/wdt:P279* wd:{qid}.
-          {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+        SELECT ?item ?itemLabel ?itemDescription ?formula ?title_ko ?title_en WHERE {{
+          {{
+            SELECT DISTINCT ?item ?formula WHERE {{
+              ?item wdt:P31/wdt:P279* wd:{qid}.
+              {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+              FILTER NOT EXISTS {{ ?item wdt:P31/wdt:P279* wd:Q49008. }}
+            }}
+            LIMIT {limit}
+          }}
+          OPTIONAL {{ ?art_ko schema:about ?item; schema:isPartOf <https://ko.wikipedia.org/>; schema:name ?title_ko. }}
+          OPTIONAL {{ ?art_en schema:about ?item; schema:isPartOf <https://en.wikipedia.org/>; schema:name ?title_en. }}
           SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
         }}
-        LIMIT {limit}
         """
     
     headers = {
@@ -102,12 +140,26 @@ def fetch_wikidata(category_name, qid, limit):
         console.print(f"[bold red]데이터 수집 에러 ({category_name}):[/bold red] {e}")
         return []
 
-def process_formula(item, category):
+def process_formula(item, category, desc_level="Short"):
     """수집된 원본 데이터를 JSON 형식에 맞게 변환합니다."""
     qid = item['item']['value'].split('/')[-1]
     name = item.get('itemLabel', {}).get('value', qid)
     latex = item.get('formula', {}).get('value', '')
     description = item.get('itemDescription', {}).get('value', '')
+    
+    # 설명 깊이 조절
+    if desc_level != "Short":
+        title_ko = item.get('title_ko', {}).get('value')
+        title_en = item.get('title_en', {}).get('value')
+        
+        wiki_desc = None
+        if title_ko:
+            wiki_desc = fetch_wikipedia_summary(title_ko, 'ko', desc_level)
+        if not wiki_desc and title_en:
+            wiki_desc = fetch_wikipedia_summary(title_en, 'en', desc_level)
+            
+        if wiki_desc:
+            description = wiki_desc
     
     # 위키데이터에서 가끔 수식이 <math> 태그가 포함된 HTML 형태로 오는 경우 처리
     if '<math' in latex:
@@ -164,6 +216,19 @@ def main():
         console.print("[bold yellow]선택된 카테고리가 없습니다.[/bold yellow]")
         return
 
+    # 설명 깊이 선택
+    desc_level = questionary.select(
+        "수집할 설명(Description)의 상세도를 선택하세요:",
+        choices=[
+            questionary.Choice("Short", "Wikidata 요약 (매우 짧음)"),
+            questionary.Choice("Medium", "Wikipedia 첫 문장 (권장)"),
+            questionary.Choice("Long", "Wikipedia 리드 섹션 (문단 전체)")
+        ],
+        style=questionary.Style([
+            ('selected', 'fg:cyan bold'),
+        ])
+    ).ask() or "Short"
+
     # 2. 모든 카테고리의 수량 조회 (개선된 쿼리 및 타임아웃)
     all_counts = {}
     with Progress(
@@ -199,7 +264,7 @@ def main():
             default_val = str(min(20, full_count))
 
         limit_str = questionary.text(
-            f"'{cat}' (최대 {full_count if full_count < 5000 else '수천'}개 이상 가능) 중 수집할 개수:",
+            f"'{cat}' (전체 {full_count:,}개 존재) 중 수집할 개수:",
             default=default_val,
             validate=lambda text: text.isdigit() and int(text) >= 0 or "숫자를 입력하세요."
         ).ask()
@@ -210,7 +275,7 @@ def main():
                 "name": cat, 
                 "qid": CATEGORY_MAP[cat], 
                 "limit": limit, 
-                "total_on_wiki": full_count if full_count < 5000 else "Unknown"
+                "total_on_wiki": full_count
             })
             total_requested += limit
 
@@ -253,7 +318,7 @@ def main():
             raw_data = fetch_wikidata(t['name'], t['qid'], t['limit'])
             
             for item in raw_data:
-                formula_obj = process_formula(item, t['name'])
+                formula_obj = process_formula(item, t['name'], desc_level)
                 all_formulas.append(formula_obj)
                 progress.update(overall_task, advance=1)
                 time.sleep(0.002)

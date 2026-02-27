@@ -97,16 +97,22 @@ def search_crossref(query):
         for item in items:
             title = item.get("title", ["Unknown Title"])[0]
             doi = item.get("DOI")
+            
+            # 저널명 추출
+            journal = item.get("container-title", ["Unknown Journal"])[0]
+            
             authors_list = item.get("author", [])
-            authors = ", ".join([f"{a.get('family', '')} {a.get('given', '')}" for a in authors_list])
+            authors = ", ".join([f"{a.get('family', '')} {a.get('given', '')}" for a in authors_list[:2]])
+            if len(authors_list) > 2: authors += " et al."
             
             # 출판년도 추출
             year_parts = item.get("published-print", item.get("published-online", {})).get("date-parts", [[None]])
             year = year_parts[0][0] if year_parts and year_parts[0] else "n.d."
             
             results.append({
-                "label": f"{title} ({year})",
-                "description": authors,
+                "label": f"$(library) [C] {title}",
+                "description": f"{year} | {journal}",
+                "detail": f"Authors: {authors}",
                 "doi": doi
             })
             
@@ -117,6 +123,48 @@ def search_crossref(query):
     except Exception as e:
         return {"status": "error", "message": f"Search failed: {str(e)}"}
 
+def search_semantic_scholar(query):
+    """Semantic Scholar API를 통해 논문을 검색합니다."""
+    # fields: title, authors, year, externalIds(DOI), citationStyles(BibTeX), publicationVenue, journal
+    url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=5&fields=title,authors,year,externalIds,citationStyles,publicationVenue,journal"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            return []
+            
+        data = response.json()
+        items = data.get("data", [])
+        
+        results = []
+        for item in items:
+            title = item.get("title", "Unknown Title")
+            year = item.get("year", "n.d.")
+            
+            # 저널명 추출
+            venue = item.get("publicationVenue")
+            journal = venue.get("name") if venue else item.get("journal", {}).get("name", "Unknown Journal")
+            
+            authors_list = item.get("authors", [])
+            authors = ", ".join([a.get("name", "") for a in authors_list[:2]])
+            if len(authors_list) > 2: authors += " et al."
+            
+            doi = item.get("externalIds", {}).get("DOI")
+            # Semantic Scholar는 BibTeX을 직접 제공하기도 함
+            bibtex = item.get("citationStyles", {}).get("bibtex")
+            
+            results.append({
+                "label": f"$(book) [S] {title}",
+                "description": f"{year} | {journal}",
+                "detail": f"Authors: {authors}",
+                "doi": doi,
+                "bibtex": bibtex,
+                "cite_key": re.search(r'@[a-zA-Z]+\{([^,]+),', bibtex).group(1) if bibtex else None
+            })
+        return results
+    except:
+        return []
+
 def handle_cite(args):
     """cite 명령의 메인 핸들러"""
     if not args:
@@ -124,19 +172,15 @@ def handle_cite(args):
     
     query = " ".join(args).strip()
     
-    # 1. DOI 판별 (우선순위 높임: 10.으로 시작하거나 doi.org 포함)
-    # DOI는 보통 10.으로 시작함
+    # 1. DOI 판별 (10.으로 시작하거나 doi.org 포함)
     doi_match = re.search(r'(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)', query)
     if doi_match:
-        # 만약 검색 쿼리 전체가 DOI 형태이거나 10.으로 시작하는 명확한 DOI라면 바로 fetch
         if query.startswith("10.") or "doi.org" in query or len(doi_match.group(1)) == len(query):
             return fetch_doi(doi_match.group(1))
         
-    # 2. arXiv ID 판별 (전체가 ID이거나 arxiv: 접두사가 있는 경우만)
-    # 패턴: YYMM.NNNNN
+    # 2. arXiv ID 판별
     arxiv_pattern = r'^(\d{4}\.\d{4,5}(?:v\d+)?)$'
     arxiv_prefix_pattern = r'arxiv:(\d{4}\.\d{4,5}(?:v\d+)?)'
-    
     match_full = re.match(arxiv_pattern, query, re.I)
     match_prefix = re.search(arxiv_prefix_pattern, query, re.I)
     
@@ -145,9 +189,24 @@ def handle_cite(args):
     if match_prefix:
         return fetch_arxiv(match_prefix.group(1))
         
-    # 3. DOI가 포함되어 있긴 하지만 다른 텍스트와 섞여 있다면 (예: 제목 검색 결과 선택 시)
-    if doi_match:
-        return fetch_doi(doi_match.group(1))
+    # 3. 제목 검색 (Semantic Scholar + Crossref 병렬 시도)
+    ss_results = search_semantic_scholar(query)
+    cr_res = search_crossref(query)
+    cr_results = cr_res.get("results", []) if cr_res.get("status") == "search_results" else []
+    
+    # 중복 제거 및 결과 합치기 (DOI 기준)
+    combined = ss_results
+    seen_dois = {r["doi"] for r in ss_results if r.get("doi")}
+    
+    for r in cr_results:
+        if r.get("doi") not in seen_dois:
+            combined.append(r)
+            if r.get("doi"): seen_dois.add(r["doi"])
+            
+    if not combined:
+        return {"status": "error", "message": "No papers found for your query."}
         
-    # 4. 나머지는 제목 검색으로 간주
-    return search_crossref(query)
+    return {
+        "status": "search_results",
+        "results": combined[:8] # 상위 8개 결과 반환
+    }
