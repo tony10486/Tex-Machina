@@ -342,6 +342,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (options.preset) userInput += ` / preset=${options.preset}`;
             if (options.stops) userInput += ` / stops=${options.stops}`;
             if (options.complex) userInput += ` / complex=${options.complex}`;
+            if (options.axis) userInput += ` / axis=${options.axis}`;
         }
 
         const parsed = parseUserCommand(userInput, exprLatex);
@@ -391,6 +392,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (options.preset) userInput += ` / preset=${options.preset}`;
             if (options.stops) userInput += ` / stops=${options.stops}`;
             if (options.complex) userInput += ` / complex=${options.complex}`;
+            if (options.axis) userInput += ` / axis=${options.axis}`;
             if (options.export) userInput += ` / export=${options.export}`;
             else userInput += ` / export`;
         } else {

@@ -116,6 +116,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     <div class="group"><label>X Label</label><input id="xl" value="x"></div>
                     <div class="group"><label>Y Label</label><input id="yl" value="y"></div>
                     <div class="group"><label>Z Label</label><input id="zl" value="z"></div>
+                    <div class="group"><label>Axis Style</label><select id="ax-style">
+                        <option value="cross">Cross (Origin)</option>
+                        <option value="box">Box (Bounds)</option>
+                        <option value="arrows">Arrows</option>
+                        <option value="none">None</option>
+                    </select></div>
                     <div class="group"><label>Font</label><select id="f"><option value="SANS">Sans</option><option value="SERIF">Serif</option><option value="TYPEWRITER">Typewriter</option></select></div>
                     <div class="group full"><label><input type="checkbox" id="show-axes" checked> Show Axes Lines</label></div>
                 </div>
@@ -152,6 +158,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         scheme: document.getElementById('sch').value, color: document.getElementById('col').value,
                         bg: document.getElementById('bg').value, preset: document.getElementById('preset').value,
                         stops: document.getElementById('stops').value, complex: document.getElementById('cm').value,
+                        axis: document.getElementById('ax-style').value,
                         label: 'x:'+document.getElementById('xl').value+',y:'+document.getElementById('yl').value+',z:'+document.getElementById('zl').value+',font:'+document.getElementById('f').value
                     };
                 }
@@ -180,33 +187,64 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     if (type === 'update' && x3d_data) {
                         last = x3d_data.expr;
                         document.getElementById('ui').style.display = 'grid';
-                        const idx = [];
                         const [c, r] = x3d_data.grid_size;
-                        for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
+                        const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
+                        
+                        // Z-range clipping for faces
+                        const idx = [];
+                        for(let i=0; i<r-1; i++) {
+                            for(let j=0; j<c-1; j++) {
+                                const v1 = i*c+j, v2 = i*c+j+1, v3 = (i+1)*c+j+1, v4 = (i+1)*c+j;
+                                const z1 = x3d_data.points[v1][2], z2 = x3d_data.points[v2][2], z3 = x3d_data.points[v3][2], z4 = x3d_data.points[v4][2];
+                                // 한 점이라도 범위 내에 있으면 그릴지, 아니면 모든 점이 범위 내여야 할지 결정.
+                                // "깔끔하게" 자르려면 모든 점이 범위 내여야 함 (안 그러면 바깥으로 튀어나옴).
+                                if (z1 >= rz[0] && z1 <= rz[1] && z2 >= rz[0] && z2 <= rz[1] && z3 >= rz[0] && z3 <= rz[1] && z4 >= rz[0] && z4 <= rz[1]) {
+                                    idx.push(v1, v2, v3, v4, -1);
+                                }
+                            }
+                        }
                         
                         const aa = document.getElementById('aa').value;
                         const f = x3d_data.labels.font || "SANS";
                         const showAxes = document.getElementById('show-axes').checked;
+                        const axStyle = x3d_data.axis_style || "cross";
                         const skyCol = hexToRgb(x3d_data.bg_color || "#1e1e1e");
                         
                         let axesXml = "";
-                        if(showAxes){
-                            const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
-                            axesXml = \`
-                                <transform>
-                                    <shape>
-                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="1 0 0"></material></appearance>
-                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="\${rx[0]} 0 0 \${rx[1]} 0 0"></coordinate></indexedlineset>
-                                    </shape>
-                                    <shape>
-                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 1 0"></material></appearance>
-                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="0 \${ry[0]} 0 0 \${ry[1]} 0"></coordinate></indexedlineset>
-                                    </shape>
-                                    <shape>
-                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 0 1"></material></appearance>
-                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="0 0 \${rz[0]} 0 0 \${rz[1]}"></coordinate></indexedlineset>
-                                    </shape>
-                                </transform>\`;
+                        if(showAxes && axStyle !== 'none'){
+                            if(axStyle === 'cross' || axStyle === 'arrows'){
+                                axesXml = \`
+                                    <transform>
+                                        <shape>
+                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="1 0 0"></material></appearance>
+                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="\${rx[0]} 0 0 \${rx[1]} 0 0"></coordinate></indexedlineset>
+                                        </shape>
+                                        <shape>
+                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 1 0"></material></appearance>
+                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="0 \${ry[0]} 0 0 \${ry[1]} 0"></coordinate></indexedlineset>
+                                        </shape>
+                                        <shape>
+                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 0 1"></material></appearance>
+                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="0 0 \${rz[0]} 0 0 \${rz[1]}"></coordinate></indexedlineset>
+                                        </shape>
+                                    </transform>\`;
+                                if(axStyle === 'arrows'){
+                                    axesXml += \`
+                                        <transform translation="\${rx[1]} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 0 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
+                                        <transform translation="0 \${ry[1]} 0"><shape><appearance><material diffuseColor="0 1 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
+                                        <transform translation="0 0 \${rz[1]}" rotation="1 0 0 1.57"><shape><appearance><material diffuseColor="0 0 1"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>\`;
+                                }
+                            } else if(axStyle === 'box'){
+                                axesXml = \`
+                                    <transform>
+                                        <shape>
+                                            <appearance><lineproperties linewidth="1"></lineproperties><material emissiveColor="0.6 0.6 0.6"></material></appearance>
+                                            <indexedlineset coordIndex="0 1 2 3 0 -1 4 5 6 7 4 -1 0 4 -1 1 5 -1 2 6 -1 3 7 -1">
+                                                <coordinate point="\${rx[0]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[1]} \${rz[1]} \${rx[0]} \${ry[1]} \${rz[1]}"></coordinate>
+                                            </indexedlineset>
+                                        </shape>
+                                    </transform>\`;
+                            }
                         }
 
                         document.getElementById('container').innerHTML = \`
@@ -215,9 +253,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                     <viewpoint position="0 15 15" orientation="1 0 0 -0.785"></viewpoint>
                                     <background skyColor="\${skyCol}"></background>
                                     \${axesXml}
-                                    <transform translation="0 \${x3d_data.ranges.y[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform translation="\${x3d_data.ranges.x[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform translation="0 0 \${x3d_data.ranges.z[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                    <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                    <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                    <transform translation="0 0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
                                     <transform rotation="1 0 0 -1.57">
                                         <shape>
                                             <appearance><material></material></appearance>

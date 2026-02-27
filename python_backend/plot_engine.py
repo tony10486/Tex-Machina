@@ -373,12 +373,13 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         C_val = Z
 
     # NaN/Inf 처리
-    Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1], neginf=z_range[0])
-    Z = np.clip(Z, z_range[0], z_range[1])
+    Z = np.nan_to_num(Z, nan=0.0)
+    # Z = np.clip(Z, z_range[0], z_range[1]) # 더 이상 강제로 자르지 않음 (프론트엔드에서 처리)
 
     # x3dom 데이터 형식
     points = []
     colors = []
+    axis_style = "cross" # 기본값
     
     def get_rgb(hex_color):
         hex_color = hex_color.lstrip('#')
@@ -386,11 +387,16 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             hex_color = ''.join([c*2 for c in hex_color])
         return [int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
 
+    # 축 스타일 파싱
+    for p in parallels:
+        if p.startswith("axis="):
+            axis_style = p.split("=")[1].lower()
+
     # 컬러 스키마 계산
-    if color_scheme == "height" or color_scheme == "preset" or color_scheme == "custom":
-        c_min, c_max = np.min(C_val), np.max(C_val)
-        c_span = c_max - c_min if c_max != c_min else 1.0
-    elif color_scheme == "gradient":
+    c_min, c_max = np.min(C_val), np.max(C_val)
+    c_span = c_max - c_min if c_max != c_min else 1.0
+
+    if color_scheme == "gradient":
         dz_dy, dz_dx = np.gradient(Z, y[1]-y[0], x[1]-x[0])
         mag = np.sqrt(dz_dx**2 + dz_dy**2)
         m_min, m_max = np.min(mag), np.max(mag)
@@ -399,6 +405,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # Custom gradient interpolator
     def interpolate_color(val):
         if not color_stops: return get_rgb(custom_color)
+        val = max(0.0, min(1.0, val)) # Clamp to [0, 1]
         if val <= color_stops[0][0]: return get_rgb(color_stops[0][1])
         if val >= color_stops[-1][0]: return get_rgb(color_stops[-1][1])
         for i in range(len(color_stops)-1):
@@ -426,12 +433,16 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                 if color_scheme == "custom":
                     colors.append(interpolate_color(norm))
                 elif cmap:
-                    colors.append(list(cmap(norm)[:3]))
+                    colors.append([float(c) for c in cmap(norm)[:3]])
                 else: # Fallback height: Blue -> Red
-                    colors.append([norm, 0.3, 1.0 - norm])
+                    colors.append([float(norm), 0.3, float(1.0 - norm)])
             elif color_scheme == "gradient":
                 norm = (mag[i,j] - m_min) / m_span
-                colors.append([0.2 + 0.8*norm, 0.8, 0.2])
+                # 개선된 그래디언트: 커스텀 스탑이 있으면 그것을 사용, 없으면 개선된 기본값 사용
+                if color_stops:
+                    colors.append(interpolate_color(norm))
+                else:
+                    colors.append([float(0.1 + 0.8*norm), 0.8, float(0.5 - 0.4*norm)])
             else:
                 colors.append(get_rgb(custom_color))
 
@@ -446,13 +457,19 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
         
+        # Matplotlib에서도 클리핑 적용 (Z축 범위)
+        ax.set_zlim(z_range)
+
         # Color mapping for matplotlib
         if color_scheme == "uniform":
             ax.plot_surface(X, Y, Z, color=custom_color, alpha=0.8, edgecolor='none')
         elif color_scheme == "preset" and cmap:
             ax.plot_surface(X, Y, Z, cmap=cmap, alpha=0.8, edgecolor='none')
+        elif color_scheme == "gradient":
+             # Matplotlib에서는 얼굴별 색상 지정이 복잡하므로 viridis로 대체하거나 facecolors 사용
+             ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.8, edgecolor='none')
         else:
-            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.8, edgecolor='none')
+            ax.plot_surface(X, Y, Z, cmap='coolwarm', alpha=0.8, edgecolor='none')
         
         ax.set_xlabel(labels['x'])
         ax.set_ylabel(labels['y'])
@@ -473,7 +490,8 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             "expr": sp.latex(expr),
             "labels": labels,
             "ranges": {"x": x_range, "y": y_range, "z": z_range},
-            "bg_color": bg_color
+            "bg_color": bg_color,
+            "axis_style": axis_style
         },
         "export_content": export_content,
         "export_format": export_format,
