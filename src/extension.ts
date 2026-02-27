@@ -54,8 +54,64 @@ export function activate(context: vscode.ExtensionContext) {
             console.log(`Python Output: ${line}`);
             try {
                 const response = JSON.parse(line);
+
+                // [cite] 인용 검색 결과 처리
+                if (response.status === 'search_results') {
+                    const selected = await vscode.window.showQuickPick(response.results, {
+                        placeHolder: "인용할 논문을 선택하세요"
+                    });
+                    if (selected && (selected as any).doi) {
+                        // 선택된 DOI로 다시 요청 (parseUserCommand 대신 직접 payload 구성)
+                        const payload = {
+                            mainCommand: "cite",
+                            subCommands: [(selected as any).doi],
+                            parallelOptions: [],
+                            rawSelection: "",
+                            config: {}
+                        };
+                        if (pythonProcess?.stdin) {
+                            pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+                        }
+                    }
+                    continue;
+                }
+
                 if (response.status === 'success') {
                     
+                    // [cite] 인용 성공 처리
+                    if (response.bibtex && response.cite_key) {
+                        const editor = vscode.window.activeTextEditor;
+                        if (editor) {
+                            const texDir = path.dirname(editor.document.uri.fsPath);
+                            // 1. .bib 파일 찾기 (없으면 references.bib 생성)
+                            const files = fs.readdirSync(texDir);
+                            let bibFile = files.find(f => f.endsWith('.bib'));
+                            if (!bibFile) {
+                                bibFile = 'references.bib';
+                            }
+                            const bibPath = path.join(texDir, bibFile);
+
+                            // 2. BibTeX 추가 (중복 체크 생략 - 필요시 고도화)
+                            let content = "";
+                            if (fs.existsSync(bibPath)) {
+                                content = fs.readFileSync(bibPath, 'utf8');
+                            }
+                            
+                            if (!content.includes(response.cite_key)) {
+                                fs.appendFileSync(bibPath, `\n\n${response.bibtex}`);
+                                vscode.window.showInformationMessage(`BibTeX이 ${bibFile}에 추가되었습니다.`);
+                            } else {
+                                vscode.window.showInformationMessage(`이미 존재하는 인용 키입니다: ${response.cite_key}`);
+                            }
+
+                            // 3. 에디터에 \cite{key} 삽입
+                            await editor.edit(editBuilder => {
+                                editBuilder.insert(editor.selection.active, `\\cite{${response.cite_key}}`);
+                            });
+                        }
+                        continue;
+                    }
+
                     // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
                     provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
 
@@ -171,7 +227,8 @@ export function activate(context: vscode.ExtensionContext) {
             root: [
                 { label: "calc >", description: "수학 연산 명령어 (미분, 적분, 단순화 등)" },
                 { label: "matrix >", description: "행렬 생성 및 분석" },
-                { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" }
+                { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" },
+                { label: "cite >", description: "논문 인용 (arXiv ID, DOI, 또는 제목)" }
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
@@ -204,6 +261,11 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "plot > 2d / ymin=-10, ymax=10", description: "y축 범위 지정" },
                 { label: "plot > 3d / preset=mathematica", description: "Mathematica 스타일 색상 (Z-Blend)" },
                 { label: "plot > 3d / export", description: "3D 그래프 PDF 내보내기" }
+            ],
+            cite: [
+                { label: "cite > 2109.12345", description: "arXiv ID로 인용 정보 가져오기" },
+                { label: "cite > 10.1038/nature14539", description: "DOI로 인용 정보 가져오기" },
+                { label: "cite > Attention is all you need", description: "제목으로 논문 검색" }
             ]
         };
 
@@ -217,6 +279,8 @@ export function activate(context: vscode.ExtensionContext) {
                 quickPick.items = commandLib.matrix;
             } else if (value.startsWith("plot >")) {
                 quickPick.items = commandLib.plot;
+            } else if (value.startsWith("cite >")) {
+                quickPick.items = commandLib.cite;
             } else if (value === "") {
                 quickPick.items = commandLib.root;
             }

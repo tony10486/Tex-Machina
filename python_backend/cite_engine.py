@@ -20,28 +20,26 @@ def fetch_arxiv(arxiv_id):
         if entry is None or entry.find('{http://www.w3.org/2005/Atom}id') is None:
             return {"status": "error", "message": "arXiv entry not found."}
             
-        title = entry.find('{http://www.w3.org/2005/Atom}title').text.strip().replace('
-', ' ')
+        title_elem = entry.find('{http://www.w3.org/2005/Atom}title')
+        title = title_elem.text.strip().replace('\n', ' ') if title_elem is not None else "Unknown Title"
+        
         authors = [a.find('{http://www.w3.org/2005/Atom}name').text for a in entry.findall('{http://www.w3.org/2005/Atom}author')]
-        published = entry.find('{http://www.w3.org/2005/Atom}published').text
+        
+        published_elem = entry.find('{http://www.w3.org/2005/Atom}published')
+        published = published_elem.text if published_elem is not None else "0000"
         year = published[:4]
-        first_author_last = authors[0].split()[-1]
+        
+        first_author_last = authors[0].split()[-1] if authors else "Unknown"
         
         # Citation Key 생성 (예: Author2024Arxiv)
         cite_key = f"{first_author_last}{year}Arxiv"
         
-        bibtex = f"@article{{{cite_key},
-"
-        bibtex += f"  title = {{{title}}},
-"
-        bibtex += f"  author = {{{' and '.join(authors)}}},
-"
-        bibtex += f"  year = {{{year}}},
-"
-        bibtex += f"  journal = {{arXiv preprint arXiv:{clean_id}}},
-"
-        bibtex += f"  url = {{https://arxiv.org/abs/{clean_id}}}
-"
+        bibtex = f"@article{{{cite_key},\n"
+        bibtex += f"  title = {{{title}}},\n"
+        bibtex += f"  author = {{{' and '.join(authors)}}},\n"
+        bibtex += f"  year = {{{year}}},\n"
+        bibtex += f"  journal = {{arXiv preprint arXiv:{clean_id}}},\n"
+        bibtex += f"  url = {{https://arxiv.org/abs/{clean_id}}}\n"
         bibtex += "}"
         
         return {
@@ -99,8 +97,12 @@ def search_crossref(query):
         for item in items:
             title = item.get("title", ["Unknown Title"])[0]
             doi = item.get("DOI")
-            authors = ", ".join([f"{a.get('family', '')} {a.get('given', '')}" for a in item.get("author", [])])
-            year = item.get("published-print", item.get("published-online", {})).get("date-parts", [[None]])[0][0]
+            authors_list = item.get("author", [])
+            authors = ", ".join([f"{a.get('family', '')} {a.get('given', '')}" for a in authors_list])
+            
+            # 출판년도 추출
+            year_parts = item.get("published-print", item.get("published-online", {})).get("date-parts", [[None]])
+            year = year_parts[0][0] if year_parts and year_parts[0] else "n.d."
             
             results.append({
                 "label": f"{title} ({year})",
@@ -122,22 +124,30 @@ def handle_cite(args):
     
     query = " ".join(args).strip()
     
-    # 1. arXiv ID 판별 (예: 2109.12345 또는 arXiv:2109.12345)
-    arxiv_match = re.search(r'(?:arxiv:)?(\d{4}\.\d{4,5})', query, re.I)
-    if arxiv_match:
-        return fetch_arxiv(arxiv_match.group(1))
-        
-    # 2. DOI 판별 (예: 10.1038/nature12345)
+    # 1. DOI 판별 (우선순위 높임: 10.으로 시작하거나 doi.org 포함)
+    # DOI는 보통 10.으로 시작함
     doi_match = re.search(r'(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)', query)
+    if doi_match:
+        # 만약 검색 쿼리 전체가 DOI 형태이거나 10.으로 시작하는 명확한 DOI라면 바로 fetch
+        if query.startswith("10.") or "doi.org" in query or len(doi_match.group(1)) == len(query):
+            return fetch_doi(doi_match.group(1))
+        
+    # 2. arXiv ID 판별 (전체가 ID이거나 arxiv: 접두사가 있는 경우만)
+    # 패턴: YYMM.NNNNN
+    arxiv_pattern = r'^(\d{4}\.\d{4,5}(?:v\d+)?)$'
+    arxiv_prefix_pattern = r'arxiv:(\d{4}\.\d{4,5}(?:v\d+)?)'
+    
+    match_full = re.match(arxiv_pattern, query, re.I)
+    match_prefix = re.search(arxiv_prefix_pattern, query, re.I)
+    
+    if match_full:
+        return fetch_arxiv(match_full.group(1))
+    if match_prefix:
+        return fetch_arxiv(match_prefix.group(1))
+        
+    # 3. DOI가 포함되어 있긴 하지만 다른 텍스트와 섞여 있다면 (예: 제목 검색 결과 선택 시)
     if doi_match:
         return fetch_doi(doi_match.group(1))
         
-    # 3. 나머지는 제목 검색으로 간주
+    # 4. 나머지는 제목 검색으로 간주
     return search_crossref(query)
-
-if __name__ == "__main__":
-    # 간단한 테스트
-    # print(json.dumps(handle_cite(["2109.12345"]), indent=2))
-    # print(json.dumps(handle_cite(["10.1038/nature14539"]), indent=2))
-    # print(json.dumps(handle_cite(["Attention is all you need"]), indent=2))
-    pass

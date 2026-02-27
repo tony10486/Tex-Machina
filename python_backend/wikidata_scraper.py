@@ -4,6 +4,7 @@ import re
 import argparse
 import sys
 import time
+import html
 from datetime import datetime
 import questionary
 from rich.console import Console
@@ -16,18 +17,22 @@ from rich.progress import (
 from rich.panel import Panel
 
 # 설정 및 카테고리 매핑 (위키데이터 QID)
-# 더 넓은 범위를 커버하고 정확한 항목을 가져오기 위해 QID를 최신화했습니다.
+# 104개는 너무 적으므로, 수식이 존재하는 모든 항목을 가져올 수 있는 '전체 수식' 카테고리를 추가했습니다.
+# 위키데이터에서 '방정식'으로 명시되지 않았더라도 P2534(Defining formula)가 있으면 유효한 수학 데이터입니다.
 CATEGORY_MAP = {
+    "전체": "Q11345",       # 특별 처리 (모든 수식)
     "방정식": "Q11345",     # Equation
-    "항등식": "Q4116214",   # Mathematical identity
-    "정리": "Q65943",       # Theorem
-    "공식": "Q191167",     # Formula
-    "함수": "Q11348",       # Function
-    "부등식": "Q165309",    # Inequality
+    "정리/공식": "Q65943",   # Theorem
     "물리법칙": "Q462061",  # Physical law
+    "부등식": "Q165309",    # Inequality
+    "함수": "Q11348",       # Function
     "통계": "Q12483",       # Statistics
     "수열": "Q131505",      # Sequence
+    "기타수식": "Q191167",  # Formula (General)
 }
+
+# 특정 카테고리에 속하지 않더라도 수식이 있는 모든 항목을 찾기 위한 특별 쿼리용 QID (사용자 선택용)
+# 실제 쿼리 시에는 P2534가 존재하는 모든 항목을 대상으로 할 수 있습니다.
 
 console = Console()
 
@@ -35,13 +40,21 @@ def get_total_count(category_name, qid):
     """위키데이터에서 해당 카테고리의 전체 항목 수를 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
     
-    # P2534(Defining formula) 또는 P1901(Formula) 중 하나라도 있는 항목을 찾습니다.
-    query = f"""
-    SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{
-      ?item wdt:P31/wdt:P279* wd:{qid}.
-      {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
-    }}
-    """
+    # '전체' 카테고리인 경우 카테고리 필터 없이 수식이 있는 모든 항목을 조회
+    if category_name == "전체":
+        query = """
+        SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {
+          { ?item wdt:P2534 ?formula. } UNION { ?item wdt:P1901 ?formula. }
+        }
+        """
+    else:
+        query = f"""
+        SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{
+          ?item wdt:P31/wdt:P279* wd:{qid}.
+          {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+        }}
+        """
+    
     headers = {
         'User-Agent': 'MathFormulaScraper/2.3 (Gemini CLI)',
         'Accept': 'application/sparql-results+json'
@@ -58,17 +71,25 @@ def fetch_wikidata(category_name, qid, limit):
     """지정된 카테고리의 공식을 위키데이터에서 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
     
-    # 쿼리 수정: 
-    # 1. SERVICE wikibase:label 블록에서 구체적인 변수 지정을 빼서 설명이 없는 항목도 포함되게 함.
-    # 2. ko,en 순서로 언어 폴백(Fallback) 보장.
-    query = f"""
-    SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
-      ?item wdt:P31/wdt:P279* wd:{qid}.
-      {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
-      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
-    }}
-    LIMIT {limit}
-    """
+    # '전체' 카테고리인 경우 수식이 있는 어떤 항목이든 가져옴
+    if category_name == "전체":
+        query = f"""
+        SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
+          {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+          SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
+        }}
+        LIMIT {limit}
+        """
+    else:
+        query = f"""
+        SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
+          ?item wdt:P31/wdt:P279* wd:{qid}.
+          {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
+          SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ko,en". }}
+        }}
+        LIMIT {limit}
+        """
+    
     headers = {
         'User-Agent': 'MathFormulaScraper/2.3 (Gemini CLI)',
         'Accept': 'application/sparql-results+json'
@@ -87,6 +108,19 @@ def process_formula(item, category):
     name = item.get('itemLabel', {}).get('value', qid)
     latex = item.get('formula', {}).get('value', '')
     description = item.get('itemDescription', {}).get('value', '')
+    
+    # 위키데이터에서 가끔 수식이 <math> 태그가 포함된 HTML 형태로 오는 경우 처리
+    if '<math' in latex:
+        # 간단한 정규식으로 LaTeX 내용만 추출 시도 (예: alttext 또는 태그 사이 내용)
+        match = re.search(r'alttext="([^"]+)"', latex)
+        if match:
+            latex = match.group(1)
+        else:
+            # 태그 제거
+            latex = re.sub(r'<[^>]+>', '', latex).strip()
+    
+    # HTML 엔티티 (&#x...;) 변환 및 공백 정리
+    latex = html.unescape(latex).strip()
     
     # 태그 생성
     tags = set([t.strip().lower() for t in re.split(r'\s+|[(),\-]', name) if len(t) > 1])

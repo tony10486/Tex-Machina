@@ -20,7 +20,8 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
         if (isEscaped) { buffer += char; isEscaped = false; continue; }
         if (char === '\\') { isEscaped = true; continue; } // 이스케이프 처리 [cite: 128]
 
-        if (char === '/' && !isParallelSection) {
+        // 개선: 앞에 공백이 있는 '/'만 옵션 섹션 시작으로 인식
+        if (char === '/' && !isParallelSection && i > 0 && input[i-1] === ' ') {
             pushToCmds();
             isParallelSection = true;
             continue;
@@ -29,7 +30,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
             pushToCmds();
             continue;
         }
-        // 개선: 앞에 공백이 있는 '/'만 새로운 옵션 구분자로 인식 (예: " / set="는 OK, "M/(L*T)"는 무시)
+        // 개선: 앞에 공백이 있는 '/'만 새로운 옵션 구분자로 인식
         if (char === '/' && isParallelSection && i > 0 && input[i-1] === ' ') {
             parallels.push(buffer.trim());
             buffer = "";

@@ -395,6 +395,7 @@ def op_laplace(expr, args, config):
 from matrix import handle_matrix
 from dimcheck_engine import handle_dimcheck
 from plot_engine import handle_plot
+from cite_engine import handle_cite
 
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
@@ -403,8 +404,9 @@ from plot_engine import handle_plot
 def get_calc_operations():
     """제안서에 명시된 모든 연산자를 매핑하는 딕셔너리 """
     return {
-        # 0. 행렬 생성 및 분석
+        # 0. 행렬 및 인용
         "matrix": lambda x, v, p, c, s: handle_matrix(v, p),
+        "cite": lambda x, v, p, c, s: handle_cite(v),
 
         # 1. 기본 대수 및 해석 
         "simplify": lambda x, v, p, c, s: sp.simplify(x),
@@ -562,6 +564,11 @@ def execute_calc(parsed_json_str):
                 "analysis": matrix_res.get("analysis"),
                 "vars": []
             })
+
+        if action == "cite":
+            # cite 명령은 인터넷 검색이 필요함
+            cite_res = handle_cite(sub_cmds)
+            return json.dumps(cite_res)
 
         if action == "plot":
             # Plot 명령도 전용 핸들러에서 직접 파싱 및 처리
