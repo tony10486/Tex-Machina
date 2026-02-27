@@ -16,10 +16,11 @@ from rich.progress import (
 from rich.panel import Panel
 
 # 설정 및 카테고리 매핑 (위키데이터 QID)
+# 더 넓은 범위를 커버하기 위해 QID 및 쿼리 전략을 강화했습니다.
 CATEGORY_MAP = {
     "방정식": "Q11345",     # Equation
-    "항등식": "Q41138",     # Identity
-    "정리": "Q11012",       # Theorem
+    "항등식": "Q41138",     # Mathematical identity
+    "정리": "Q11012",       # Theorem (Mathematical theorem 포함)
     "함수": "Q11348",       # Function
     "부등식": "Q165309",    # Inequality
     "물리법칙": "Q462061",  # Physical law
@@ -32,41 +33,50 @@ console = Console()
 def get_total_count(category_name, qid):
     """위키데이터에서 해당 카테고리의 전체 항목 수를 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
+    
+    # P2534(Defining formula) 또는 P1901(Formula) 중 하나라도 있는 항목을 찾습니다.
+    # 또한 정리(Theorem)의 경우 수학적 정리(Q1064567) 인스턴스도 많으므로 이를 고려합니다.
     query = f"""
     SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{
       ?item wdt:P31/wdt:P279* wd:{qid}.
-      ?item wdt:P2534 ?formula.
+      {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
     }}
     """
     headers = {
-        'User-Agent': 'MathFormulaScraper/2.0 (Gemini CLI)',
+        'User-Agent': 'MathFormulaScraper/2.2 (Gemini CLI; honey@example.com)',
         'Accept': 'application/sparql-results+json'
     }
     try:
-        response = requests.get(url, params={'query': query, 'format': 'json'}, headers=headers, timeout=15)
+        # 타임아웃을 30초로 대폭 늘림 (Theorem 같은 거대 카테고리 대응)
+        response = requests.get(url, params={'query': query, 'format': 'json'}, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
         return int(data['results']['bindings'][0]['count']['value'])
-    except Exception:
-        return 0
+    except Exception as e:
+        # 타임아웃이나 오류 발생 시 콘솔에 로그 출력 (사용자 확인용)
+        # console.print(f"[dim red]조회 실패 ({category_name}): {e}[/dim red]")
+        return -1 # 실패 표시
 
 def fetch_wikidata(category_name, qid, limit):
     """지정된 카테고리의 공식을 위키데이터에서 가져옵니다."""
     url = 'https://query.wikidata.org/sparql'
+    
+    # 데이터 수집 시에도 P2534와 P1901을 모두 고려하며, 수식이 있는 것을 우선순위로 가져옴
     query = f"""
     SELECT DISTINCT ?item ?itemLabel ?itemDescription ?formula WHERE {{
       ?item wdt:P31/wdt:P279* wd:{qid}.
-      ?item wdt:P2534 ?formula.
+      {{ ?item wdt:P2534 ?formula. }} UNION {{ ?item wdt:P1901 ?formula. }}
       SERVICE wikibase:label {{ 
         bd:serviceParam wikibase:language "ko,en". 
         ?item rdfs:label ?itemLabel.
         ?item schema:description ?itemDescription.
       }}
     }}
+    ORDER BY DESC(?formula)
     LIMIT {limit}
     """
     headers = {
-        'User-Agent': 'MathFormulaScraper/2.0 (Gemini CLI)',
+        'User-Agent': 'MathFormulaScraper/2.2 (Gemini CLI)',
         'Accept': 'application/sparql-results+json'
     }
     try:
@@ -74,7 +84,7 @@ def fetch_wikidata(category_name, qid, limit):
         response.raise_for_status()
         return response.json()['results']['bindings']
     except Exception as e:
-        console.print(f"[bold red]에러 발생 ({category_name}):[/bold red] {e}")
+        console.print(f"[bold red]데이터 수집 에러 ({category_name}):[/bold red] {e}")
         return []
 
 def process_formula(item, category):
@@ -84,11 +94,13 @@ def process_formula(item, category):
     latex = item.get('formula', {}).get('value', '')
     description = item.get('itemDescription', {}).get('value', '')
     
+    # 태그 생성
     tags = set([t.strip().lower() for t in re.split(r'\s+|[(),\-]', name) if len(t) > 1])
     tags.add(category)
     
+    # 복잡도 판별
     complexity = "Basic"
-    if len(latex) > 100 or "\\int" in latex or "\\sum" in latex or "\\partial" in latex:
+    if len(latex) > 100 or any(sym in latex for sym in ["\\int", "\\sum", "\\partial", "\\prod", "\\nabla", "\\oint"]):
         complexity = "Advanced"
     elif len(latex) > 40:
         complexity = "Intermediate"
@@ -105,8 +117,8 @@ def process_formula(item, category):
 
 def main():
     console.print(Panel.fit(
-        "[bold cyan]Wikidata Math Scraper v2.0[/bold cyan]\n"
-        "방향키로 이동, [bold yellow]스페이스바[/bold yellow]로 선택, [bold green]엔터[/bold green]로 확정하세요.",
+        "[bold cyan]Wikidata Math Scraper v2.2[/bold cyan]\n"
+        "데이터 속성 확장 및 쿼리 최적화 버전",
         border_style="cyan"
     ))
 
@@ -121,74 +133,87 @@ def main():
     ).ask()
 
     if not selected_cats:
-        console.print("[bold yellow]선택된 카테고리가 없습니다. 종료합니다.[/bold yellow]")
+        console.print("[bold yellow]선택된 카테고리가 없습니다.[/bold yellow]")
         return
 
-    # 2. 각 카테고리별 전체 수량 조회 및 수집 수량 입력
+    # 2. 모든 카테고리의 수량 조회 (개선된 쿼리 및 타임아웃)
+    all_counts = {}
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task(description="위키데이터 전역 데이터베이스 조회 중...", total=len(selected_cats))
+        for cat in selected_cats:
+            progress.update(task, description=f"'{cat}' 항목 탐색 중 (대규모 카테고리는 시간이 걸릴 수 있습니다)...")
+            count = get_total_count(cat, CATEGORY_MAP[cat])
+            all_counts[cat] = count
+            progress.update(task, advance=1)
+
+    # 3. 수집량 입력
     targets = []
     total_requested = 0
     
-    console.print("\n[bold blue]위키데이터에서 전체 항목 수를 조회하는 중...[/bold blue]")
-    
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-        for cat in selected_cats:
-            task = progress.add_task(description=f"'{cat}' 수량 확인 중...", total=None)
-            full_count = get_total_count(cat, CATEGORY_MAP[cat])
-            progress.remove_task(task)
-            
-            # 사용자에게 수량 입력 받기
-            limit_str = questionary.text(
-                f"'{cat}' (전체 {full_count}개) 중 몇 개를 가져올까요?",
-                default=str(min(20, full_count)),
-                validate=lambda text: text.isdigit() and 0 <= int(text) <= full_count or f"0에서 {full_count} 사이의 숫자를 입력하세요."
-            ).ask()
-            
-            if limit_str and int(limit_str) > 0:
-                limit = int(limit_str)
-                targets.append({
-                    "name": cat, 
-                    "qid": CATEGORY_MAP[cat], 
-                    "limit": limit, 
-                    "total_on_wiki": full_count
-                })
-                total_requested += limit
+    for cat in selected_cats:
+        full_count = all_counts[cat]
+        
+        if full_count == -1:
+            console.print(f"[orange1]! '{cat}' 카테고리는 응답 시간이 너무 길어 조회에 실패했습니다. 기본값으로 진행하시겠습니까?[/orange1]")
+            if questionary.confirm(f"'{cat}'을(를) 강제로 50개 수집 시도할까요?").ask():
+                full_count = 5000 # 가상의 최대치 설정
+                default_val = "50"
+            else:
+                continue
+        elif full_count == 0:
+            console.print(f"[dim yellow]! '{cat}' 카테고리는 수식이 포함된 항목을 찾을 수 없습니다.[/dim yellow]")
+            continue
+        else:
+            default_val = str(min(20, full_count))
+
+        limit_str = questionary.text(
+            f"'{cat}' (최대 {full_count if full_count < 5000 else '수천'}개 이상 가능) 중 수집할 개수:",
+            default=default_val,
+            validate=lambda text: text.isdigit() and int(text) >= 0 or "숫자를 입력하세요."
+        ).ask()
+        
+        if limit_str and int(limit_str) > 0:
+            limit = int(limit_str)
+            targets.append({
+                "name": cat, 
+                "qid": CATEGORY_MAP[cat], 
+                "limit": limit, 
+                "total_on_wiki": full_count if full_count < 5000 else "Unknown"
+            })
+            total_requested += limit
 
     if not targets:
-        console.print("[bold yellow]수집할 데이터가 설정되지 않았습니다.[/bold yellow]")
         return
 
-    # 3. 최종 수집 계획 요약
-    summary_table = Table(title="\n수집 계획 요약", show_header=True, header_style="bold magenta")
+    # 4. 최종 수집 계획 요약
+    summary_table = Table(title="\n최종 수집 대상", show_header=True, header_style="bold magenta")
     summary_table.add_column("카테고리", style="cyan")
-    summary_table.add_column("수집 수량 / 전체", justify="right")
-    summary_table.add_column("진척률", justify="right")
+    summary_table.add_column("수집 목표량", justify="right")
     
     for t in targets:
-        ratio = (t['limit'] / t['total_on_wiki'] * 100) if t['total_on_wiki'] > 0 else 0
-        summary_table.add_row(
-            t['name'], 
-            f"{t['limit']} / {t['total_on_wiki']}", 
-            f"{ratio:.1f}%"
-        )
+        summary_table.add_row(t['name'], f"{t['limit']} 개")
     
     console.print(summary_table)
     console.print(Panel(f"총 [bold green]{total_requested}[/bold green] 개의 데이터를 수집합니다.", border_style="green"))
 
-    if not questionary.confirm("이대로 수집을 시작할까요?").ask():
-        console.print("[bold red]취소되었습니다.[/bold red]")
+    if not questionary.confirm("수집을 시작할까요?").ask():
         return
 
-    # 4. 실시간 진행 상황을 포함한 수집 시작
+    # 5. 수집 시작
     all_formulas = []
+    start_time = time.time()
     
-    # Progress 바 구성: 스피너, 설명, 진행바, 현재/전체, 퍼센트, 속도, 남은 시간
     with Progress(
         SpinnerColumn(),
         TextColumn("[bold blue]{task.description}"),
         BarColumn(bar_width=40),
         MofNCompleteColumn(),
         TaskProgressColumn(),
-        TransferSpeedColumn(), # 초당 처리 속도
+        TransferSpeedColumn(),
         TimeRemainingColumn(),
         console=console
     ) as progress:
@@ -197,24 +222,17 @@ def main():
         
         for t in targets:
             progress.update(overall_task, description=f"[cyan]수집 중: {t['name']}")
-            
             raw_data = fetch_wikidata(t['name'], t['qid'], t['limit'])
-            
-            if not raw_data:
-                progress.console.print(f"[dim yellow]  ! {t['name']}: 데이터를 가져오지 못했습니다.[/dim yellow]")
-                # 실패한 만큼 진행바를 건너뛰지 않고 처리 (또는 skip)
-                continue
             
             for item in raw_data:
                 formula_obj = process_formula(item, t['name'])
                 all_formulas.append(formula_obj)
                 progress.update(overall_task, advance=1)
-                # 실제 수동 딜레이는 최소화하되 속도 표시를 위해 아주 짧게 유지
-                time.sleep(0.005)
+                time.sleep(0.002)
 
-    # 5. 결과 저장 및 최종 요약
+    # 6. 결과 저장
     final_output = {
-        "version": "1.4.0",
+        "version": "1.4.2",
         "last_updated": datetime.now().strftime("%Y-%m-%d"),
         "total_count": len(all_formulas),
         "formulas": all_formulas

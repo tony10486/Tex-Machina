@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tex-Machina | Solar Precision v2</title>
+    <title>Tex-Machina | Solar Precision v3</title>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -14,12 +14,12 @@
             --panel: #fcfcfd;
             --border: #eeeeee;
             --accent: #4f46e5;
-            /* Refined Pastel Palette */
-            --node-sec: #ffadad; /* Pastel Rose */
-            --node-eq: #9bf6ff;  /* Pastel Sky */
-            --node-fig: #caffbf; /* Pastel Mint */
-            --node-gen: #ffd6a5; /* Pastel Peach */
-            --edge: #e2e8f0;
+            /* Refined Pastel Palette - Lower Saturation */
+            --node-sec: #ffadad; 
+            --node-eq: #a2d2ff;  /* Muted Pastel Blue for better readability */
+            --node-fig: #caffbf; 
+            --node-gen: #ffd6a5; 
+            --edge: #64748b;     /* Darker, more visible edge color */
             --font-main: 'Plus Jakarta Sans', sans-serif;
         }
 
@@ -34,19 +34,19 @@
 
         #header {
             height: 64px; display: flex; align-items: center; padding: 0 40px;
-            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border); z-index: 100;
         }
 
         #title { 
-            font-weight: 800; font-size: 14px; letter-spacing: 0.1em; 
-            text-transform: uppercase; color: var(--fg);
+            font-weight: 800; font-size: 13px; letter-spacing: 0.15em; 
+            text-transform: uppercase; color: var(--fg); opacity: 0.8;
         }
         
         #viz-outer { 
             flex-grow: 1; position: relative; width: 100%; 
-            background-image: radial-gradient(var(--border) 1.5px, transparent 1.5px); 
-            background-size: 32px 32px; 
+            background-image: radial-gradient(#f1f5f9 1.5px, transparent 1.5px); 
+            background-size: 30px 30px; 
         }
         #viz { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
@@ -54,13 +54,13 @@
             position: absolute; top: 0; right: 0; width: 420px; height: 100%;
             background: var(--bg); border-left: 1px solid var(--border);
             display: none; padding: 60px 40px; z-index: 200;
-            box-shadow: -20px 0 60px rgba(0,0,0,0.03);
-            animation: slideInRight 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: -20px 0 60px rgba(0,0,0,0.05);
+            animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
         }
 
         .math-preview {
@@ -68,47 +68,38 @@
             padding: 40px; margin: 32px 0; border-radius: 12px; 
             font-size: 20px; min-height: 100px;
             display: flex; align-items: center; justify-content: center;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
 
         .btn {
             background: white; border: 1px solid var(--border); color: var(--fg);
-            padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 12px;
-            font-weight: 700; margin-left: 12px; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 11px;
+            font-weight: 700; margin-left: 10px; transition: all 0.2s;
             text-transform: uppercase; letter-spacing: 0.05em;
         }
         .btn:hover { 
-            border-color: var(--accent); 
-            background: var(--accent); 
+            border-color: var(--fg); 
+            background: var(--fg); 
             color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
         }
 
         #legend {
-            position: absolute; bottom: 40px; left: 40px;
-            display: flex; gap: 32px; padding: 16px 28px;
+            position: absolute; bottom: 32px; left: 32px;
+            display: flex; gap: 24px; padding: 12px 24px;
             background: white; border: 1px solid var(--border);
-            border-radius: 100px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
         }
-        .legend-item { display: flex; align-items: center; gap: 10px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; }
-
-        .meta-pill {
-            display: inline-block; padding: 4px 12px; border-radius: 100px;
-            background: #f1f5f9; font-size: 10px; font-weight: 700; color: #64748b;
-            margin-right: 8px;
-        }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
     </style>
 </head>
 <body>
     <div id="layout">
         <div id="header">
-            <div id="title">Tex-Machina / Precision Navigator</div>
+            <div id="title">Tex-Machina / Solar Precision</div>
             <div style="flex-grow: 1"></div>
-            <button class="btn" onclick="network.fit({animation:{duration:2000, easingFunction:'easeInOutCubic'}})">Fit View</button>
-            <button class="btn" onclick="addDynamicNode()">Simulate Node</button>
+            <button class="btn" onclick="network.fit({animation:{duration:1000}})">Fit View</button>
+            <button class="btn" onclick="addDynamicNode()">Add Node</button>
         </div>
         
         <div id="viz-outer">
@@ -121,18 +112,13 @@
         </div>
 
         <div id="inspector">
-            <div style="font-size: 11px; font-weight: 800; color: var(--accent); margin-bottom: 12px; letter-spacing: 0.2em;">ELEMENT DATA</div>
-            <div id="ins-label" style="font-weight: 800; font-size: 32px; margin-bottom: 8px; color: var(--fg);">Label</div>
-            <div id="ins-meta" style="margin-bottom: 40px;"></div>
+            <div style="font-size: 10px; font-weight: 800; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.2em;">NODE INSPECTOR</div>
+            <div id="ins-label" style="font-weight: 800; font-size: 28px; margin-bottom: 4px; color: var(--fg);">Label</div>
+            <div id="ins-meta" style="font-size: 12px; opacity: 0.4; margin-bottom: 40px;"></div>
             
-            <div style="font-size: 13px; font-weight: 600; color: #94a3b8;">LATEX PREVIEW</div>
             <div class="math-preview" id="math-target"></div>
             
-            <div style="font-size: 14px; line-height: 1.8; color: #64748b; margin-bottom: 40px;">
-                This node represents a logical entity within the LaTeX document. The connections illustrate how concepts are referenced and built upon throughout the text.
-            </div>
-
-            <button class="btn" style="width: 100%; margin: 0; padding: 18px; background: var(--fg); color: white; border: none;" onclick="document.getElementById('inspector').style.display='none'">Dismiss</button>
+            <button class="btn" style="width: 100%; margin: 0; padding: 16px; background: var(--fg); color: white; border: none;" onclick="document.getElementById('inspector').style.display='none'">Close Inspector</button>
         </div>
     </div>
 
@@ -140,29 +126,23 @@
         let nodes, edges, network;
 
         const initialNodes = [
-            { id: 's1', label: 'sec:introduction', type: 'section', line: 1, refs: 4, content: '\\text{Introduction}' },
-            { id: 'e1', label: 'eq:einstein_field', type: 'equation', line: 12, refs: 18, content: 'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\kappa T_{\\mu\\nu}' },
+            { id: 's1', label: 'sec:intro', type: 'section', line: 1, refs: 4, content: '\\text{Introduction}' },
+            { id: 'e1', label: 'eq:einstein', type: 'equation', line: 12, refs: 18, content: 'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\kappa T_{\\mu\\nu}' },
             { id: 'e2', label: 'eq:mass_energy', type: 'equation', line: 24, refs: 12, content: 'E = mc^2' },
-            { id: 'f1', label: 'fig:spacetime', type: 'figure', line: 45, refs: 3, content: '\\text{Figure: Spacetime Curvature}' },
-            { id: 's2', label: 'sec:theoretical_framework', type: 'section', line: 8, refs: 9, content: '\\text{Theoretical Framework}' }
+            { id: 'f1', label: 'fig:graph', type: 'figure', line: 45, refs: 3, content: '\\text{Figure: Spacetime}' },
+            { id: 's2', label: 'sec:theory', type: 'section', line: 8, refs: 9, content: '\\text{Theoretical Basis}' }
         ];
 
         const initialEdges = [
-            { from: 'e1', to: 's2' },
-            { from: 'e2', to: 's2' },
-            { from: 'f1', to: 's1' },
-            { from: 'e1', to: 'e2' },
-            { from: 'e2', to: 'e1' }
+            { from: 'e1', to: 's2' }, { from: 'e2', to: 's2' },
+            { from: 'f1', to: 's1' }, { from: 'e1', to: 'e2' }
         ];
 
         function formatNode(n) {
-            const colors = {
-                section: '#ffadad',
-                equation: '#9bf6ff',
-                figure: '#caffbf'
-            };
+            const colors = { section: '#ffadad', equation: '#a2d2ff', figure: '#caffbf' };
             const color = colors[n.type] || '#ffd6a5';
-            const size = 8 + (Math.log(n.refs + 1) * 6);
+            const refCount = n.refCount || n.refs || 0;
+            const size = 6 + (Math.log(refCount + 1) * 5);
             
             return {
                 id: n.id,
@@ -171,21 +151,22 @@
                 size: size,
                 color: { 
                     background: color, 
-                    border: '#ffffff', 
+                    border: 'rgba(255,255,255,0.8)', 
                     highlight: { background: color, border: '#1a1a1a' },
-                    hover: { background: color, border: '#1a1a1a' }
+                    hover: { background: color, border: '#475569' }
                 },
                 font: { 
-                    color: '#1a1a1a',
+                    color: '#334155',
                     size: 11,
                     face: 'Plus Jakarta Sans',
-                    weight: '700',
-                    vadjust: - (size + 14), // Position text significantly above the node
-                    strokeWidth: 6, // Thick halo for readability
+                    weight: '600',
+                    vadjust: size + 2, // Brought label closer to the node
+                    strokeWidth: 3, 
                     strokeColor: '#ffffff' 
                 },
-                borderWidth: 3,
-                shadow: { enabled: true, color: 'rgba(0,0,0,0.05)', size: 10, x: 0, y: 4 },
+                borderWidth: 1.5,
+                borderWidthSelected: 2.5,
+                shadow: { enabled: true, color: 'rgba(0,0,0,0.12)', size: 10, x: 0, y: 4 },
                 metadata: n
             };
         }
@@ -194,52 +175,43 @@
             nodes = new vis.DataSet(initialNodes.map(formatNode));
             edges = new vis.DataSet(initialEdges.map(e => ({
                 ...e,
-                arrows: { to: { enabled: true, scaleFactor: 0.4 } },
-                color: { color: '#e2e8f0', highlight: '#4f46e5', opacity: 0.6 },
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                color: { color: '#64748b', highlight: '#4f46e5', opacity: 1.0 },
                 width: 1.5,
-                smooth: { type: 'continuous', roundness: 0.5 } // Elegant curved lines
+                smooth: false // Straight lines as requested
             })));
 
-            const container = document.getElementById('viz');
             const options = {
                 physics: {
                     enabled: true,
-                    timestep: 0.3, // Slower simulation (default is 0.5)
-                    minVelocity: 0.1, // Smooth settle
-                    maxVelocity: 15, // Prevent frantic jumping
+                    timestep: 0.2, // Slower, smoother movement
                     solver: 'barnesHut',
                     barnesHut: {
-                        gravitationalConstant: -4000,
-                        centralGravity: 0.2,
-                        springLength: 180,
-                        springConstant: 0.03, // Soft springs for gentle motion
-                        damping: 0.09, // Higher damping for smoother movement
+                        gravitationalConstant: -10000, // Stronger repulsion for wider spacing
+                        centralGravity: 0.1,
+                        springLength: 350, // Significantly increased spacing between nodes
+                        springConstant: 0.02,
+                        damping: 0.15,
                         avoidOverlap: 1
                     },
-                    stabilization: {
-                        enabled: true,
-                        iterations: 1000, // Longer stabilization phase
-                        updateInterval: 25
-                    }
+                    stabilization: { iterations: 1000 } // Allows more time to settle
                 },
                 interaction: { 
                     hover: true, 
-                    tooltipDelay: 300,
-                    hideEdgesOnDrag: true 
+                    hoverConnectedEdges: true,
+                    tooltipDelay: 200 
                 }
             };
 
-            network = new vis.Network(container, { nodes, edges }, options);
+            network = new vis.Network(document.getElementById('viz'), { nodes, edges }, options);
 
             network.on("click", (p) => {
                 const ins = document.getElementById('inspector');
                 if (p.nodes.length > 0) {
                     const node = nodes.get(p.nodes[0]).metadata;
+                    const refCount = node.refCount || node.refs || 0;
                     document.getElementById('ins-label').innerText = node.label;
-                    document.getElementById('ins-meta').innerHTML = `
-                        <span class="meta-pill">LINE ${node.line}</span>
-                        <span class="meta-pill">${node.refs} REFERENCES</span>
-                    `;
+                    document.getElementById('ins-meta').innerText = `LINE ${node.line} | ${refCount} REFERENCES`;
                     const target = document.getElementById('math-target');
                     target.innerHTML = `\\[ ${node.content} \\]`;
                     ins.style.display = 'block';
@@ -251,18 +223,13 @@
         }
 
         function addDynamicNode() {
-            const id = 'sim' + Math.floor(Math.random()*1000);
+            const id = 'sim' + Math.floor(Math.random()*100);
             const node = {
-                id: id, label: 'eq:new_discovery_' + id, type: 'equation',
-                line: 100, refs: Math.floor(Math.random() * 10),
-                content: '\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\epsilon_0}'
+                id: id, label: 'new:node_' + id, type: 'equation',
+                line: 100, refs: 5, content: 'E = h\\nu'
             };
             nodes.add(formatNode(node));
             edges.add({ from: id, to: 's2', arrows: 'to' });
-            network.focus(id, { 
-                scale: 1.0, 
-                animation: { duration: 1500, easingFunction: 'easeInOutQuart' } 
-            });
         }
 
         window.onload = init;
