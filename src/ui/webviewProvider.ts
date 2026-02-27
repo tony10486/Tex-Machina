@@ -99,6 +99,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         <option value="custom">Custom stops</option>
                     </select></div>
                     <div class="group" id="col-grp"><label>Color</label><input type="color" id="col" value="#1a99cc"></div>
+                    <div class="group" id="grad-grp" style="display:none">
+                        <label>Start</label><input type="color" id="col-s" value="#0000ff">
+                        <label>End</label><input type="color" id="col-e" value="#ff0000">
+                    </div>
                     <div class="group" id="preset-grp" style="display:none"><label>Preset</label><select id="preset">
                         <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option>
                     </select></div>
@@ -149,15 +153,21 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 function toggleScheme(){
                     const s = document.getElementById('sch').value;
                     document.getElementById('col-grp').style.display = (s==='uniform')?'flex':'none';
+                    document.getElementById('grad-grp').style.display = (s==='height' || s==='gradient')?'flex':'none';
                     document.getElementById('preset-grp').style.display = (s==='preset')?'flex':'none';
                     document.getElementById('stops-grp').style.display = (s==='custom')?'flex':'none';
                 }
                 function getOptions(){
+                    const s = document.getElementById('sch').value;
+                    let stops = document.getElementById('stops').value;
+                    if(s === 'height' || s === 'gradient') {
+                        stops = '0:' + document.getElementById('col-s').value + ',1:' + document.getElementById('col-e').value;
+                    }
                     return {
                         x: document.getElementById('xr').value, y: document.getElementById('yr').value, z: document.getElementById('zr').value,
-                        scheme: document.getElementById('sch').value, color: document.getElementById('col').value,
+                        scheme: s, color: document.getElementById('col').value,
                         bg: document.getElementById('bg').value, preset: document.getElementById('preset').value,
-                        stops: document.getElementById('stops').value, complex: document.getElementById('cm').value,
+                        stops: stops, complex: document.getElementById('cm').value,
                         axis: document.getElementById('ax-style').value,
                         label: 'x:'+document.getElementById('xl').value+',y:'+document.getElementById('yl').value+',z:'+document.getElementById('zl').value+',font:'+document.getElementById('f').value
                     };

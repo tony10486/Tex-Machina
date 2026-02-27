@@ -337,10 +337,16 @@ export function activate(context: vscode.ExtensionContext) {
             if (options.z) userInput += ` / z=${options.z}`;
             if (options.scheme) userInput += ` / scheme=${options.scheme}`;
             if (options.color) userInput += ` / color=${options.color}`;
+            
+            // 스키마에 따라 필요한 옵션만 추가 (기본값이 선택된 스키마를 덮어쓰지 않도록)
+            if (options.scheme === 'preset' && options.preset) {
+                userInput += ` / preset=${options.preset}`;
+            } else if (options.scheme === 'custom' && options.stops) {
+                userInput += ` / stops=${options.stops}`;
+            }
+
             if (options.label) userInput += ` / label=${options.label}`;
             if (options.bg) userInput += ` / bg=${options.bg}`;
-            if (options.preset) userInput += ` / preset=${options.preset}`;
-            if (options.stops) userInput += ` / stops=${options.stops}`;
             if (options.complex) userInput += ` / complex=${options.complex}`;
             if (options.axis) userInput += ` / axis=${options.axis}`;
         }
@@ -381,22 +387,33 @@ export function activate(context: vscode.ExtensionContext) {
         pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
 
         // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
-        let userInput = `plot > 3d / samples=${samples} / color=${color}`;
+        let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
             if (options.x) userInput += ` / x=${options.x}`;
             if (options.y) userInput += ` / y=${options.y}`;
             if (options.z) userInput += ` / z=${options.z}`;
             if (options.scheme) userInput += ` / scheme=${options.scheme}`;
+            
+            // 스키마에 따라 필요한 옵션만 추가
+            if (options.scheme === 'uniform') {
+                userInput += ` / color=${color}`;
+            } else if (options.scheme === 'preset' && options.preset) {
+                userInput += ` / preset=${options.preset}`;
+            } else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) {
+                userInput += ` / stops=${options.stops}`;
+            } else {
+                // height, gradient 등은 추가 파라미터 불필요하지만 color는 기본값으로 넣어줄 수 있음
+                userInput += ` / color=${color}`;
+            }
+
             if (options.label) userInput += ` / label=${options.label}`;
             if (options.bg) userInput += ` / bg=${options.bg}`;
-            if (options.preset) userInput += ` / preset=${options.preset}`;
-            if (options.stops) userInput += ` / stops=${options.stops}`;
             if (options.complex) userInput += ` / complex=${options.complex}`;
             if (options.axis) userInput += ` / axis=${options.axis}`;
             if (options.export) userInput += ` / export=${options.export}`;
             else userInput += ` / export`;
         } else {
-            userInput += ` / export`;
+            userInput += ` / color=${color} / export`;
         }
         
         const parsed = parseUserCommand(userInput, exprLatex);

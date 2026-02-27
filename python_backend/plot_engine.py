@@ -321,7 +321,9 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                     pos, col = sp_part.split(":")
                     color_stops.append((float(pos), col))
                 color_stops.sort()
-                color_scheme = "custom"
+                # gradient 모드인 경우 해당 모드를 유지 (interpolate_color가 mag 기반 norm을 사용함)
+                if color_scheme != "gradient":
+                    color_scheme = "custom"
             except: pass
         elif p.startswith("preset="):
             preset_name = p.split("=")[1]
@@ -376,6 +378,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # z_range보다 충분히 큰 범위로 클리핑하여 '반듯하게' 잘릴 여지를 줌
     z_margin = (z_range[1] - z_range[0]) * 2
     Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1] + z_margin, neginf=z_range[0] - z_margin)
+    C_val = np.nan_to_num(C_val, nan=0.0, posinf=np.nanmax(C_val) if not np.all(np.isnan(C_val)) else 1.0, neginf=np.nanmin(C_val) if not np.all(np.isnan(C_val)) else 0.0)
     
     # x3dom 데이터 형식
     points = []
@@ -395,7 +398,10 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
 
     # 컬러 스키마 계산
     # 색상 계산을 위해 실제 값 범위를 사용 (Z_range가 아닌 데이터의 Z 사용)
-    c_min, c_max = np.min(C_val), np.max(C_val)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c_min = np.nanmin(C_val)
+        c_max = np.nanmax(C_val)
     c_span = c_max - c_min if c_max != c_min else 1.0
 
     if color_scheme == "gradient":
@@ -421,8 +427,16 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # Preset colormap
     cmap = None
     if color_scheme == "preset" and preset_name:
-        try: cmap = plt.get_cmap(preset_name)
-        except: pass
+        try:
+            # Matplotlib 3.5+
+            from matplotlib import colormaps
+            cmap = colormaps.get_cmap(preset_name)
+        except:
+            try:
+                # Older Matplotlib
+                cmap = plt.get_cmap(preset_name)
+            except:
+                pass
 
     for i in range(len(y)):
         for j in range(len(x)):
