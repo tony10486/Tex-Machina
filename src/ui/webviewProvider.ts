@@ -130,6 +130,27 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             <button class="secondary" onclick="setView('side')">Side</button>
                         </div>
                     </div>
+                    <div class="group full" style="border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                        <label>Rotation & Zoom</label>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top:5px">
+                            <label style="width: 40px;">Elev</label>
+                            <input type="range" id="rot-elev" min="-90" max="90" value="30" oninput="updateFromSliders()">
+                            <span id="val-elev" style="width: 30px;">30</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="width: 40px;">Azim</label>
+                            <input type="range" id="rot-azim" min="-180" max="180" value="45" oninput="updateFromSliders()">
+                            <span id="val-azim" style="width: 30px;">45</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="width: 40px;">Zoom</label>
+                            <input type="range" id="zoom" min="5" max="150" value="30" oninput="updateFromSliders()">
+                            <span id="val-zoom" style="width: 30px;">30</span>
+                        </div>
+                        <div class="btn-row" style="margin-top:5px">
+                            <button class="secondary" onclick="alignZ()">Align Z Axis</button>
+                        </div>
+                    </div>
                     <div class="group full"><label><input type="checkbox" id="textbook-mode" onchange="toggleTextbook()"> Textbook Mode (Clean White + Ortho + Iso)</label></div>
                 </div>
                 <div id="light-tab" class="full controls" style="display:none; border:none; margin:0; padding:0">
@@ -213,35 +234,84 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     });
                 }
 
-                function setView(type) {
-                    const vp = document.getElementById('vp');
-                    const x3d = document.getElementById('x');
-                    if (!vp || !x3d) return;
-                    
-                    let pos, ori;
-                    if (type === 'iso') {
-                        // Matplotlib-like perspective (elev=30, azim=45)
-                        pos = "16 13 16";
-                        ori = "-0.45 0.88 0.15 2.2";
-                    } else if (type === 'top') {
-                        pos = "0 28 0";
-                        ori = "1 0 0 -1.57";
-                    } else if (type === 'front') {
-                        pos = "0 0 28";
-                        ori = "0 0 1 0";
-                    } else if (type === 'side') {
-                        pos = "28 0 0";
-                        ori = "0 1 0 1.57";
-                    }
+                function alignZ() {
+                    // Set elevation to 0 if it was negative, or maintain if positive
+                    // Azimuth is kept. This makes the Z axis (scene Y) look "up"
+                    updateFromSliders();
+                }
 
-                    // Update attributes and force bind to make it the active, permanent viewpoint
-                    vp.setAttribute('position', pos);
-                    vp.setAttribute('orientation', ori);
-                    vp.setAttribute('set_bind', 'true');
+                function updateFromSliders() {
+                    const elev = parseFloat(document.getElementById('rot-elev').value);
+                    const azim = parseFloat(document.getElementById('rot-azim').value);
+                    const zoom = parseFloat(document.getElementById('zoom').value);
                     
-                    // We remove the delayed showAll() here because it often resets the orientation 
-                    // to the default one defined in the initial HTML. 
-                    // If the user wants to fit the graph, they can use the 'Fit View' button.
+                    document.getElementById('val-elev').innerText = elev;
+                    document.getElementById('val-azim').innerText = azim;
+                    document.getElementById('val-zoom').innerText = zoom;
+                    
+                    const e = elev * Math.PI / 180;
+                    const a = azim * Math.PI / 180;
+                    
+                    // Calculate position on a sphere centered at (0,0,0)
+                    const x = zoom * Math.cos(e) * Math.sin(a);
+                    const y = zoom * Math.sin(e);
+                    const z = zoom * Math.cos(e) * Math.cos(a);
+                    
+                    const vp = document.getElementById('vp');
+                    if (!vp) return;
+                    
+                    vp.setAttribute('position', \`\${x} \${y} \${z}\`);
+                    
+                    // Calculate orientation (axis-angle) to look at origin with Y-up
+                    // We rotate by Azim around Y, then by Elev around LOCAL X.
+                    const s_a = Math.sin(a/2), c_a = Math.cos(a/2);
+                    const s_e = Math.sin(-e/2), c_e = Math.cos(-e/2);
+                    
+                    // Quaternion multiplication for Y-rotation then X-rotation
+                    const qx = c_a * s_e;
+                    const qy = s_a * c_e;
+                    const qz = -s_a * s_e;
+                    const qw = c_a * c_e;
+                    
+                    const angle = 2 * Math.acos(qw);
+                    const s = Math.sqrt(1 - qw * qw);
+                    let axisX, axisY, axisZ;
+                    if (s < 0.001) {
+                        axisX = 1; axisY = 0; axisZ = 0;
+                    } else {
+                        axisX = qx / s; axisY = qy / s; axisZ = qz / s;
+                    }
+                    
+                    vp.setAttribute('orientation', \`\${axisX} \${axisY} \${axisZ} \${angle}\`);
+                    
+                    // Handle Zoom for OrthoViewpoint via fieldOfView
+                    if (vp.tagName.toLowerCase() === 'orthoviewpoint') {
+                        const aspect = 1.0; 
+                        const size = zoom * 0.4; // Scale zoom for ortho view
+                        vp.setAttribute('fieldOfView', \`\${-size} \${-size} \${size} \${size}\`);
+                    }
+                    vp.setAttribute('set_bind', 'true');
+                }
+
+                function setView(type) {
+                    if (type === 'iso') {
+                        document.getElementById('rot-elev').value = 30;
+                        document.getElementById('rot-azim').value = 45;
+                        document.getElementById('zoom').value = 28;
+                    } else if (type === 'top') {
+                        document.getElementById('rot-elev').value = 89; // Avoid gimbal lock at 90
+                        document.getElementById('rot-azim').value = 0;
+                        document.getElementById('zoom').value = 28;
+                    } else if (type === 'front') {
+                        document.getElementById('rot-elev').value = 0;
+                        document.getElementById('rot-azim').value = 0;
+                        document.getElementById('zoom').value = 28;
+                    } else if (type === 'side') {
+                        document.getElementById('rot-elev').value = 0;
+                        document.getElementById('rot-azim').value = 90;
+                        document.getElementById('zoom').value = 28;
+                    }
+                    updateFromSliders();
                 }
 
                 function updateLights() {
@@ -273,27 +343,15 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     
                     const scene = x3d.querySelector('scene');
                     let vp = document.getElementById('vp');
-                    const pos = vp ? vp.getAttribute('position') : "16 13 16";
-                    const ori = vp ? vp.getAttribute('orientation') : "-0.45 0.88 0.15 2.2";
-                    
                     if (vp) vp.parentNode.removeChild(vp);
                     
                     const newVp = document.createElement(isOrtho ? 'OrthoViewpoint' : 'Viewpoint');
                     newVp.setAttribute('id', 'vp');
-                    newVp.setAttribute('position', pos);
-                    newVp.setAttribute('orientation', ori);
-                    if (isOrtho) {
-                        // Tight FOV for textbook style
-                        newVp.setAttribute('fieldOfView', "-8 -8 8 8");
-                    }
                     scene.insertBefore(newVp, scene.firstChild);
                     
                     if (window.x3dom) {
                         window.x3dom.reload();
-                        setTimeout(() => {
-                            const x = document.getElementById('x');
-                            if(x && x.runtime) x.runtime.showAll();
-                        }, 100);
+                        setTimeout(updateFromSliders, 200);
                     }
                 }
 
@@ -548,7 +606,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                     </transform>
                                 </scene>
                             </x3d>\`;
-                        if(window.x3dom) window.x3dom.reload();
+                        if(window.x3dom) {
+                            window.x3dom.reload();
+                            setTimeout(updateFromSliders, 200);
+                        }
                     } else if (type === 'update' && latex) {
                         document.getElementById('out').innerHTML = latex;
                         if(window.MathJax) MathJax.typesetPromise();
