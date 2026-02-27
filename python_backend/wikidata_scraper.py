@@ -37,7 +37,6 @@ def get_total_count(categories):
     }
 
     try:
-        # COUNT 쿼리는 데이터 양이 많아도 상대적으로 빠를 수 있지만 타임아웃 넉넉히 설정
         response = requests.get(url, params={'query': query, 'format': 'json'}, headers=headers, timeout=60)
         response.raise_for_status()
         count = response.json()['results']['bindings'][0]['count']['value']
@@ -74,7 +73,8 @@ def get_formula_qids(categories, limit=150, lang='ko'):
         bd:serviceParam wikibase:language "{lang},en". 
         ?item rdfs:label ?itemLabel.
         ?item schema:description ?itemDescription.
-        ?types rdfs:label ?categoryLabel.
+        ?categoryLabel_item rdfs:label ?categoryLabel. # 실제 카테고리 레이블
+        BIND(?types AS ?categoryLabel_item)
       }}
       
       FILTER(!regex(?itemLabel, "^Q\\\\d+$"))
@@ -92,7 +92,7 @@ def get_formula_qids(categories, limit=150, lang='ko'):
         response.raise_for_status()
         return response.json()['results']['bindings']
     except Exception as e:
-        print(f"Error fetching QIDs (Subclass mode): {e}")
+        print(f"Error fetching QIDs: {e}")
         return []
 
 def fetch_wikipedia_summary(title, lang='ko'):
@@ -146,7 +146,7 @@ def main():
     args = parser.parse_args()
 
     if args.count:
-        print(f"[*] Querying total count (including subclasses) for: {', '.join(args.categories)}")
+        print(f"[*] Querying total count (including subclasses) for categories...")
         total = get_total_count(args.categories)
         print(f"[+] Total available items in Wikidata: {total}")
         return

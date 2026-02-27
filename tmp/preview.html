@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaTeX Dependency Graph Modern Preview</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f8f9fa; color: #343a40; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #network-container { width: 100%; height: 70vh; border-bottom: 1px solid #dee2e6; background-color: #ffffff; }
+        #inspector { width: 100%; height: 30vh; padding: 20px; box-sizing: border-box; overflow-y: auto; background-color: #ffffff; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); z-index: 10; }
+        .node-info h3 { margin: 0 0 10px 0; color: #495057; font-weight: 600; font-size: 1.25rem; }
+        .node-meta { font-size: 13px; color: #adb5bd; margin-bottom: 15px; }
+        .math-preview { background: #f1f3f5; color: #212529; padding: 20px; border-radius: 12px; margin-top: 10px; min-height: 80px; display: flex; align-items: center; justify-content: center; border: 1px solid #e9ecef; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-eq { background: #e7f5ff; color: #228be6; } /* Pastel Blue */
+        .badge-sec { background: #fff5f5; color: #fa5252; } /* Pastel Red */
+        .badge-fig { background: #f4fce3; color: #82c91e; } /* Pastel Green */
+    </style>
+</head>
+<body>
+    <div id="network-container"></div>
+    <div id="inspector">
+        <div id="info-content" class="node-info">
+            <h3>Graph Inspector</h3>
+            <p style="color: #adb5bd;">Select a node to view its contents and references.</p>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Modern pastel colors
+        const colors = {
+            equation: { background: '#d0ebff', border: '#74c0fc', highlight: '#a5d8ff' },
+            section: { background: '#ffdeeb', border: '#ff8787', highlight: '#ffc9c9' },
+            figure: { background: '#d3f9d8', border: '#69db7c', highlight: '#b2f2bb' },
+            edge: '#ced4da'
+        };
+
+        const initialData = {
+          "nodes": [
+            {"id": "sec:intro", "label": "Introduction", "type": "section", "line": 6, "refCount": 1, "content": "\\section{Introduction} \\label{sec:intro}"},
+            {"id": "eq:einstein", "label": "eq:einstein", "type": "equation", "line": 11, "refCount": 5, "content": "\\begin{equation}\n    E = mc^2 \\label{eq:einstein}\n\\end{equation}"},
+            {"id": "sec:deep", "label": "Deep Dive", "type": "section", "line": 17, "refCount": 1, "content": "\\section{Deep Dive} \\label{sec:deep}"},
+            {"id": "eq:pythagoras", "label": "eq:pythagoras", "type": "equation", "line": 21, "refCount": 2, "content": "\\begin{align}\n    a^2 + b^2 &= c^2 \\label{eq:pythagoras} \\\\\n    \\sin^2 \\theta + \\cos^2 \\theta &= 1 \\label{eq:trig}\n\\end{align}"},
+            {"id": "eq:trig", "label": "eq:trig", "type": "equation", "line": 22, "refCount": 0, "content": "\\begin{align}\n    a^2 + b^2 &= c^2 \\label{eq:pythagoras} \\\\\n    \\sin^2 \\theta + \\cos^2 \\theta &= 1 \\label{eq:trig}\n\\end{align}"},
+            {"id": "fig:sample", "label": "fig:sample", "type": "figure", "line": 30, "refCount": 1, "content": "\\begin{figure}[h]\n    \\centering\n    \\label{fig:sample}\n    \\caption{A sample figure}\n\\end{figure}"}
+          ],
+          "edges": [
+            {"from": "eq:einstein", "to": "sec:intro"},
+            {"from": "eq:trig", "to": "eq:einstein"},
+            {"from": "eq:trig", "to": "eq:pythagoras"},
+            {"from": "eq:pythagoras", "to": "eq:einstein"},
+            {"from": "fig:sample", "to": "sec:deep"}
+          ]
+        };
+
+        // Size logic: Base size 15 + (refCount * 5)
+        const nodes = new vis.DataSet(initialData.nodes.map(n => ({
+            id: n.id,
+            label: n.id,
+            shape: 'dot',
+            size: 15 + (n.refCount * 6),
+            color: {
+                background: colors[n.type].background,
+                border: colors[n.type].border,
+                highlight: { 
+                    background: colors[n.type].highlight, 
+                    border: colors[n.type].border 
+                }
+            },
+            font: { color: '#495057', size: 12, face: 'Inter, sans-serif' },
+            metadata: n,
+            borderWidth: 2
+        })));
+
+        const edges = new vis.DataSet(initialData.edges);
+
+        const container = document.getElementById('network-container');
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            physics: {
+                enabled: true,
+                barnesHut: {
+                    gravitationalConstant: -2000,
+                    centralGravity: 0.1,
+                    springLength: 150,
+                    springConstant: 0.04,
+                    damping: 0.09,
+                    avoidOverlap: 1
+                },
+                stabilization: { iterations: 100 }
+            },
+            interaction: { 
+                hover: true, 
+                tooltipDelay: 300,
+                hideEdgesOnDrag: true
+            },
+            edges: {
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                color: { color: colors.edge, highlight: '#495057' },
+                width: 1.5,
+                smooth: { enabled: false } // Force straight lines
+            }
+        };
+
+        const network = new vis.Network(container, data, options);
+
+        network.on("click", function (params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const nodeData = nodes.get(nodeId).metadata;
+                
+                const infoDiv = document.getElementById('info-content');
+                const badgeClass = nodeData.type === 'equation' ? 'badge-eq' : (nodeData.type === 'section' ? 'badge-sec' : 'badge-fig');
+                
+                const displayContent = nodeData.content.replace(/\\label\{[^}]+\}/g, '');
+
+                infoDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h3>${nodeData.id}</h3>
+                        <span class="badge ${badgeClass}">${nodeData.type}</span>
+                        <span style="font-size: 12px; color: #adb5bd; margin-left: auto;">Referenced ${nodeData.refCount} times</span>
+                    </div>
+                    <div class="node-meta">Line ${nodeData.line} | Source: ${nodeData.label}</div>
+                    <div class="math-preview" id="math-preview">
+                        \\[ ${displayContent} \\]
+                    </div>
+                `;
+                
+                if (window.MathJax) {
+                    MathJax.typesetPromise([document.getElementById('math-preview')]);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

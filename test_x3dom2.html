@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://www.x3dom.org/download/1.8.3/x3dom.css">
+    <script src="https://www.x3dom.org/download/1.8.3/x3dom.js"></script>
+</head>
+<body>
+    <button onclick="setView('iso')">Iso</button>
+    <button onclick="setView('top')">Top</button>
+    <button onclick="fitView()">Fit</button>
+    <x3d id="x" style="width:500px; height:500px;">
+        <scene>
+            <Viewpoint id="vp" position="0 0 10" orientation="0 0 1 0" centerOfRotation="5 5 5"></Viewpoint>
+            <transform translation="5 5 5">
+                <shape>
+                    <appearance><material diffuseColor="1 0 0"></material></appearance>
+                    <box size="10 10 10"></box>
+                </shape>
+            </transform>
+        </scene>
+    </x3d>
+    <script>
+        function setView(type) {
+            const vp = document.getElementById('vp');
+            const x = document.getElementById('x');
+            if (type === 'iso') {
+                vp.setAttribute('orientation', '-0.45 0.88 0.15 2.2');
+            } else if (type === 'top') {
+                vp.setAttribute('orientation', '1 0 0 -1.57');
+            }
+            vp.setAttribute('set_bind', 'true');
+            // When we change orientation, we can call showAll to fit it
+            setTimeout(() => x.runtime.showAll(), 50);
+        }
+        function fitView() {
+            document.getElementById('x').runtime.showAll();
+        }
+    </script>
+</body>
+</html>

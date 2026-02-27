@@ -1,0 +1,36 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Introduction} \label{sec:intro}
+This is a test document to check the LaTeX dependency graph.
+We will reference an equation later.
+
+\begin{equation}
+    E = mc^2 \label{eq:einstein}
+\end{equation}
+
+In section \ref{sec:intro}, we introduced the basic idea.
+Then, we presented equation \ref{eq:einstein}.
+
+\section{Deep Dive} \label{sec:deep}
+This section explores more complex dependencies.
+
+\begin{align}
+    a^2 + b^2 &= c^2 \label{eq:pythagoras} \
+    \sin^2 \theta + \cos^2 \theta &= 1 \label{eq:trig}
+\end{align}
+
+We can also reference multiple things like \ref{eq:einstein} and \ref{eq:pythagoras}.
+Also, we have a figure here.
+
+\begin{figure}[h]
+    \centering
+    \label{fig:sample}
+    \caption{A sample figure}
+\end{figure}
+
+Reference to \ref{fig:sample} and \ref{sec:deep}.
+
+\end{document}
