@@ -69,7 +69,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <script src="${mathjaxUri}"></script>
             <style>
                 body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; font-size: 13px; }
-                x3d { width: 100%; height: 400px; border: 1px solid #444; }
+                x3d { width: 100%; height: 400px; border: 1px solid #444; background: #000; }
                 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px; }
                 .group { display: flex; flex-direction: column; }
                 label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
@@ -82,6 +82,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 button { background: #007acc; color: white; border: none; padding: 6px; cursor: pointer; flex: 1; }
                 button:hover { background: #0062a3; }
                 button.secondary { background: #555; }
+                input[type="range"] { width: 100%; margin: 4px 0; }
             </style>
         </head>
         <body>
@@ -90,8 +91,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <div id="ui" class="controls" style="display:none">
                 <div class="tabs full">
                     <div class="tab active" onclick="tab('s')">Style</div>
+                    <div class="tab" onclick="tab('v')">View</div>
                     <div class="tab" onclick="tab('d')">Domain</div>
                     <div class="tab" onclick="tab('l')">Axes</div>
+                    <div class="tab" onclick="tab('light-tab')">Light</div>
                     <div class="tab" onclick="tab('c')">Complex</div>
                 </div>
                 <div id="s" class="full controls" style="display:grid; border:none; margin:0; padding:0">
@@ -113,6 +116,32 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
                     <div class="group"><label>Background</label><input type="color" id="bg" value="#ffffff"></div>
                     <div class="group"><label>Antialiasing</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
+                </div>
+                <div id="v" class="full controls" style="display:none; border:none; margin:0; padding:0">
+                    <div class="group"><label>Projection</label><select id="proj" onchange="updateViewpoint()">
+                        <option value="perspective">Perspective</option>
+                        <option value="ortho">Orthographic</option>
+                    </select></div>
+                    <div class="group"><label>Standard Views</label>
+                        <div class="btn-row">
+                            <button class="secondary" onclick="setView('iso')">Iso</button>
+                            <button class="secondary" onclick="setView('top')">Top</button>
+                            <button class="secondary" onclick="setView('front')">Front</button>
+                            <button class="secondary" onclick="setView('side')">Side</button>
+                        </div>
+                    </div>
+                    <div class="group full"><label><input type="checkbox" id="textbook-mode" onchange="toggleTextbook()"> Textbook Mode (Clean White + Ortho + Iso)</label></div>
+                </div>
+                <div id="light-tab" class="full controls" style="display:none; border:none; margin:0; padding:0">
+                    <div class="group"><label>Ambient Intensity</label><input type="range" id="amb-int" min="0" max="1" step="0.05" value="0.3" oninput="updateLights()"></div>
+                    <div class="group"><label>Direct Intensity</label><input type="range" id="dir-int" min="0" max="2" step="0.1" value="1.0" oninput="updateLights()"></div>
+                    <div class="group"><label>Shadow Intensity</label><input type="range" id="shd-int" min="0" max="1" step="0.1" value="0.0" oninput="updateLights()"></div>
+                    <div class="group"><label>Light Position</label><select id="light-pos" onchange="updateLights()">
+                        <option value="top">Top Right</option>
+                        <option value="front">Front</option>
+                        <option value="left">Left High</option>
+                    </select></div>
+                    <div class="group full"><label><input type="checkbox" id="headlight" checked onchange="updateLights()"> Headlight (Camera follow)</label></div>
                 </div>
                 <div id="d" class="full controls" style="display:none; border:none; margin:0; padding:0">
                     <div class="group"><label>X Range</label><input id="xr" value="-5,5"></div>
@@ -177,8 +206,114 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     });
                 }
                 function tab(n){
-                    ['s','d','l','c'].forEach(t => document.getElementById(t).style.display = t===n?'grid':'none');
-                    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.getAttribute('onclick').includes("'"+n+"'")));
+                    ['s','v','d','l','c','light-tab'].forEach(t => document.getElementById(t).style.display = t===n?'grid':'none');
+                    document.querySelectorAll('.tab').forEach(t => {
+                        const onclick = t.getAttribute('onclick');
+                        t.classList.toggle('active', onclick && onclick.includes("'"+n+"'"));
+                    });
+                }
+
+                function setView(type) {
+                    const vp = document.getElementById('vp');
+                    const x3d = document.getElementById('x');
+                    if (!vp || !x3d) return;
+                    
+                    let pos, ori;
+                    if (type === 'iso') {
+                        // Matplotlib-like perspective (elev=30, azim=45)
+                        pos = "16 13 16";
+                        ori = "-0.45 0.88 0.15 2.2";
+                    } else if (type === 'top') {
+                        pos = "0 28 0";
+                        ori = "1 0 0 -1.57";
+                    } else if (type === 'front') {
+                        pos = "0 0 28";
+                        ori = "0 0 1 0";
+                    } else if (type === 'side') {
+                        pos = "28 0 0";
+                        ori = "0 1 0 1.57";
+                    }
+
+                    // Update attributes and force bind to make it the active, permanent viewpoint
+                    vp.setAttribute('position', pos);
+                    vp.setAttribute('orientation', ori);
+                    vp.setAttribute('set_bind', 'true');
+                    
+                    // We remove the delayed showAll() here because it often resets the orientation 
+                    // to the default one defined in the initial HTML. 
+                    // If the user wants to fit the graph, they can use the 'Fit View' button.
+                }
+
+                function updateLights() {
+                    const amb = document.getElementById('amb-int').value;
+                    const dir = document.getElementById('dir-int').value;
+                    const shd = document.getElementById('shd-int').value;
+                    const pos = document.getElementById('light-pos').value;
+                    const head = document.getElementById('headlight').checked;
+
+                    const dl = document.getElementById('dir-light');
+                    const al = document.getElementById('amb-light');
+                    const ni = document.getElementById('nav-info');
+
+                    if (dl) {
+                        dl.setAttribute('intensity', dir);
+                        dl.setAttribute('shadowIntensity', shd);
+                        if (pos === 'top') dl.setAttribute('direction', '-1 -1 -1');
+                        else if (pos === 'front') dl.setAttribute('direction', '0 0 -1');
+                        else if (pos === 'left') dl.setAttribute('direction', '1 -1 -0.5');
+                    }
+                    if (al) al.setAttribute('intensity', amb);
+                    if (ni) ni.setAttribute('headlight', head ? 'true' : 'false');
+                }
+
+                function updateViewpoint() {
+                    const isOrtho = document.getElementById('proj').value === 'ortho';
+                    const x3d = document.getElementById('x');
+                    if (!x3d) return;
+                    
+                    const scene = x3d.querySelector('scene');
+                    let vp = document.getElementById('vp');
+                    const pos = vp ? vp.getAttribute('position') : "16 13 16";
+                    const ori = vp ? vp.getAttribute('orientation') : "-0.45 0.88 0.15 2.2";
+                    
+                    if (vp) vp.parentNode.removeChild(vp);
+                    
+                    const newVp = document.createElement(isOrtho ? 'OrthoViewpoint' : 'Viewpoint');
+                    newVp.setAttribute('id', 'vp');
+                    newVp.setAttribute('position', pos);
+                    newVp.setAttribute('orientation', ori);
+                    if (isOrtho) {
+                        // Tight FOV for textbook style
+                        newVp.setAttribute('fieldOfView', "-8 -8 8 8");
+                    }
+                    scene.insertBefore(newVp, scene.firstChild);
+                    
+                    if (window.x3dom) {
+                        window.x3dom.reload();
+                        setTimeout(() => {
+                            const x = document.getElementById('x');
+                            if(x && x.runtime) x.runtime.showAll();
+                        }, 100);
+                    }
+                }
+
+                function toggleTextbook() {
+                    const active = document.getElementById('textbook-mode').checked;
+                    if (active) {
+                        document.getElementById('bg').value = "#ffffff";
+                        document.getElementById('proj').value = "ortho";
+                        document.getElementById('aa').value = "true";
+                        document.getElementById('ax-style').value = "box";
+                        document.getElementById('f').value = "SERIF";
+                        // Optimized light for white background
+                        document.getElementById('amb-int').value = "0.6";
+                        document.getElementById('dir-int').value = "0.8";
+                        document.getElementById('shd-int').value = "0.15";
+                        document.getElementById('headlight').checked = true;
+                        updateViewpoint();
+                        updateLights();
+                        setView('iso');
+                    }
                 }
                 function toggleScheme(){
                     const s = document.getElementById('sch').value;
@@ -211,13 +346,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 function fitView(){
                     const x3d = document.getElementById('x');
                     if (x3d && x3d.runtime) x3d.runtime.showAll();
-                }
-                function hqExport(){
-                    vscode.postMessage({
-                        command: 'exportPdf', expr: last, samples: document.getElementById('res').value,
-                        color: document.getElementById('col').value,
-                        options: { ...getOptions(), export: 'pdf' }
-                    });
                 }
                 function autoCrop(imgData, bgColor, format, callback) {
                     const img = new Image();
@@ -271,19 +399,35 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 function exportPlot(){
                     const x3d = document.getElementById('x');
                     if (!x3d || !x3d.runtime) return;
+                    
+                    const isTextbook = document.getElementById('textbook-mode').checked;
                     const w = parseInt(document.getElementById('exp-w').value) || 800;
                     const h = parseInt(document.getElementById('exp-h').value) || 600;
                     const fmt = document.getElementById('exp-fmt').value;
                     const isSmart = document.getElementById('exp-smart').checked;
-                    const bgColor = document.getElementById('bg').value;
+                    const bgColor = isTextbook ? "#ffffff" : document.getElementById('bg').value;
+                    
                     const originalWidth = x3d.style.width;
                     const originalHeight = x3d.style.height;
+                    const originalAA = x3d.getAttribute('antialiasing');
+                    
                     x3d.style.width = w + 'px';
                     x3d.style.height = h + 'px';
+                    x3d.setAttribute('antialiasing', 'true');
+                    
+                    if (isTextbook) {
+                        document.getElementById('bg').value = "#ffffff";
+                        document.getElementById('proj').value = "ortho";
+                        updateViewpoint();
+                        setView('iso');
+                    }
+
                     setTimeout(() => {
                         const rawData = x3d.runtime.getScreenshot();
                         x3d.style.width = originalWidth;
                         x3d.style.height = originalHeight;
+                        x3d.setAttribute('antialiasing', originalAA);
+                        
                         if (isSmart) {
                             autoCrop(rawData, bgColor, fmt, (croppedData) => {
                                 vscode.postMessage({ command: 'saveImage', imageData: croppedData, format: fmt, expr: last });
@@ -291,7 +435,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         } else {
                             vscode.postMessage({ command: 'saveImage', imageData: rawData, format: fmt, expr: last });
                         }
-                    }, 200);
+                    }, 500);
                 }
                 function hexToRgb(hex) {
                     const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -301,14 +445,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
                 window.addEventListener('message', e => {
                     const { type, x3d_data, latex } = e.data;
-                    console.log("Webview received message:", type, x3d_data ? "has x3d" : "no x3d");
                     if (type === 'update' && x3d_data) {
                         last = x3d_data.expr;
                         document.getElementById('ui').style.display = 'grid';
                         const [c, r] = x3d_data.grid_size;
                         const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
                         
-                        // [추가] UI 입력 필드 동기화 (기존 필드 + 스타일 필드)
                         document.getElementById('res').value = c;
                         document.getElementById('xr').value = rx.join(',');
                         document.getElementById('yr').value = ry.join(',');
@@ -317,7 +459,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         if (x3d_data.bg_color) document.getElementById('bg').value = x3d_data.bg_color;
                         if (x3d_data.axis_style) document.getElementById('ax-style').value = x3d_data.axis_style;
                         
-                        // Scheme & Complex mode sync
                         if (x3d_data.color_scheme) {
                             document.getElementById('sch').value = x3d_data.color_scheme;
                             toggleScheme();
@@ -325,14 +466,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         if (x3d_data.preset_name) document.getElementById('preset').value = x3d_data.preset_name;
                         if (x3d_data.complex_mode) document.getElementById('cm').value = x3d_data.complex_mode;
 
-                        // Labels
                         if (x3d_data.labels) {
                             if (x3d_data.labels.x) document.getElementById('xl').value = x3d_data.labels.x;
                             if (x3d_data.labels.y) document.getElementById('yl').value = x3d_data.labels.y;
                             if (x3d_data.labels.z) document.getElementById('zl').value = x3d_data.labels.z;
                         }
 
-                        // Smooth indices (no skipping, ClipPlane will handle the cut)
                         const idx = [];
                         for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
                         
@@ -342,6 +481,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const axStyle = x3d_data.axis_style || "cross";
                         const skyCol = hexToRgb(x3d_data.bg_color || "#ffffff");
                         
+                        const ambInt = document.getElementById('amb-int').value;
+                        const dirInt = document.getElementById('dir-int').value;
+                        const shdInt = document.getElementById('shd-int').value;
+                        const head = document.getElementById('headlight').checked ? 'true' : 'false';
+
                         let axesXml = "";
                         if(showAxes && axStyle !== 'none'){
                             if(axStyle === 'cross' || axStyle === 'arrows'){
@@ -382,7 +526,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         document.getElementById('container').innerHTML = \`
                             <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
                                 <scene>
-                                    <viewpoint position="0 15 15" orientation="1 0 0 -0.785"></viewpoint>
+                                    <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
+                                    <directionalLight id="dir-light" direction="-1 -1 -1" intensity="\${dirInt}" shadowIntensity="\${shdInt}" shadowMapSize="1024"></directionalLight>
+                                    <ambientLight id="amb-light" intensity="\${ambInt}"></ambientLight>
+                                    <\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')} id="vp" position="0 15 15" orientation="1 0 0 -0.785" \${(document.getElementById('proj').value === 'ortho' ? 'fieldOfView="-5 -5 5 5"' : '')}></\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')}>
                                     <background skyColor="\${skyCol}"></background>
                                     \${axesXml}
                                     <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>

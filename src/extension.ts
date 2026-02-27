@@ -105,15 +105,21 @@ export function activate(context: vscode.ExtensionContext) {
 
                             if (currentMainCommand === "matrix") {
                                 outputText = resultLatex;
+                            } else if (currentMainCommand === "plot") {
+                                // Plot의 경우 에디터 수식을 수정하지 않고 웹뷰 프리뷰만 업데이트함
+                                outputText = currentOriginalText;
                             } else if (currentParallels.includes("newline")) {
                                 outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
                             } else {
                                 outputText = `${currentOriginalText} = ${resultLatex}`;
                             }
 
-                            await currentEditor.edit(editBuilder => {
-                                editBuilder.replace(currentSelection!, outputText);
-                            });
+                            // plot이 아닐 때만 에디터 텍스트 교체 수행
+                            if (currentMainCommand !== "plot") {
+                                await currentEditor.edit(editBuilder => {
+                                    editBuilder.replace(currentSelection!, outputText);
+                                });
+                            }
                             
                             // .dat 파일 생성 처리
                             if (response.dat_content) {
