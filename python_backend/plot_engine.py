@@ -373,9 +373,10 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         C_val = Z
 
     # NaN/Inf 처리
-    Z = np.nan_to_num(Z, nan=0.0)
-    # Z = np.clip(Z, z_range[0], z_range[1]) # 더 이상 강제로 자르지 않음 (프론트엔드에서 처리)
-
+    # z_range보다 충분히 큰 범위로 클리핑하여 '반듯하게' 잘릴 여지를 줌
+    z_margin = (z_range[1] - z_range[0]) * 2
+    Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1] + z_margin, neginf=z_range[0] - z_margin)
+    
     # x3dom 데이터 형식
     points = []
     colors = []
@@ -393,6 +394,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             axis_style = p.split("=")[1].lower()
 
     # 컬러 스키마 계산
+    # 색상 계산을 위해 실제 값 범위를 사용 (Z_range가 아닌 데이터의 Z 사용)
     c_min, c_max = np.min(C_val), np.max(C_val)
     c_span = c_max - c_min if c_max != c_min else 1.0
 
@@ -434,15 +436,16 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                     colors.append(interpolate_color(norm))
                 elif cmap:
                     colors.append([float(c) for c in cmap(norm)[:3]])
-                else: # Fallback height: Blue -> Red
-                    colors.append([float(norm), 0.3, float(1.0 - norm)])
+                else: # Fallback height: Blue -> Cyan -> Yellow -> Red
+                    # 더 풍부한 기본 높이 그래디언트
+                    colors.append([float(norm), float(0.5 + 0.5*np.sin(norm*np.pi)), float(1.0 - norm)])
             elif color_scheme == "gradient":
                 norm = (mag[i,j] - m_min) / m_span
-                # 개선된 그래디언트: 커스텀 스탑이 있으면 그것을 사용, 없으면 개선된 기본값 사용
                 if color_stops:
                     colors.append(interpolate_color(norm))
                 else:
-                    colors.append([float(0.1 + 0.8*norm), 0.8, float(0.5 - 0.4*norm)])
+                    # 개선된 기본 그래디언트 (경사도에 따른 색상)
+                    colors.append([float(0.1 + 0.9*norm), float(0.8 - 0.4*norm), float(0.3 + 0.2*norm)])
             else:
                 colors.append(get_rgb(custom_color))
 

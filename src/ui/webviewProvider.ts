@@ -190,19 +190,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const [c, r] = x3d_data.grid_size;
                         const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
                         
-                        // Z-range clipping for faces
+                        // Smooth indices (no skipping, ClipPlane will handle the cut)
                         const idx = [];
-                        for(let i=0; i<r-1; i++) {
-                            for(let j=0; j<c-1; j++) {
-                                const v1 = i*c+j, v2 = i*c+j+1, v3 = (i+1)*c+j+1, v4 = (i+1)*c+j;
-                                const z1 = x3d_data.points[v1][2], z2 = x3d_data.points[v2][2], z3 = x3d_data.points[v3][2], z4 = x3d_data.points[v4][2];
-                                // 한 점이라도 범위 내에 있으면 그릴지, 아니면 모든 점이 범위 내여야 할지 결정.
-                                // "깔끔하게" 자르려면 모든 점이 범위 내여야 함 (안 그러면 바깥으로 튀어나옴).
-                                if (z1 >= rz[0] && z1 <= rz[1] && z2 >= rz[0] && z2 <= rz[1] && z3 >= rz[0] && z3 <= rz[1] && z4 >= rz[0] && z4 <= rz[1]) {
-                                    idx.push(v1, v2, v3, v4, -1);
-                                }
-                            }
-                        }
+                        for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
                         
                         const aa = document.getElementById('aa').value;
                         const f = x3d_data.labels.font || "SANS";
@@ -255,8 +245,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                     \${axesXml}
                                     <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
                                     <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform translation="0 0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                    <transform translation="0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
                                     <transform rotation="1 0 0 -1.57">
+                                        <ClipPlane plane="0 0 -1 \${rz[1]}" enabled="true"></ClipPlane>
+                                        <ClipPlane plane="0 0 1 \${-rz[0]}" enabled="true"></ClipPlane>
                                         <shape>
                                             <appearance><material></material></appearance>
                                             <IndexedFaceSet solid="false" colorPerVertex="true" coordIndex="\${idx.join(' ')}">
