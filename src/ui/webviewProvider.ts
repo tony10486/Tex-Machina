@@ -201,11 +201,29 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const [c, r] = x3d_data.grid_size;
                         const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
                         
-                        // [추가] UI 입력 필드 동기화
+                        // [추가] UI 입력 필드 동기화 (기존 필드 + 스타일 필드)
                         document.getElementById('res').value = c;
                         document.getElementById('xr').value = rx.join(',');
                         document.getElementById('yr').value = ry.join(',');
                         document.getElementById('zr').value = rz.join(',');
+                        
+                        if (x3d_data.bg_color) document.getElementById('bg').value = x3d_data.bg_color;
+                        if (x3d_data.axis_style) document.getElementById('ax-style').value = x3d_data.axis_style;
+                        
+                        // Scheme & Complex mode sync
+                        if (x3d_data.color_scheme) {
+                            document.getElementById('sch').value = x3d_data.color_scheme;
+                            toggleScheme();
+                        }
+                        if (x3d_data.preset_name) document.getElementById('preset').value = x3d_data.preset_name;
+                        if (x3d_data.complex_mode) document.getElementById('cm').value = x3d_data.complex_mode;
+
+                        // Labels
+                        if (x3d_data.labels) {
+                            if (x3d_data.labels.x) document.getElementById('xl').value = x3d_data.labels.x;
+                            if (x3d_data.labels.y) document.getElementById('yl').value = x3d_data.labels.y;
+                            if (x3d_data.labels.z) document.getElementById('zl').value = x3d_data.labels.z;
+                        }
 
                         // Smooth indices (no skipping, ClipPlane will handle the cut)
                         const idx = [];

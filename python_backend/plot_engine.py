@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import base64
 import sys
+import re
 from io import BytesIO
 from typing import Dict, Any, List, Tuple
 try:
@@ -25,13 +26,28 @@ PGF_SUPPORTED_FUNCS = (
 def _safe_latex_parse(raw_latex: str) -> sp.Expr:
     """LaTeX 문자열을 SymPy 객체로 안전하게 변환합니다."""
     try:
-        # latex2sympy가 가끔 Eq를 반환하거나 단순 Expr을 반환함
-        expr = latex2sympy(raw_latex)
+        # i를 I로, j를 I로 전처리 (허수 단위 대응)
+        processed_latex = raw_latex
+        
+        # 1. 기본적인 LaTeX 명령어 보정
+        # \Gamma{\left(z \right)} -> \Gamma(z) 형태로 변환 (parse_latex가 Mul로 오인하는 것 방지)
+        # 모든 그리스 문자나 함수 이름 뒤의 {\left( ... \right)} 패턴을 찾아 (...)로 치환
+        processed_latex = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', processed_latex)
+        # \left( ... \right) 만 있는 경우도 보정
+        processed_latex = processed_latex.replace(r'\left(', '(').replace(r'\right)', ')')
+        # \text{gamma} -> gamma 변환
+        processed_latex = re.sub(r'\\text\{([a-zA-Z]+)\}', r'\1', processed_latex)
+        
+        expr = latex2sympy(processed_latex)
         if isinstance(expr, sp.Eq):
             return expr.lhs - expr.rhs
         return expr
     except Exception as e:
-        raise ValueError(f"LaTeX 파싱 실패: {raw_latex}. 상세: {str(e)}")
+        # Fallback: parse_latex가 실패하면 sympify 시도 (간단한 수식용)
+        try:
+            return sp.sympify(raw_latex.replace('\\', ''))
+        except:
+            raise ValueError(f"LaTeX 파싱 실패: {raw_latex}. 상세: {str(e)}")
 
 def sympy_to_pgfplots_str(expr: sp.Expr) -> str:
     """SymPy 수식을 PGFPlots가 이해할 수 있는 대수적 문자열로 변환합니다."""
@@ -285,7 +301,16 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     
     # 복소수 맵핑 옵션
     complex_mode = "abs_phase" # height_color mapping
-    is_complex = expr.has(sp.I) or any(s.is_complex and not s.is_real for s in expr.free_symbols)
+    # i(I)가 수식에 포함되었거나 변수 z가 포함되어 있으면 복소 그래프 모드로 동작 제안
+    is_complex = expr.has(sp.I) or any(s.name == 'z' for s in expr.free_symbols) or expr.has(sp.Symbol('i'))
+    
+    # [i 허수 단위 기호 보정]
+    # 'i'가 수식에 포함되어 있고, 이것이 독립 변수가 아니라면 허수 단위로 취급
+    if sp.Symbol('i') in expr.free_symbols:
+        if not any(s.name == 'i' for s in var_list):
+            expr = expr.subs(sp.Symbol('i'), sp.I)
+            # 수식에서 i가 제거되었을 수 있으므로 is_complex 재설정
+            is_complex = expr.has(sp.I) or any(s.name == 'z' for s in expr.free_symbols)
     
     # 그라디언트 스탑 ([(pos, color), ...])
     color_stops = []
@@ -345,26 +370,37 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # [복소수 시각화 변수 확장 개선]
     # 사용자가 'complex=' 옵션을 주었거나 수식에 허수 단위 i가 포함된 경우 처리
     is_complex_by_opt = any(p.startswith("complex=") for p in parallels) or is_complex
+    is_single_complex_input = False
     
     if is_complex_by_opt:
         if len(var_list) == 1:
             # 단일 변수 (z 등) -> x + iy로 확장
-            v_orig = var_list[0]
+            # [Fix] 수식에 있는 실제 심볼을 찾아 치환 (이름 불일치 방지)
+            v_orig = list(expr.free_symbols)[0] if expr.free_symbols else var_list[0]
             v1 = sp.Symbol('x', real=True)
             v2 = sp.Symbol('y', real=True)
-            expr = expr.subs(v_orig, v1 + sp.I * v2)
-            # 변수 목록 갱신
+            
+            # SciPy ufunc 대응: 단일 복소수 심볼로 lambdify
+            v_comp = sp.Symbol('v_comp', complex=True)
+            expr = expr.subs(v_orig, v_comp)
+            f = sp.lambdify(v_comp, expr, modules=['numpy', 'scipy'])
+            is_single_complex_input = True
+            
+            # 가시화용 변수 이름 (라벨용)
             var_list = [v1, v2]
         elif len(var_list) >= 2:
-            # 이미 x, y가 있는 경우 (rerender 시 sp.latex 결과물인 경우 포함)
-            # 심볼 이름으로 매칭 시도
+            # 이미 x, y가 있는 경우
             v1 = next((s for s in var_list if s.name == 'x'), var_list[0])
             v2 = next((s for s in var_list if s.name == 'y'), var_list[1])
-            # x, y가 아닌 다른 이름이면 그대로 사용하되 v1, v2로 할당
+            f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+            is_single_complex_input = False
         else:
             v1, v2 = sp.Symbol('x'), sp.Symbol('y')
+            f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+            is_single_complex_input = False
     else:
         # 일반 실수 그래프
+        is_single_complex_input = False
         if len(var_list) >= 2:
             v1, v2 = var_list[0], var_list[1]
         elif len(var_list) == 1:
@@ -372,41 +408,76 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             v2 = sp.Symbol('y')
         else:
             v1, v2 = sp.Symbol('x'), sp.Symbol('y')
+        f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
 
-    # 메시 생성 (확장된 v1, v2 사용)
-    # 복소수 연산을 위해 modules에 'numpy', 'scipy'와 특수 함수들 명시
-    f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy', {'gamma': sp.gamma, 'zeta': sp.zeta}])
     x = np.linspace(x_range[0], x_range[1], grid_res)
     y = np.linspace(y_range[0], y_range[1], grid_res)
     X, Y = np.meshgrid(x, y)
     
+    # Ensure X, Y are float arrays for numerical stability
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
+    
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        W = f(X, Y)
+        if is_single_complex_input:
+            W = f(X + 1j * Y)
+        else:
+            W = f(X, Y)
+            
         if np.isscalar(W):
             W = np.full(X.shape, W)
 
     # 복소수 처리
     if np.iscomplexobj(W) or is_complex:
+        # Ensure W is a numerical complex array for angle/abs calculation
+        try:
+            # Try direct conversion (fastest)
+            W_num = np.asarray(W, dtype=np.complex128)
+        except Exception:
+            # Fallback: manually convert each element to complex (handles SymPy objects)
+            def _to_complex(val):
+                try:
+                    if hasattr(val, 'evalf'):
+                        c = val.evalf()
+                        return complex(c)
+                    return complex(val)
+                except:
+                    return np.nan + 1j*np.nan
+            
+            W_num = np.vectorize(_to_complex)(W)
+
+        # Ensure we have a numerical array for calculations
+        W_num = np.asarray(W_num, dtype=np.complex128)
+        
         if complex_mode == "abs_phase":
-            Z = np.abs(W)
-            C_val = np.angle(W) / (2 * np.pi) % 1.0 # Phase for color
+            Z = np.abs(W_num)
+            C_val = np.angle(W_num) / (2 * np.pi) % 1.0 # Phase for color
         elif complex_mode == "real_imag":
-            Z = np.real(W)
-            C_val = np.imag(W)
+            Z = np.real(W_num)
+            C_val = np.imag(W_num)
         elif complex_mode == "imag_real":
-            Z = np.imag(W)
-            C_val = np.real(W)
+            Z = np.imag(W_num)
+            C_val = np.real(W_num)
         else:
-            Z = np.abs(W)
+            Z = np.abs(W_num)
             C_val = Z
     else:
-        Z = np.real(W)
+        # For real arrays, ensure conversion to float
+        try:
+            W_num = np.asarray(W, dtype=float)
+        except Exception:
+            W_num = np.vectorize(lambda x: float(x.evalf() if hasattr(x, 'evalf') else x))(W)
+        Z = W_num
         C_val = Z
 
-    # NaN/Inf 처리
-    z_margin = (z_range[1] - z_range[0]) * 2
-    Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1] + z_margin, neginf=z_range[0] - z_margin)
+    # NaN/Inf 처리 및 Clipping (Visualization stability)
+    # z_range를 넘어서는 너무 큰 값은 x3dom 렌더링 시 문제를 일으킬 수 있으므로 적절히 클리핑
+    z_limit_up = z_range[1] + (z_range[1] - z_range[0]) * 0.5
+    z_limit_down = z_range[0] - (z_range[1] - z_range[0]) * 0.5
+    
+    Z = np.nan_to_num(Z, nan=0.0, posinf=z_limit_up, neginf=z_limit_down)
+    Z = np.clip(Z, z_limit_down, z_limit_up)
     
     # x3dom 데이터 형식
     points = []
@@ -576,7 +647,10 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             "labels": labels,
             "ranges": {"x": x_range, "y": y_range, "z": z_range},
             "bg_color": bg_color,
-            "axis_style": axis_style
+            "axis_style": axis_style,
+            "complex_mode": complex_mode,
+            "color_scheme": color_scheme,
+            "preset_name": preset_name
         },
         "export_content": export_content,
         "export_format": export_format,

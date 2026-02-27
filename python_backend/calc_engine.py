@@ -590,6 +590,10 @@ def execute_calc(parsed_json_str):
             for p in parts:
                 if p.strip():
                     preprocessed = preprocess_latex_ode(p.strip())
+                    # [Pre-process for Gamma and other functions]
+                    # \Gamma{\left(z \right)} -> \Gamma(z)
+                    preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', preprocessed)
+                    preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
                     exprs.append(parse_latex(preprocessed))
             
             # 수집된 모든 자유 변수 확인
@@ -631,7 +635,11 @@ def execute_calc(parsed_json_str):
                 }
                 expr = sp.sympify(processed_selection, locals=calc_locals)
             else:
-                expr = parse_latex(selection)
+                # [Pre-process for Gamma and other functions]
+                # \Gamma{\left(z \right)} -> \Gamma(z)
+                preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', selection)
+                preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
+                expr = parse_latex(preprocessed)
             
             # 3. 명령어 실행
             ops = get_calc_operations()
