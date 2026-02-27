@@ -272,17 +272,41 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     workspace_dir = params.get("workspaceDir", os.getcwd())
     parallels = params.get("parallelOptions", [])
     
-    # 해상도 설정 (기본값 50으로 상향)
+    # 해상도 설정 (기본값 50)
     grid_res = 50
+    x_range = [-5.0, 5.0]
+    y_range = [-5.0, 5.0]
+    z_range = [-15.0, 15.0]
+    color_scheme = "uniform"
+    custom_color = "#1a99cc"
+    labels = {"x": "x", "y": "y", "z": "z"}
+
     for p in parallels:
+        p = p.strip()
         if p.startswith("samples="):
             try: grid_res = int(p.split("=")[1])
             except: pass
+        elif p.startswith("x="):
+            try: x_range = [float(x) for x in p.split("=")[1].split(",")]
+            except: pass
+        elif p.startswith("y="):
+            try: y_range = [float(y) for y in p.split("=")[1].split(",")]
+            except: pass
+        elif p.startswith("z="):
+            try: z_range = [float(z) for z in p.split("=")[1].split(",")]
+            except: pass
+        elif p.startswith("color="):
+            custom_color = p.split("=")[1]
+        elif p.startswith("scheme="):
+            color_scheme = p.split("=")[1]
+        elif p.startswith("label="):
+            # label=x:Time,y:Value
+            label_parts = p.split("=")[1].split(",")
+            for lp in label_parts:
+                if ":" in lp:
+                    k, v = lp.split(":", 1)
+                    labels[k.strip().lower()] = v.strip()
 
-    # 도메인 설정 (기본값)
-    x_range = (-5.0, 5.0)
-    y_range = (-5.0, 5.0)
-    
     # 변수 인식
     if len(var_list) >= 2:
         v1, v2 = var_list[0], var_list[1]
@@ -304,31 +328,67 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         if np.isscalar(Z):
             Z = np.full(X.shape, Z)
 
-    # NaN/Inf 처리 (Z값을 적절한 범위로 제한)
-    Z = np.nan_to_num(Z, nan=0.0, posinf=15.0, neginf=-15.0)
-    Z = np.clip(Z, -15.0, 15.0)
+    # NaN/Inf 처리
+    Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1], neginf=z_range[0])
+    Z = np.clip(Z, z_range[0], z_range[1])
 
     # x3dom 데이터 형식 (IndexedFaceSet용)
     points = []
+    colors = []
+    
+    # 컬러 스키마 계산
+    def get_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 3:
+            hex_color = ''.join([c*2 for c in hex_color])
+        return [int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+
+    base_rgb = get_rgb(custom_color)
+
+    # 그라디언트/스키마용 데이터 준비
+    if color_scheme == "height":
+        z_min, z_max = np.min(Z), np.max(Z)
+        z_span = z_max - z_min if z_max != z_min else 1.0
+    elif color_scheme == "gradient":
+        dz_dy, dz_dx = np.gradient(Z, y[1]-y[0], x[1]-x[0])
+        mag = np.sqrt(dz_dx**2 + dz_dy**2)
+        m_min, m_max = np.min(mag), np.max(mag)
+        m_span = m_max - m_min if m_max != m_min else 1.0
+
     for i in range(len(y)):
         for j in range(len(x)):
             points.append([float(X[i,j]), float(Y[i,j]), float(Z[i,j])])
             
+            if color_scheme == "uniform":
+                colors.append(base_rgb)
+            elif color_scheme == "height":
+                norm = (Z[i,j] - z_min) / z_span
+                # 파랑 -> 빨강 그라디언트 예시
+                colors.append([norm, 0.3, 1.0 - norm])
+            elif color_scheme == "gradient":
+                norm = (mag[i,j] - m_min) / m_span
+                # 녹색 -> 황금색
+                colors.append([0.2 + 0.8*norm, 0.8, 0.2])
+            else:
+                colors.append(base_rgb)
+
     # 벡터 그래픽 생성 (사용자가 'export' 옵션을 주었을 때)
     pdf_base64 = None
     if "export" in parallels:
-        # X3D와 유사한 색상 적용 (옵션이 있을 경우)
-        color = "#1a99cc"
-        for p in parallels:
-            if p.startswith("color="):
-                color = p.split("=")[1]
-
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
-        # 색상 값이 hex일 경우 matplotlib에서 인식 가능
-        ax.plot_surface(X, Y, Z, color=color, alpha=0.8, edgecolor='none')
         
-        # 뷰 각도 설정 (약간의 입체감)
+        # 스키마에 따른 서페이스 플롯
+        if color_scheme == "uniform":
+            ax.plot_surface(X, Y, Z, color=custom_color, alpha=0.8, edgecolor='none')
+        elif color_scheme == "height":
+            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.8, edgecolor='none')
+        elif color_scheme == "gradient":
+            ax.plot_surface(X, Y, Z, cmap='magma', alpha=0.8, edgecolor='none')
+        
+        ax.set_xlabel(labels['x'])
+        ax.set_ylabel(labels['y'])
+        ax.set_zlabel(labels['z'])
         ax.view_init(elev=30, azim=45)
         
         buf = BytesIO()
@@ -340,8 +400,11 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         "latex": f"% 3D Interactive Preview of ${sp.latex(expr)}$",
         "x3d_data": {
             "points": points,
+            "colors": colors,
             "grid_size": [len(x), len(y)],
-            "expr": sp.latex(expr)
+            "expr": sp.latex(expr),
+            "labels": labels,
+            "ranges": {"x": x_range, "y": y_range, "z": z_range}
         },
         "pdf_content": pdf_base64,
         "status": "success"

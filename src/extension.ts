@@ -324,11 +324,20 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(cliCommand);
 
     // 5. 웹뷰에서 보낸 재랜더링(해상도 조절) 요청 처리 커맨드
-    let rerenderCommand = vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string) => {
+    let rerenderCommand = vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string, options?: any) => {
         if (!pythonProcess?.stdin) {return;}
         
         // plot > 3d / samples=... 형태의 가상 명령어를 파싱하여 전달
-        const userInput = `plot > 3d / samples=${samples}`;
+        let userInput = `plot > 3d / samples=${samples}`;
+        if (options) {
+            if (options.x) userInput += `, x=${options.x}`;
+            if (options.y) userInput += `, y=${options.y}`;
+            if (options.z) userInput += `, z=${options.z}`;
+            if (options.scheme) userInput += `, scheme=${options.scheme}`;
+            if (options.color) userInput += `, color=${options.color}`;
+            if (options.label) userInput += `, label=${options.label}`;
+        }
+
         const parsed = parseUserCommand(userInput, exprLatex);
         
         currentMainCommand = parsed.mainCommand;
@@ -349,7 +358,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(rerenderCommand);
 
     // 6. 3D 그래프 PDF 내보내기 커맨드
-    let exportCommand = vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string) => {
+    let exportCommand = vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string, options?: any) => {
         if (!pythonProcess?.stdin || !currentEditor) {return;}
 
         const answer = await vscode.window.showInformationMessage(
@@ -364,7 +373,15 @@ export function activate(context: vscode.ExtensionContext) {
         pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
 
         // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
-        const userInput = `plot > 3d / samples=${samples}, export, color=${color}`;
+        let userInput = `plot > 3d / samples=${samples}, export, color=${color}`;
+        if (options) {
+            if (options.x) userInput += `, x=${options.x}`;
+            if (options.y) userInput += `, y=${options.y}`;
+            if (options.z) userInput += `, z=${options.z}`;
+            if (options.scheme) userInput += `, scheme=${options.scheme}`;
+            if (options.label) userInput += `, label=${options.label}`;
+        }
+        
         const parsed = parseUserCommand(userInput, exprLatex);
         
         const config = vscode.workspace.getConfiguration('tex-machina');
