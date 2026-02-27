@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaTeX Graph - Minimalist</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #1a1a1a;
+            --sidebar-bg: #f8f9fa;
+            --border: #e0e0e0;
+            --accent: #000000;
+            --font-serif: "Times New Roman", Times, serif;
+            --font-sans: -apple-system, system-ui, sans-serif;
+        }
+
+        body.vscode-dark {
+            --bg: #1e1e1e;
+            --fg: #d4d4d4;
+            --sidebar-bg: #252526;
+            --border: #333333;
+            --accent: #ffffff;
+        }
+
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--font-sans); }
+
+        #layout { display: flex; width: 100%; height: 100%; }
+
+        /* Left side: Graph */
+        #graph-area { flex-grow: 1; position: relative; border-right: 1px solid var(--border); }
+
+        /* Right side: Sidebar */
+        #sidebar { width: 350px; background: var(--sidebar-bg); display: flex; flex-direction: column; box-shadow: -2px 0 10px rgba(0,0,0,0.02); }
+
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h1 { margin: 0; font-size: 18px; font-weight: 500; }
+
+        .content-area { padding: 20px; overflow-y: auto; flex-grow: 1; }
+
+        .node-card { margin-bottom: 20px; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .type-tag { font-family: var(--font-sans); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid var(--fg); padding: 2px 6px; margin-bottom: 10px; display: inline-block; }
+
+        .math-display { font-family: var(--font-serif); font-size: 1.2em; line-height: 1.6; padding: 20px; background: var(--bg); border: 1px solid var(--border); margin: 10px 0; border-radius: 2px; }
+
+        .stats-row { display: flex; gap: 20px; font-size: 12px; opacity: 0.6; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 10px; }
+
+        .empty-state { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; opacity: 0.4; font-style: italic; padding: 40px; }
+
+        /* Graph Overlays */
+        #controls { position: absolute; top: 20px; left: 20px; display: flex; gap: 10px; }
+        .icon-btn { background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 8px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+        .icon-btn:hover { background: var(--sidebar-bg); }
+    </style>
+</head>
+<body>
+    <div id="layout">
+        <div id="graph-area">
+            <div id="controls">
+                <button class="icon-btn" onclick="network.fit()">Reset View</button>
+            </div>
+            <div id="viz" style="width: 100%; height: 100%;"></div>
+        </div>
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <h1>Graph Inspector</h1>
+            </div>
+            <div id="details" class="content-area">
+                <div class="empty-state">
+                    Select a node in the graph to inspect its LaTeX content and dependencies.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const data = {
+            nodes: [
+                {id: 'eq:1', label: 'eq:1', type: 'equation', content: 'E = h
+u', line: 10, refCount: 3},
+                {id: 'sec:theory', label: 'Theory', type: 'section', content: '\section{Theory}', line: 1, refCount: 0},
+                {id: 'eq:2', label: 'eq:2', type: 'equation', content: 'p = \frac{h}{\lambda}', line: 15, refCount: 2}
+            ],
+            edges: [
+                {from: 'eq:1', to: 'sec:theory'},
+                {from: 'eq:2', to: 'eq:1'}
+            ]
+        };
+
+        let nodes = new vis.DataSet(data.nodes.map(transformNode));
+        let edges = new vis.DataSet(data.edges);
+        let network;
+
+        function transformNode(n) {
+            const isDark = document.body.classList.contains('vscode-dark');
+            const color = n.type === 'section' ? '#e74c3c' : (n.type === 'equation' ? '#3498db' : '#2ecc71');
+            return {
+                id: n.id,
+                label: n.id,
+                shape: 'dot',
+                size: 8 + (n.refCount * 4),
+                color: { background: color, border: color, highlight: { background: color, border: color } },
+                font: { color: isDark ? '#fff' : '#000', face: 'system-ui', size: 11 },
+                metadata: n
+            };
+        }
+
+        function init() {
+            const container = document.getElementById('viz');
+            const options = {
+                physics: { enabled: true, solver: 'forceAtlas2Based', stabilization: { iterations: 100 } },
+                edges: { arrows: 'to', smooth: { type: 'curvedCW', roundness: 0.2 }, color: { opacity: 0.3 } }
+            };
+            network = new vis.Network(container, { nodes, edges }, options);
+
+            network.on("selectNode", (params) => {
+                const node = nodes.get(params.nodes[0]).metadata;
+                renderDetails(node);
+            });
+
+            network.on("deselectNode", () => {
+                document.getElementById('details').innerHTML = `<div class="empty-state">Select a node...</div>`;
+            });
+        }
+
+        function renderDetails(node) {
+            const container = document.getElementById('details');
+            container.innerHTML = `
+                <div class="node-card">
+                    <div class="type-tag">${node.type}</div>
+                    <div style="font-size: 20px; font-weight: bold; margin-bottom: 20px;">${node.id}</div>
+                    <div class="math-display" id="math-target">\[ ${node.content} \]</div>
+                    <div class="stats-row">
+                        <span>LINE: ${node.line}</span>
+                        <span>REFERENCES: ${node.refCount}</span>
+                    </div>
+                </div>
+            `;
+            if (window.MathJax) MathJax.typesetPromise([document.getElementById('math-target')]);
+        }
+
+        init();
+    </script>
+</body>
+</html>

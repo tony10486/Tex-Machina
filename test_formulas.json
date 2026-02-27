@@ -1,0 +1,74 @@
+{
+  "version": "1.3.0",
+  "last_updated": "2026-02-28",
+  "total_count": 5,
+  "formulas": [
+    {
+      "id": "q5318827",
+      "name": "Dym equation",
+      "category": "방정식",
+      "latex": "<math class=\"mwe-math-element mwe-math-element-inline\" xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow data-mjx-texclass=\"ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><msub><mi>u</mi><mrow data-mjx-texclass=\"ORD\"><mi>t</mi></mrow></msub><mo stretchy=\"false\">=</mo><msup><mi>u</mi><mrow data-mjx-texclass=\"ORD\"><mn>3</mn></mrow></msup><msub><mi>u</mi><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>x</mi><mi>x</mi><mi>x</mi></mrow></mrow></msub></mstyle></mrow></math>",
+      "description": "",
+      "tags": [
+        "dym",
+        "equation",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q48773561",
+      "name": "Chandrasekhar's white dwarf equation",
+      "category": "방정식",
+      "latex": "<math class=\"mwe-math-element mwe-math-element-inline\" xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow data-mjx-texclass=\"ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mn>1</mn></mrow><mrow data-mjx-texclass=\"ORD\"><msup><mi>&#x03B7;</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup></mrow></mfrac></mrow><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi mathvariant=\"normal\">d</mi></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi mathvariant=\"normal\">d</mi></mrow><mi>&#x03B7;</mi></mrow></mrow></mfrac></mrow><mrow data-mjx-texclass=\"INNER\"><mo data-mjx-texclass=\"OPEN\">(</mo><msup><mi>&#x03B7;</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi mathvariant=\"normal\">d</mi></mrow><mi>&#x03C6;</mi></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi mathvariant=\"normal\">d</mi></mrow><mi>&#x03B7;</mi></mrow></mrow></mfrac></mrow><mo data-mjx-texclass=\"CLOSE\">)</mo></mrow><mo stretchy=\"false\">+</mo><mo stretchy=\"false\">(</mo><msup><mi>&#x03C6;</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup><mo stretchy=\"false\">&#x2212;</mo><mi>C</mi><msup><mo stretchy=\"false\">)</mo><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mn>3</mn><mo lspace=\"0\" rspace=\"0\">/</mo><mn>2</mn></mrow></mrow></msup><mo stretchy=\"false\">=</mo><mn>0</mn></mstyle></mrow></math>",
+      "description": "relation between density and radius for a white dwarf",
+      "tags": [
+        "chandrasekhar's",
+        "dwarf",
+        "equation",
+        "white",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q604374",
+      "name": "Kuramoto model",
+      "category": "방정식",
+      "latex": "<math class=\"mwe-math-element mwe-math-element-inline\" xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow data-mjx-texclass=\"ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><msub><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mover><mi>&#x03B8;</mi><mo>˙</mo></mover></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mi>i</mi></mrow></msub><mo stretchy=\"false\">=</mo><msub><mi>&#x03C9;</mi><mrow data-mjx-texclass=\"ORD\"><mi>i</mi></mrow></msub><mo stretchy=\"false\">+</mo><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mi>k</mi></mrow><mrow data-mjx-texclass=\"ORD\"><mi>N</mi></mrow></mfrac></mrow><mstyle displaystyle=\"true\" scriptlevel=\"0\"><munderover><mo stretchy=\"false\">&#x2211;</mo><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>j</mi><mo stretchy=\"false\">=</mo><mn>1</mn></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mi>N</mi></mrow></munderover></mstyle><mi>sin</mi><mo>&#x2061;</mo><mo stretchy=\"false\">(</mo><msub><mi>&#x03B8;</mi><mrow data-mjx-texclass=\"ORD\"><mi>j</mi></mrow></msub><mo stretchy=\"false\">&#x2212;</mo><msub><mi>&#x03B8;</mi><mrow data-mjx-texclass=\"ORD\"><mi>i</mi></mrow></msub><mo stretchy=\"false\">)</mo></mstyle></mrow></math>",
+      "description": "exactly solvable model of coupled oscillators",
+      "tags": [
+        "kuramoto",
+        "model",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q6810340",
+      "name": "Meissner equation",
+      "category": "방정식",
+      "latex": "<math class=\"mwe-math-element mwe-math-element-inline\" xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow data-mjx-texclass=\"ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><msup><mi>d</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup><mi>y</mi></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><msup><mi>t</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup></mrow></mrow></mfrac></mrow><mo stretchy=\"false\">+</mo><mo stretchy=\"false\">(</mo><msup><mi>&#x03B1;</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup><mo stretchy=\"false\">+</mo><msup><mi>&#x03C9;</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msup><mi data-mjx-texclass=\"OP\" mathvariant=\"normal\">sgn</mi><mo>&#x2061;</mo><mi>cos</mi><mo>&#x2061;</mo><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo stretchy=\"false\">)</mo><mi>y</mi><mo stretchy=\"false\">=</mo><mn>0</mn></mstyle></mrow></math>",
+      "description": "second order linear differential equation featuring a square wave",
+      "tags": [
+        "equation",
+        "meissner",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q1966547",
+      "name": "Meschersky equation",
+      "category": "방정식",
+      "latex": "<math class=\"mwe-math-element mwe-math-element-inline\" xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow data-mjx-texclass=\"ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><mi>M</mi><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><mrow data-mjx-texclass=\"ORD\"><mi>𝐯</mi></mrow></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><mi>t</mi></mrow></mrow></mfrac></mrow><mo stretchy=\"false\">=</mo><msub><mrow data-mjx-texclass=\"ORD\"><mi>𝐮</mi></mrow><mrow data-mjx-texclass=\"ORD\"><mn>1</mn></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><msub><mi>m</mi><mrow data-mjx-texclass=\"ORD\"><mn>1</mn></mrow></msub></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><mi>t</mi></mrow></mrow></mfrac></mrow><mo stretchy=\"false\">&#x2212;</mo><msub><mrow data-mjx-texclass=\"ORD\"><mi>𝐮</mi></mrow><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mrow data-mjx-texclass=\"ORD\"><mfrac><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><msub><mi>m</mi><mrow data-mjx-texclass=\"ORD\"><mn>2</mn></mrow></msub></mrow></mrow><mrow data-mjx-texclass=\"ORD\"><mrow data-mjx-texclass=\"ORD\"><mi>d</mi><mi>t</mi></mrow></mrow></mfrac></mrow><mo stretchy=\"false\">+</mo><mrow data-mjx-texclass=\"ORD\"><mi>𝐅</mi></mrow></mstyle></mrow></math>",
+      "description": "",
+      "tags": [
+        "equation",
+        "meschersky",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    }
+  ]
+}

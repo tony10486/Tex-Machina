@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tex-Machina | Claymorphism Soft</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root {
+            --bg: #e0e5ec;
+            --fg: #44475a;
+            --shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5);
+            --inner-shadow: inset 6px 6px 12px #a3b1c6, inset -6px -6px 12px #ffffff;
+        }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: system-ui; background: var(--bg); color: var(--fg); overflow: hidden; }
+        #layout { padding: 30px; height: calc(100vh - 60px); display: flex; flex-direction: column; gap: 30px; }
+        .clay-card { background: var(--bg); border-radius: 30px; box-shadow: var(--shadow); padding: 20px; }
+        #viz-area { flex-grow: 1; position: relative; }
+        #inspector { position: absolute; top: 20px; right: 20px; width: 300px; display: none; }
+        .btn { border: none; background: var(--bg); box-shadow: var(--shadow); padding: 10px 20px; border-radius: 15px; cursor: pointer; color: var(--fg); font-weight: bold; }
+        .btn:active { box-shadow: var(--inner-shadow); }
+        .math-preview { background: var(--bg); box-shadow: var(--inner-shadow); border-radius: 20px; padding: 20px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div id="layout">
+        <div class="clay-card" style="display:flex; align-items:center; justify-content:space-between">
+            <div style="font-size:20px; font-weight:900">Tex-Machina Soft</div>
+            <button class="btn" onclick="network.fit()">Recenter</button>
+        </div>
+        <div id="viz-area" class="clay-card">
+            <div id="viz" style="width:100%; height:100%"></div>
+            <div id="inspector" class="clay-card">
+                <div id="ins-label" style="font-weight:bold; font-size:18px">Node Name</div>
+                <div class="math-preview" id="math-target"></div>
+                <button class="btn" style="width:100%" onclick="document.getElementById('inspector').style.display='none'">Close</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let nodes, edges, network;
+        const initialNodes = [
+            { id: 's1', label: 'Introduction', type: 'section', line: 1, refs: 2, content: '	ext{Introduction}' },
+            { id: 'e1', label: 'Einstein Eq.', type: 'equation', line: 10, refs: 15, content: 'E = mc^2' }
+        ];
+        function init() {
+            nodes = new vis.DataSet(initialNodes.map(n => ({
+                id: n.id, label: n.label, shape: 'dot', size: 15,
+                color: { background: '#e0e5ec', border: n.type === 'section' ? '#ff8a8a' : '#8a8aff' },
+                font: { color: '#44475a', size: 12 }, borderWidth: 4, metadata: n
+            })));
+            edges = new vis.DataSet([{ from: 'e1', to: 's1', arrows: 'to', color: '#a3b1c6' }]);
+            network = new vis.Network(document.getElementById('viz'), { nodes, edges }, { physics: { enabled: true } });
+            network.on("click", (p) => {
+                if (p.nodes.length > 0) {
+                    const node = nodes.get(p.nodes[0]).metadata;
+                    document.getElementById('ins-label').innerText = node.label;
+                    document.getElementById('math-target').innerHTML = `\[ ${node.content} \]`;
+                    document.getElementById('inspector').style.display = 'block';
+                    if (window.MathJax) MathJax.typesetPromise();
+                }
+            });
+        }
+        window.onload = init;
+    </script>
+</body>
+</html>

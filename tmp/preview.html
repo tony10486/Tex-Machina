@@ -3,136 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaTeX Dependency Graph Modern Preview</title>
+    <title>Tex-Machina | Pastel Graph</title>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f8f9fa; color: #343a40; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        #network-container { width: 100%; height: 70vh; border-bottom: 1px solid #dee2e6; background-color: #ffffff; }
-        #inspector { width: 100%; height: 30vh; padding: 20px; box-sizing: border-box; overflow-y: auto; background-color: #ffffff; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); z-index: 10; }
-        .node-info h3 { margin: 0 0 10px 0; color: #495057; font-weight: 600; font-size: 1.25rem; }
-        .node-meta { font-size: 13px; color: #adb5bd; margin-bottom: 15px; }
-        .math-preview { background: #f1f3f5; color: #212529; padding: 20px; border-radius: 12px; margin-top: 10px; min-height: 80px; display: flex; align-items: center; justify-content: center; border: 1px solid #e9ecef; }
-        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-eq { background: #e7f5ff; color: #228be6; } /* Pastel Blue */
-        .badge-sec { background: #fff5f5; color: #fa5252; } /* Pastel Red */
-        .badge-fig { background: #f4fce3; color: #82c91e; } /* Pastel Green */
+        :root {
+            /* Modern Pastel Palette */
+            --bg: #ffffff;
+            --fg: #444444;
+            --panel: #fcfcfc;
+            --border: #f0f0f0;
+            --accent: #74c0fc;
+            --node-sec: #ffc9c9; /* Pastel Red/Peach */
+            --node-eq: #a5d8ff;  /* Pastel Blue */
+            --node-fig: #b2f2bb; /* Pastel Green */
+            --edge: #e0e0e0;
+            --font: "Inter", -apple-system, system-ui, sans-serif;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1e1e1e;
+                --fg: #bbbbbb;
+                --panel: #252526;
+                --border: #333333;
+                --edge: #444444;
+                --node-sec: #ff8787;
+                --node-eq: #4dabf7;
+                --node-fig: #69db7c;
+            }
+        }
+
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background: var(--bg); color: var(--fg);
+            font-family: var(--font);
+            overflow: hidden;
+        }
+
+        #layout { display: flex; flex-direction: column; width: 100%; height: 100vh; }
+
+        #header {
+            height: 48px; display: flex; align-items: center; padding: 0 20px;
+            background: var(--panel); border-bottom: 1px solid var(--border); z-index: 100;
+        }
+
+        #title { font-weight: 500; font-size: 11px; letter-spacing: 1.5px; opacity: 0.6; text-transform: uppercase; }
+        
+        #viz-outer { flex-grow: 1; position: relative; width: 100%; }
+        #viz { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        #inspector {
+            position: absolute; top: 20px; right: 20px; width: 300px;
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: none; padding: 20px; z-index: 200;
+        }
+
+        .math-preview {
+            background: var(--bg); border: 1px solid var(--border);
+            padding: 15px; margin: 15px 0; border-radius: 6px; text-align: center;
+        }
+
+        .btn {
+            background: var(--panel); border: 1px solid var(--border); color: var(--fg);
+            padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 11px;
+            margin-left: 8px; transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--accent); background: var(--bg); }
+
+        #legend {
+            position: absolute; bottom: 20px; left: 20px;
+            display: flex; gap: 20px; font-size: 11px; opacity: 0.7; pointer-events: none;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
     </style>
 </head>
 <body>
-    <div id="network-container"></div>
-    <div id="inspector">
-        <div id="info-content" class="node-info">
-            <h3>Graph Inspector</h3>
-            <p style="color: #adb5bd;">Select a node to view its contents and references.</p>
+    <div id="layout">
+        <div id="header">
+            <div id="title">Tex-Machina Dependency Graph</div>
+            <div style="flex-grow: 1"></div>
+            <button class="btn" onclick="network.fit({animation:true})">Fit View</button>
+            <button class="btn" onclick="addDynamicNode()">+ Simulate Update</button>
+        </div>
+        
+        <div id="viz-outer">
+            <div id="viz"></div>
+            <div id="legend">
+                <div class="legend-item"><span class="dot" style="background:var(--node-sec)"></span> Section</div>
+                <div class="legend-item"><span class="dot" style="background:var(--node-eq)"></span> Equation</div>
+                <div class="legend-item"><span class="dot" style="background:var(--node-fig)"></span> Figure</div>
+            </div>
+        </div>
+
+        <div id="inspector">
+            <div id="ins-label" style="font-weight: 600; font-size: 16px; color: var(--accent);">Label</div>
+            <div id="ins-meta" style="font-size: 11px; opacity: 0.5; margin-top: 4px;">Line 0 | 0 Refs</div>
+            <div class="math-preview" id="math-target"></div>
+            <button class="btn" style="width: 100%; margin: 0;" onclick="document.getElementById('inspector').style.display='none'">Close</button>
         </div>
     </div>
 
-    <script type="text/javascript">
-        // Modern pastel colors
-        const colors = {
-            equation: { background: '#d0ebff', border: '#74c0fc', highlight: '#a5d8ff' },
-            section: { background: '#ffdeeb', border: '#ff8787', highlight: '#ffc9c9' },
-            figure: { background: '#d3f9d8', border: '#69db7c', highlight: '#b2f2bb' },
-            edge: '#ced4da'
-        };
+    <script>
+        let nodes, edges, network;
 
-        const initialData = {
-          "nodes": [
-            {"id": "sec:intro", "label": "Introduction", "type": "section", "line": 6, "refCount": 1, "content": "\\section{Introduction} \\label{sec:intro}"},
-            {"id": "eq:einstein", "label": "eq:einstein", "type": "equation", "line": 11, "refCount": 5, "content": "\\begin{equation}\n    E = mc^2 \\label{eq:einstein}\n\\end{equation}"},
-            {"id": "sec:deep", "label": "Deep Dive", "type": "section", "line": 17, "refCount": 1, "content": "\\section{Deep Dive} \\label{sec:deep}"},
-            {"id": "eq:pythagoras", "label": "eq:pythagoras", "type": "equation", "line": 21, "refCount": 2, "content": "\\begin{align}\n    a^2 + b^2 &= c^2 \\label{eq:pythagoras} \\\\\n    \\sin^2 \\theta + \\cos^2 \\theta &= 1 \\label{eq:trig}\n\\end{align}"},
-            {"id": "eq:trig", "label": "eq:trig", "type": "equation", "line": 22, "refCount": 0, "content": "\\begin{align}\n    a^2 + b^2 &= c^2 \\label{eq:pythagoras} \\\\\n    \\sin^2 \\theta + \\cos^2 \\theta &= 1 \\label{eq:trig}\n\\end{align}"},
-            {"id": "fig:sample", "label": "fig:sample", "type": "figure", "line": 30, "refCount": 1, "content": "\\begin{figure}[h]\n    \\centering\n    \\label{fig:sample}\n    \\caption{A sample figure}\n\\end{figure}"}
-          ],
-          "edges": [
-            {"from": "eq:einstein", "to": "sec:intro"},
-            {"from": "eq:trig", "to": "eq:einstein"},
-            {"from": "eq:trig", "to": "eq:pythagoras"},
-            {"from": "eq:pythagoras", "to": "eq:einstein"},
-            {"from": "fig:sample", "to": "sec:deep"}
-          ]
-        };
+        function getTheme() {
+            return {
+                isDark: window.matchMedia('(prefers-color-scheme: dark)').matches,
+                bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+            };
+        }
 
-        // Size logic: Base size 15 + (refCount * 5)
-        const nodes = new vis.DataSet(initialData.nodes.map(n => ({
-            id: n.id,
-            label: n.id,
-            shape: 'dot',
-            size: 15 + (n.refCount * 6),
-            color: {
-                background: colors[n.type].background,
-                border: colors[n.type].border,
-                highlight: { 
-                    background: colors[n.type].highlight, 
-                    border: colors[n.type].border 
-                }
-            },
-            font: { color: '#495057', size: 12, face: 'Inter, sans-serif' },
-            metadata: n,
-            borderWidth: 2
-        })));
+        const initialNodes = [
+            { id: 's1', label: 'sec:intro', type: 'section', line: 1, refs: 2, content: '\\text{Introduction}' },
+            { id: 'e1', label: 'eq:einstein', type: 'equation', line: 10, refs: 15, content: 'E = mc^2' },
+            { id: 'e2', label: 'eq:newton', type: 'equation', line: 15, refs: 5, content: 'F = ma' },
+            { id: 'f1', label: 'fig:data', type: 'figure', line: 40, refs: 1, content: '\\text{Figure: Data Analysis}' },
+            { id: 's2', label: 'sec:theory', type: 'section', line: 5, refs: 8, content: '\\text{Theoretical Basis}' }
+        ];
 
-        const edges = new vis.DataSet(initialData.edges);
+        const initialEdges = [
+            { from: 'e1', to: 's2' },
+            { from: 'e2', to: 's2' },
+            { from: 'f1', to: 's1' },
+            { from: 'e1', to: 'e2' }
+        ];
 
-        const container = document.getElementById('network-container');
-        const data = { nodes: nodes, edges: edges };
-        const options = {
-            physics: {
-                enabled: true,
-                barnesHut: {
-                    gravitationalConstant: -2000,
-                    centralGravity: 0.1,
-                    springLength: 150,
-                    springConstant: 0.04,
-                    damping: 0.09,
-                    avoidOverlap: 1
+        function formatNode(n) {
+            const theme = getTheme();
+            const colors = {
+                section: getComputedStyle(document.documentElement).getPropertyValue('--node-sec'),
+                equation: getComputedStyle(document.documentElement).getPropertyValue('--node-eq'),
+                figure: getComputedStyle(document.documentElement).getPropertyValue('--node-fig')
+            };
+            const color = colors[n.type] || colors.equation;
+            
+            // Size: Small base (4) + log scale refs
+            const size = 4 + (Math.log(n.refs + 1) * 5);
+            
+            return {
+                id: n.id,
+                label: n.label,
+                shape: 'dot',
+                size: size,
+                color: { background: color, border: color, highlight: { background: color, border: theme.isDark ? '#fff' : '#000' } },
+                font: { 
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--fg'),
+                    size: 10,
+                    face: 'Inter',
+                    vadjust: -22, // Move text away from node
+                    strokeWidth: 3, // Prevent overlap with edges
+                    strokeColor: theme.bg 
                 },
-                stabilization: { iterations: 100 }
-            },
-            interaction: { 
-                hover: true, 
-                tooltipDelay: 300,
-                hideEdgesOnDrag: true
-            },
-            edges: {
-                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-                color: { color: colors.edge, highlight: '#495057' },
-                width: 1.5,
-                smooth: { enabled: false } // Force straight lines
-            }
-        };
+                borderWidth: 0,
+                metadata: n
+            };
+        }
 
-        const network = new vis.Network(container, data, options);
+        function init() {
+            nodes = new vis.DataSet(initialNodes.map(formatNode));
+            edges = new vis.DataSet(initialEdges.map(e => ({
+                ...e,
+                arrows: { to: { enabled: true, scaleFactor: 0.3 } },
+                color: { color: getComputedStyle(document.documentElement).getPropertyValue('--edge'), opacity: 0.6 },
+                width: 1,
+                smooth: false // Straight lines as requested
+            })));
 
-        network.on("click", function (params) {
-            if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];
-                const nodeData = nodes.get(nodeId).metadata;
-                
-                const infoDiv = document.getElementById('info-content');
-                const badgeClass = nodeData.type === 'equation' ? 'badge-eq' : (nodeData.type === 'section' ? 'badge-sec' : 'badge-fig');
-                
-                const displayContent = nodeData.content.replace(/\\label\{[^}]+\}/g, '');
+            const container = document.getElementById('viz');
+            const options = {
+                physics: {
+                    enabled: true,
+                    barnesHut: {
+                        gravitationalConstant: -4000, // Stronger repulsion to avoid overlap
+                        centralGravity: 0.3,
+                        springLength: 120,
+                        avoidOverlap: 1 // Force nodes to stay apart
+                    },
+                    stabilization: { iterations: 150 }
+                },
+                interaction: { hover: true, hideEdgesOnDrag: true }
+            };
 
-                infoDiv.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <h3>${nodeData.id}</h3>
-                        <span class="badge ${badgeClass}">${nodeData.type}</span>
-                        <span style="font-size: 12px; color: #adb5bd; margin-left: auto;">Referenced ${nodeData.refCount} times</span>
-                    </div>
-                    <div class="node-meta">Line ${nodeData.line} | Source: ${nodeData.label}</div>
-                    <div class="math-preview" id="math-preview">
-                        \\[ ${displayContent} \\]
-                    </div>
-                `;
-                
-                if (window.MathJax) {
-                    MathJax.typesetPromise([document.getElementById('math-preview')]);
+            network = new vis.Network(container, { nodes, edges }, options);
+
+            network.on("click", (p) => {
+                if (p.nodes.length > 0) {
+                    const node = nodes.get(p.nodes[0]).metadata;
+                    const ins = document.getElementById('inspector');
+                    document.getElementById('ins-label').innerText = node.label;
+                    document.getElementById('ins-meta').innerText = `Line ${node.line} | ${node.refs} References`;
+                    const target = document.getElementById('math-target');
+                    target.innerHTML = `\\[ ${node.content} \\]`;
+                    ins.style.display = 'block';
+                    if (window.MathJax) MathJax.typesetPromise([target]);
+                } else {
+                    document.getElementById('inspector').style.display = 'none';
                 }
-            }
+            });
+        }
+
+        let simCount = 0;
+        function addDynamicNode() {
+            simCount++;
+            const id = 'sim' + simCount;
+            const node = {
+                id: id, label: 'eq:dynamic_' + simCount, type: 'equation',
+                line: 100 + simCount, refs: Math.floor(Math.random() * 8),
+                content: '\\mathcal{L} = \\bar{\\psi}(i\\gamma^\\mu D_\\mu - m)\\psi'
+            };
+            nodes.add(formatNode(node));
+            edges.add({ from: id, to: 's2', arrows: { to: { enabled: true, scaleFactor: 0.3 } }, color: { opacity: 0.6 }, width: 1, smooth: false });
+            network.focus(id, { scale: 1.2, animation: true });
+        }
+
+        window.onload = init;
+
+        // Auto-refresh styles on theme change
+        window.matchMedia('(prefers-color-scheme: dark)').addListener(() => {
+            const theme = getTheme();
+            nodes.forEach(n => {
+                nodes.update({ 
+                    id: n.id, 
+                    font: { color: getComputedStyle(document.documentElement).getPropertyValue('--fg'), strokeColor: theme.bg } 
+                });
+            });
+            edges.forEach(e => {
+                edges.update({ id: e.id, color: { color: getComputedStyle(document.documentElement).getPropertyValue('--edge') } });
+            });
         });
     </script>
 </body>
