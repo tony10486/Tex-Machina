@@ -272,14 +272,23 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     workspace_dir = params.get("workspaceDir", os.getcwd())
     parallels = params.get("parallelOptions", [])
     
-    # 해상도 설정 (기본값 50)
+    # 해상도 설정
     grid_res = 50
     x_range = [-5.0, 5.0]
     y_range = [-5.0, 5.0]
     z_range = [-15.0, 15.0]
     color_scheme = "uniform"
     custom_color = "#1a99cc"
-    labels = {"x": "x", "y": "y", "z": "z"}
+    labels = {"x": "x", "y": "y", "z": "z", "font": "SANS"}
+    bg_color = "#1e1e1e"
+    
+    # 복소수 맵핑 옵션
+    complex_mode = "abs_phase" # height_color mapping
+    is_complex = expr.has(sp.I) or any(s.is_complex and not s.is_real for s in expr.free_symbols)
+    
+    # 그라디언트 스탑 ([(pos, color), ...])
+    color_stops = []
+    preset_name = None
 
     for p in parallels:
         p = p.strip()
@@ -299,8 +308,25 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             custom_color = p.split("=")[1]
         elif p.startswith("scheme="):
             color_scheme = p.split("=")[1]
+        elif p.startswith("bg="):
+            bg_color = p.split("=")[1]
+        elif p.startswith("complex="):
+            complex_mode = p.split("=")[1]
+            is_complex = True
+        elif p.startswith("stops="):
+            # stops=0:#ff0000,0.5:#00ff00,1:#0000ff
+            try:
+                stop_parts = p.split("=")[1].split(",")
+                for sp_part in stop_parts:
+                    pos, col = sp_part.split(":")
+                    color_stops.append((float(pos), col))
+                color_stops.sort()
+                color_scheme = "custom"
+            except: pass
+        elif p.startswith("preset="):
+            preset_name = p.split("=")[1]
+            color_scheme = "preset"
         elif p.startswith("label="):
-            # label=x:Time,y:Value
             label_parts = p.split("=")[1].split(",")
             for lp in label_parts:
                 if ":" in lp:
@@ -324,67 +350,109 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        Z = f(X, Y)
-        if np.isscalar(Z):
-            Z = np.full(X.shape, Z)
+        W = f(X, Y)
+        if np.isscalar(W):
+            W = np.full(X.shape, W)
+
+    # 복소수 처리
+    if np.iscomplexobj(W) or is_complex:
+        if complex_mode == "abs_phase":
+            Z = np.abs(W)
+            C_val = np.angle(W) / (2 * np.pi) % 1.0 # Phase for color
+        elif complex_mode == "real_imag":
+            Z = np.real(W)
+            C_val = np.imag(W)
+        elif complex_mode == "imag_real":
+            Z = np.imag(W)
+            C_val = np.real(W)
+        else: # abs_abs, real_real etc
+            Z = np.abs(W)
+            C_val = Z
+    else:
+        Z = np.real(W)
+        C_val = Z
 
     # NaN/Inf 처리
     Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1], neginf=z_range[0])
     Z = np.clip(Z, z_range[0], z_range[1])
 
-    # x3dom 데이터 형식 (IndexedFaceSet용)
+    # x3dom 데이터 형식
     points = []
     colors = []
     
-    # 컬러 스키마 계산
     def get_rgb(hex_color):
         hex_color = hex_color.lstrip('#')
         if len(hex_color) == 3:
             hex_color = ''.join([c*2 for c in hex_color])
         return [int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
 
-    base_rgb = get_rgb(custom_color)
-
-    # 그라디언트/스키마용 데이터 준비
-    if color_scheme == "height":
-        z_min, z_max = np.min(Z), np.max(Z)
-        z_span = z_max - z_min if z_max != z_min else 1.0
+    # 컬러 스키마 계산
+    if color_scheme == "height" or color_scheme == "preset" or color_scheme == "custom":
+        c_min, c_max = np.min(C_val), np.max(C_val)
+        c_span = c_max - c_min if c_max != c_min else 1.0
     elif color_scheme == "gradient":
         dz_dy, dz_dx = np.gradient(Z, y[1]-y[0], x[1]-x[0])
         mag = np.sqrt(dz_dx**2 + dz_dy**2)
         m_min, m_max = np.min(mag), np.max(mag)
         m_span = m_max - m_min if m_max != m_min else 1.0
 
+    # Custom gradient interpolator
+    def interpolate_color(val):
+        if not color_stops: return get_rgb(custom_color)
+        if val <= color_stops[0][0]: return get_rgb(color_stops[0][1])
+        if val >= color_stops[-1][0]: return get_rgb(color_stops[-1][1])
+        for i in range(len(color_stops)-1):
+            s1, s2 = color_stops[i], color_stops[i+1]
+            if s1[0] <= val <= s2[0]:
+                t = (val - s1[0]) / (s2[0] - s1[0])
+                c1, c2 = get_rgb(s1[1]), get_rgb(s2[1])
+                return [c1[j]*(1-t) + c2[j]*t for j in range(3)]
+        return get_rgb(custom_color)
+
+    # Preset colormap
+    cmap = None
+    if color_scheme == "preset" and preset_name:
+        try: cmap = plt.get_cmap(preset_name)
+        except: pass
+
     for i in range(len(y)):
         for j in range(len(x)):
             points.append([float(X[i,j]), float(Y[i,j]), float(Z[i,j])])
             
             if color_scheme == "uniform":
-                colors.append(base_rgb)
-            elif color_scheme == "height":
-                norm = (Z[i,j] - z_min) / z_span
-                # 파랑 -> 빨강 그라디언트 예시
-                colors.append([norm, 0.3, 1.0 - norm])
+                colors.append(get_rgb(custom_color))
+            elif color_scheme == "height" or color_scheme == "preset" or color_scheme == "custom":
+                norm = (C_val[i,j] - c_min) / c_span
+                if color_scheme == "custom":
+                    colors.append(interpolate_color(norm))
+                elif cmap:
+                    colors.append(list(cmap(norm)[:3]))
+                else: # Fallback height: Blue -> Red
+                    colors.append([norm, 0.3, 1.0 - norm])
             elif color_scheme == "gradient":
                 norm = (mag[i,j] - m_min) / m_span
-                # 녹색 -> 황금색
                 colors.append([0.2 + 0.8*norm, 0.8, 0.2])
             else:
-                colors.append(base_rgb)
+                colors.append(get_rgb(custom_color))
 
-    # 벡터 그래픽 생성 (사용자가 'export' 옵션을 주었을 때)
-    pdf_base64 = None
-    if "export" in parallels:
+    # 내보내기 처리 (PDF, PNG, JPG)
+    export_content = None
+    export_format = "pdf"
+    for p in parallels:
+        if p.startswith("export="):
+            export_format = p.split("=")[1].lower()
+    
+    if "export" in parallels or any(p.startswith("export=") for p in parallels):
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
         
-        # 스키마에 따른 서페이스 플롯
+        # Color mapping for matplotlib
         if color_scheme == "uniform":
             ax.plot_surface(X, Y, Z, color=custom_color, alpha=0.8, edgecolor='none')
-        elif color_scheme == "height":
+        elif color_scheme == "preset" and cmap:
+            ax.plot_surface(X, Y, Z, cmap=cmap, alpha=0.8, edgecolor='none')
+        else:
             ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.8, edgecolor='none')
-        elif color_scheme == "gradient":
-            ax.plot_surface(X, Y, Z, cmap='magma', alpha=0.8, edgecolor='none')
         
         ax.set_xlabel(labels['x'])
         ax.set_ylabel(labels['y'])
@@ -392,9 +460,9 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         ax.view_init(elev=30, azim=45)
         
         buf = BytesIO()
-        plt.savefig(buf, format='pdf', bbox_inches='tight')
+        plt.savefig(buf, format=export_format, bbox_inches='tight')
         plt.close()
-        pdf_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        export_content = base64.b64encode(buf.getvalue()).decode('utf-8')
 
     return {
         "latex": f"% 3D Interactive Preview of ${sp.latex(expr)}$",
@@ -404,11 +472,14 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             "grid_size": [len(x), len(y)],
             "expr": sp.latex(expr),
             "labels": labels,
-            "ranges": {"x": x_range, "y": y_range, "z": z_range}
+            "ranges": {"x": x_range, "y": y_range, "z": z_range},
+            "bg_color": bg_color
         },
-        "pdf_content": pdf_base64,
+        "export_content": export_content,
+        "export_format": export_format,
         "status": "success"
     }
+
 
 def handle_plot_complex(expr: sp.Expr, var: sp.Symbol, params: Dict[str, Any]) -> Dict[str, Any]:
     """복소 평면 Domain Coloring 데이터를 생성합니다."""

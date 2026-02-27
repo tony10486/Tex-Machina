@@ -56,29 +56,31 @@ export function activate(context: vscode.ExtensionContext) {
                 const response = JSON.parse(line);
                 if (response.status === 'success' && currentEditor && currentSelection) {
                     
-                    // PDF 내보내기 모드인 경우 파일 저장 및 Figure 삽입
-                    if (isExportingPdf && response.pdf_content) {
-                        const pdfBuffer = Buffer.from(response.pdf_content, 'base64');
+                    // 내보내기 모드인 경우 파일 저장 및 Figure 삽입
+                    if (isExportingPdf && response.export_content) {
+                        const exportBuffer = Buffer.from(response.export_content, 'base64');
                         const imagesDir = path.join(pdfTargetDir, 'images');
-                        const pdfPath = path.join(imagesDir, 'plot_3d.pdf');
+                        const ext = response.export_format || 'pdf';
+                        const filename = `plot_3d.${ext}`;
+                        const exportPath = path.join(imagesDir, filename);
 
                         try {
                             if (!fs.existsSync(imagesDir)) {
                                 fs.mkdirSync(imagesDir, { recursive: true });
                             }
-                            fs.writeFileSync(pdfPath, pdfBuffer);
+                            fs.writeFileSync(exportPath, exportBuffer);
                             
                             // LaTeX Figure 코드 생성 및 삽입
-                            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/plot_3d.pdf}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
                             
                             await currentEditor.edit(editBuilder => {
                                 // 현재 선택 영역 다음 줄에 삽입
                                 editBuilder.insert(currentSelection!.end, figureCode);
                             });
                             
-                            vscode.window.showInformationMessage(`그래프가 PDF로 저장되고 Figure가 삽입되었습니다: images/plot_3d.pdf`);
+                            vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
                         } catch (err: any) {
-                            vscode.window.showErrorMessage(`PDF 저장 실패: ${err.message}`);
+                            vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
                         } finally {
                             isExportingPdf = false;
                         }
@@ -330,12 +332,16 @@ export function activate(context: vscode.ExtensionContext) {
         // plot > 3d / samples=... 형태의 가상 명령어를 파싱하여 전달
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
-            if (options.x) userInput += `, x=${options.x}`;
-            if (options.y) userInput += `, y=${options.y}`;
-            if (options.z) userInput += `, z=${options.z}`;
-            if (options.scheme) userInput += `, scheme=${options.scheme}`;
-            if (options.color) userInput += `, color=${options.color}`;
-            if (options.label) userInput += `, label=${options.label}`;
+            if (options.x) userInput += ` / x=${options.x}`;
+            if (options.y) userInput += ` / y=${options.y}`;
+            if (options.z) userInput += ` / z=${options.z}`;
+            if (options.scheme) userInput += ` / scheme=${options.scheme}`;
+            if (options.color) userInput += ` / color=${options.color}`;
+            if (options.label) userInput += ` / label=${options.label}`;
+            if (options.bg) userInput += ` / bg=${options.bg}`;
+            if (options.preset) userInput += ` / preset=${options.preset}`;
+            if (options.stops) userInput += ` / stops=${options.stops}`;
+            if (options.complex) userInput += ` / complex=${options.complex}`;
         }
 
         const parsed = parseUserCommand(userInput, exprLatex);
@@ -361,8 +367,9 @@ export function activate(context: vscode.ExtensionContext) {
     let exportCommand = vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string, options?: any) => {
         if (!pythonProcess?.stdin || !currentEditor) {return;}
 
+        const fmt = (options && options.export) || 'pdf';
         const answer = await vscode.window.showInformationMessage(
-            "현재 3D 그래프를 PDF로 저장하고 Figure를 삽입하시겠습니까?",
+            `현재 3D 그래프를 ${fmt.toUpperCase()}로 저장하고 Figure를 삽입하시겠습니까?`,
             "예 (images 폴더 생성 및 저장)", "아니오"
         );
 
@@ -373,13 +380,21 @@ export function activate(context: vscode.ExtensionContext) {
         pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
 
         // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
-        let userInput = `plot > 3d / samples=${samples}, export, color=${color}`;
+        let userInput = `plot > 3d / samples=${samples} / color=${color}`;
         if (options) {
-            if (options.x) userInput += `, x=${options.x}`;
-            if (options.y) userInput += `, y=${options.y}`;
-            if (options.z) userInput += `, z=${options.z}`;
-            if (options.scheme) userInput += `, scheme=${options.scheme}`;
-            if (options.label) userInput += `, label=${options.label}`;
+            if (options.x) userInput += ` / x=${options.x}`;
+            if (options.y) userInput += ` / y=${options.y}`;
+            if (options.z) userInput += ` / z=${options.z}`;
+            if (options.scheme) userInput += ` / scheme=${options.scheme}`;
+            if (options.label) userInput += ` / label=${options.label}`;
+            if (options.bg) userInput += ` / bg=${options.bg}`;
+            if (options.preset) userInput += ` / preset=${options.preset}`;
+            if (options.stops) userInput += ` / stops=${options.stops}`;
+            if (options.complex) userInput += ` / complex=${options.complex}`;
+            if (options.export) userInput += ` / export=${options.export}`;
+            else userInput += ` / export`;
+        } else {
+            userInput += ` / export`;
         }
         
         const parsed = parseUserCommand(userInput, exprLatex);

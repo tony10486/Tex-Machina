@@ -64,15 +64,20 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <script src="${x3domJs}"></script>
             <script src="${mathjaxUri}"></script>
             <style>
-                body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; }
-                x3d { width: 100%; height: 400px; background: #1e1e1e; }
-                .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8em; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px; }
+                body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; font-size: 13px; }
+                x3d { width: 100%; height: 400px; border: 1px solid #444; }
+                .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px; }
                 .group { display: flex; flex-direction: column; }
-                input, select { background: #333; color: #eee; border: 1px solid #555; }
+                label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
+                input, select { background: #333; color: #eee; border: 1px solid #555; padding: 2px; }
                 .full { grid-column: 1 / span 2; }
                 .tabs { display: flex; gap: 4px; margin-bottom: 5px; }
-                .tab { padding: 2px 6px; cursor: pointer; background: #444; }
-                .tab.active { background: #666; }
+                .tab { padding: 4px 8px; cursor: pointer; background: #333; border: 1px solid #444; border-bottom: none; }
+                .tab.active { background: #555; font-weight: bold; }
+                .btn-row { display: flex; gap: 4px; margin-top: 5px; }
+                button { background: #007acc; color: white; border: none; padding: 6px; cursor: pointer; flex: 1; }
+                button:hover { background: #0062a3; }
+                button.secondary { background: #555; }
             </style>
         </head>
         <body>
@@ -82,43 +87,93 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <div class="tabs full">
                     <div class="tab active" onclick="tab('s')">Style</div>
                     <div class="tab" onclick="tab('d')">Domain</div>
-                    <div class="tab" onclick="tab('l')">Labels</div>
+                    <div class="tab" onclick="tab('l')">Axes</div>
+                    <div class="tab" onclick="tab('c')">Complex</div>
                 </div>
                 <div id="s" class="full controls" style="display:grid; border:none; margin:0; padding:0">
-                    <div class="group"><label>Scheme</label><select id="sch"><option value="uniform">Uniform</option><option value="height">Height</option><option value="gradient">Gradient</option></select></div>
-                    <div class="group"><label>Color</label><input type="color" id="col" value="#1a99cc"></div>
-                    <div class="group"><label>AA</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
-                    <div class="group"><label>Font</label><select id="f"><option value="SANS">Sans</option><option value="SERIF">Serif</option></select></div>
+                    <div class="group"><label>Scheme</label><select id="sch" onchange="toggleScheme()">
+                        <option value="uniform">Uniform</option>
+                        <option value="height">Height</option>
+                        <option value="gradient">Gradient</option>
+                        <option value="preset">Preset</option>
+                        <option value="custom">Custom stops</option>
+                    </select></div>
+                    <div class="group" id="col-grp"><label>Color</label><input type="color" id="col" value="#1a99cc"></div>
+                    <div class="group" id="preset-grp" style="display:none"><label>Preset</label><select id="preset">
+                        <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option>
+                    </select></div>
+                    <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
+                    <div class="group"><label>Background</label><input type="color" id="bg" value="#1e1e1e"></div>
+                    <div class="group"><label>Antialiasing</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
                 </div>
                 <div id="d" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>X</label><input id="xr" value="-5,5"></div>
-                    <div class="group"><label>Y</label><input id="yr" value="-5,5"></div>
-                    <div class="group"><label>Z</label><input id="zr" value="-15,15"></div>
+                    <div class="group"><label>X Range</label><input id="xr" value="-5,5"></div>
+                    <div class="group"><label>Y Range</label><input id="yr" value="-5,5"></div>
+                    <div class="group"><label>Z Range</label><input id="zr" value="-15,15"></div>
                     <div class="group"><label>Res</label><input type="number" id="res" value="50"></div>
                 </div>
                 <div id="l" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>X</label><input id="xl" value="x"></div>
-                    <div class="group"><label>Y</label><input id="yl" value="y"></div>
-                    <div class="group"><label>Z</label><input id="zl" value="z"></div>
+                    <div class="group"><label>X Label</label><input id="xl" value="x"></div>
+                    <div class="group"><label>Y Label</label><input id="yl" value="y"></div>
+                    <div class="group"><label>Z Label</label><input id="zl" value="z"></div>
+                    <div class="group"><label>Font</label><select id="f"><option value="SANS">Sans</option><option value="SERIF">Serif</option><option value="TYPEWRITER">Typewriter</option></select></div>
+                    <div class="group full"><label><input type="checkbox" id="show-axes" checked> Show Axes Lines</label></div>
                 </div>
-                <button class="full" onclick="apply()">Apply Changes</button>
+                <div id="c" class="full controls" style="display:none; border:none; margin:0; padding:0">
+                    <div class="group full"><label>Complex Mapping (Height | Color)</label><select id="cm">
+                        <option value="abs_phase">Abs | Phase</option>
+                        <option value="real_imag">Real | Imag</option>
+                        <option value="imag_real">Imag | Real</option>
+                        <option value="abs_abs">Abs | Abs</option>
+                    </select></div>
+                </div>
+                <div class="btn-row full">
+                    <button onclick="apply()">Apply Changes</button>
+                    <button class="secondary" onclick="exportPlot()">Export</button>
+                    <select id="exp-fmt" style="width:70px; flex:none"><option value="pdf">PDF</option><option value="png">PNG</option><option value="jpg">JPG</option></select>
+                </div>
             </div>
             <script>
                 const vscode = acquireVsCodeApi();
                 let last = "";
                 function tab(n){
-                    ['s','d','l'].forEach(t => document.getElementById(t).style.display = t===n?'grid':'none');
-                    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.innerText.toLowerCase().startsWith(n)));
+                    ['s','d','l','c'].forEach(t => document.getElementById(t).style.display = t===n?'grid':'none');
+                    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.getAttribute('onclick').includes("'"+n+"'")));
+                }
+                function toggleScheme(){
+                    const s = document.getElementById('sch').value;
+                    document.getElementById('col-grp').style.display = (s==='uniform')?'flex':'none';
+                    document.getElementById('preset-grp').style.display = (s==='preset')?'flex':'none';
+                    document.getElementById('stops-grp').style.display = (s==='custom')?'flex':'none';
+                }
+                function getOptions(){
+                    return {
+                        x: document.getElementById('xr').value, y: document.getElementById('yr').value, z: document.getElementById('zr').value,
+                        scheme: document.getElementById('sch').value, color: document.getElementById('col').value,
+                        bg: document.getElementById('bg').value, preset: document.getElementById('preset').value,
+                        stops: document.getElementById('stops').value, complex: document.getElementById('cm').value,
+                        label: 'x:'+document.getElementById('xl').value+',y:'+document.getElementById('yl').value+',z:'+document.getElementById('zl').value+',font:'+document.getElementById('f').value
+                    };
                 }
                 function apply(){
                     vscode.postMessage({
                         command: 'rerender', expr: last, samples: document.getElementById('res').value,
-                        options: {
-                            x: document.getElementById('xr').value, y: document.getElementById('yr').value, z: document.getElementById('zr').value,
-                            scheme: document.getElementById('sch').value, color: document.getElementById('col').value,
-                            label: 'x:'+document.getElementById('xl').value+',y:'+document.getElementById('yl').value+',z:'+document.getElementById('zl').value
-                        }
+                        options: getOptions()
                     });
+                }
+                function exportPlot(){
+                    const fmt = document.getElementById('exp-fmt').value;
+                    vscode.postMessage({
+                        command: 'exportPdf', expr: last, samples: document.getElementById('res').value,
+                        color: document.getElementById('col').value,
+                        options: { ...getOptions(), export: fmt }
+                    });
+                }
+                function hexToRgb(hex) {
+                    const r = parseInt(hex.slice(1, 3), 16) / 255;
+                    const g = parseInt(hex.slice(3, 5), 16) / 255;
+                    const b = parseInt(hex.slice(5, 7), 16) / 255;
+                    return r + " " + g + " " + b;
                 }
                 window.addEventListener('message', e => {
                     const { type, x3d_data, latex } = e.data;
@@ -128,15 +183,41 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const idx = [];
                         const [c, r] = x3d_data.grid_size;
                         for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
+                        
                         const aa = document.getElementById('aa').value;
-                        const f = document.getElementById('f').value;
+                        const f = x3d_data.labels.font || "SANS";
+                        const showAxes = document.getElementById('show-axes').checked;
+                        const skyCol = hexToRgb(x3d_data.bg_color || "#1e1e1e");
+                        
+                        let axesXml = "";
+                        if(showAxes){
+                            const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
+                            axesXml = \`
+                                <transform>
+                                    <shape>
+                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="1 0 0"></material></appearance>
+                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="\${rx[0]} 0 0 \${rx[1]} 0 0"></coordinate></indexedlineset>
+                                    </shape>
+                                    <shape>
+                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 1 0"></material></appearance>
+                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="0 \${ry[0]} 0 0 \${ry[1]} 0"></coordinate></indexedlineset>
+                                    </shape>
+                                    <shape>
+                                        <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 0 1"></material></appearance>
+                                        <indexedlineset coordIndex="0 1 -1"><coordinate point="0 0 \${rz[0]} 0 0 \${rz[1]}"></coordinate></indexedlineset>
+                                    </shape>
+                                </transform>\`;
+                        }
+
                         document.getElementById('container').innerHTML = \`
                             <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
                                 <scene>
                                     <viewpoint position="0 15 15" orientation="1 0 0 -0.785"></viewpoint>
-                                    <background skyColor="0.1 0.1 0.1"></background>
+                                    <background skyColor="\${skyCol}"></background>
+                                    \${axesXml}
                                     <transform translation="0 \${x3d_data.ranges.y[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
                                     <transform translation="\${x3d_data.ranges.x[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                    <transform translation="0 0 \${x3d_data.ranges.z[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
                                     <transform rotation="1 0 0 -1.57">
                                         <shape>
                                             <appearance><material></material></appearance>
