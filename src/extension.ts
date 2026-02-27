@@ -54,96 +54,77 @@ export function activate(context: vscode.ExtensionContext) {
             console.log(`Python Output: ${line}`);
             try {
                 const response = JSON.parse(line);
-                if (response.status === 'success' && currentEditor && currentSelection) {
+                if (response.status === 'success') {
                     
-                    // 내보내기 모드인 경우 파일 저장 및 Figure 삽입
-                    if (isExportingPdf && response.export_content) {
-                        const exportBuffer = Buffer.from(response.export_content, 'base64');
-                        const imagesDir = path.join(pdfTargetDir, 'images');
-                        const ext = response.export_format || 'pdf';
-                        const filename = `plot_3d.${ext}`;
-                        const exportPath = path.join(imagesDir, filename);
+                    // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
+                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
 
-                        try {
-                            if (!fs.existsSync(imagesDir)) {
-                                fs.mkdirSync(imagesDir, { recursive: true });
-                            }
-                            fs.writeFileSync(exportPath, exportBuffer);
-                            
-                            // LaTeX Figure 코드 생성 및 삽입
-                            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
-                            
-                            await currentEditor.edit(editBuilder => {
-                                // 현재 선택 영역 다음 줄에 삽입
-                                editBuilder.insert(currentSelection!.end, figureCode);
-                            });
-                            
-                            vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
-                        } catch (err: any) {
-                            vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
-                        } finally {
-                            isExportingPdf = false;
-                        }
-                        continue;
-                    }
+                    // [2] 에디터 삽입 로직 (에디터가 활성화되어 있고, 단순 재랜더링이 아닌 경우에만 수행)
+                    // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 삽입 제외
+                    const isRerender = currentParallels.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
 
-                    const resultLatex = response.latex;
-                    let outputText = "";
+                    if (currentEditor && currentSelection && !isRerender) {
+                        // 내보내기 모드인 경우 파일 저장 및 Figure 삽입
+                        if (isExportingPdf && response.export_content) {
+                            const exportBuffer = Buffer.from(response.export_content, 'base64');
+                            const imagesDir = path.join(pdfTargetDir, 'images');
+                            const ext = response.export_format || 'pdf';
+                            const filename = `plot_3d.${ext}`;
+                            const exportPath = path.join(imagesDir, filename);
 
-                    //  제안서의 출력 포맷팅 설정 반영
-                    if (currentMainCommand === "matrix") {
-                        // 행렬 생성은 단독 삽입 (앞에 = 붙이지 않음)
-                        outputText = resultLatex;
-                    } else if (currentParallels.includes("newline")) {
-                        // 기존 수식 유지 + 새 줄에 $$로 결과물 출력 
-                        outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
-                    } else {
-                        // 기본값: 기존 수식 + " = " + 결과물 
-                        outputText = `${currentOriginalText} = ${resultLatex}`;
-                    }
-
-                    await currentEditor.edit(editBuilder => {
-                        editBuilder.replace(currentSelection!, outputText);
-                    });
-                    
-                    // .dat 파일 생성 요청이 있는 경우 처리
-                    if (response.dat_content) {
-                        const texDir = path.dirname(currentEditor.document.uri.fsPath);
-                        const dataDir = path.join(texDir, 'data');
-                        const datFilename = response.dat_filename || 'plot_data.dat';
-                        const datPath = path.join(dataDir, datFilename);
-
-                        let shouldWrite = true;
-                        if (!fs.existsSync(dataDir)) {
-                            const answer = await vscode.window.showInformationMessage(
-                                `PGFPlots 데이터를 위한 'data' 폴더가 없습니다. 생성하시겠습니까?\n경로: ${dataDir}`,
-                                "예", "아니오"
-                            );
-                            if (answer === "예") {
-                                try {
-                                    fs.mkdirSync(dataDir, { recursive: true });
-                                } catch (err: any) {
-                                    vscode.window.showErrorMessage(`폴더 생성 실패: ${err.message}`);
-                                    shouldWrite = false;
-                                }
-                            } else {
-                                shouldWrite = false;
-                            }
-                        }
-
-                        if (shouldWrite) {
                             try {
-                                fs.writeFileSync(datPath, response.dat_content);
-                                // 파일 저장 성공 시에는 알림을 띄우지 않거나 조용히 처리 (사용자 피드백 반영)
-                                // vscode.window.showInformationMessage(`데이터 파일이 저장되었습니다: data/${datFilename}`);
+                                if (!fs.existsSync(imagesDir)) {
+                                    fs.mkdirSync(imagesDir, { recursive: true });
+                                }
+                                fs.writeFileSync(exportPath, exportBuffer);
+                                
+                                // LaTeX Figure 코드 생성 및 삽입
+                                const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                                
+                                await currentEditor.edit(editBuilder => {
+                                    editBuilder.insert(currentSelection!.end, figureCode);
+                                });
+                                
+                                vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
                             } catch (err: any) {
-                                vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                                vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
+                            } finally {
+                                isExportingPdf = false;
+                            }
+                            continue;
+                        }
+
+                        const resultLatex = response.latex;
+                        let outputText = "";
+
+                        if (currentMainCommand === "matrix") {
+                            outputText = resultLatex;
+                        } else if (currentParallels.includes("newline")) {
+                            outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
+                        } else {
+                            outputText = `${currentOriginalText} = ${resultLatex}`;
+                        }
+
+                        await currentEditor.edit(editBuilder => {
+                            editBuilder.replace(currentSelection!, outputText);
+                        });
+                        
+                        // .dat 파일 생성 처리
+                        if (response.dat_content) {
+                            const texDir = path.dirname(currentEditor.document.uri.fsPath);
+                            const dataDir = path.join(texDir, 'data');
+                            const datFilename = response.dat_filename || 'plot_data.dat';
+                            const datPath = path.join(dataDir, datFilename);
+
+                            if (fs.existsSync(dataDir)) {
+                                try {
+                                    fs.writeFileSync(datPath, response.dat_content);
+                                } catch (err: any) {
+                                    vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                                }
                             }
                         }
                     }
-                    
-                    // Webview 업데이트 (preview_img 포함)
-                    provider.updatePreview(resultLatex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
 
                     // 경고 메시지가 있으면 출력
                     if (response.warning) {
@@ -153,7 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
                 }
             } catch (e) {
-                console.error("결과 삽입 중 오류:", e, "원본 데이터:", line);
+                console.error("결과 처리 중 오류:", e, "원본 데이터:", line);
             }
         }
 	});
@@ -207,6 +188,7 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "plot > complex", description: "복소 평면 Domain Coloring" },
                 { label: "plot > 2d > -5,5", description: "범위 지정 (예: -5에서 5까지)" },
                 { label: "plot > 2d / ymin=-10, ymax=10", description: "y축 범위 지정" },
+                { label: "plot > 3d / preset=mathematica", description: "Mathematica 스타일 색상 (Z-Blend)" },
                 { label: "plot > 3d / export", description: "3D 그래프 PDF 내보내기" }
             ]
         };
@@ -293,6 +275,24 @@ export function activate(context: vscode.ExtensionContext) {
             currentMainCommand = parsed.mainCommand;
             currentParallels = parsed.parallelOptions;
 
+            // [추가] 변수 z 감지 시 복소 그래프 모드 제안
+            if (currentMainCommand === 'plot' && parsed.subCommands.includes('3d')) {
+                const zDetected = /[^a-zA-Z]z[^a-zA-Z]|^z[^a-zA-Z]|[^a-zA-Z]z$|^z$/.test(currentOriginalText);
+                if (zDetected && !currentParallels.some(p => p.includes('complex'))) {
+                    const answer = await vscode.window.showInformationMessage(
+                        "변수 'z'가 감지되었습니다. 복소 평면 시각화(Complex Mode)를 활성화할까요?",
+                        "예 (Abs|Phase)", "아니오"
+                    );
+                    if (answer === "예 (Abs|Phase)") {
+                        userInput += " / complex=abs_phase";
+                        // 다시 파싱
+                        const updatedParsed = parseUserCommand(userInput, currentOriginalText);
+                        currentParallels = updatedParsed.parallelOptions;
+                        parsed.parallelOptions = updatedParsed.parallelOptions;
+                    }
+                }
+            }
+
             // 라플라스 및 각도 설정 가져오기
             const config = vscode.workspace.getConfiguration('tex-machina');
             const laplaceConfig = {
@@ -329,7 +329,6 @@ export function activate(context: vscode.ExtensionContext) {
     let rerenderCommand = vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string, options?: any) => {
         if (!pythonProcess?.stdin) {return;}
         
-        // plot > 3d / samples=... 형태의 가상 명령어를 파싱하여 전달
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
             if (options.x) userInput += ` / x=${options.x}`;
@@ -338,7 +337,6 @@ export function activate(context: vscode.ExtensionContext) {
             if (options.scheme) userInput += ` / scheme=${options.scheme}`;
             if (options.color) userInput += ` / color=${options.color}`;
             
-            // 스키마에 따라 필요한 옵션만 추가 (기본값이 선택된 스키마를 덮어쓰지 않도록)
             if (options.scheme === 'preset' && options.preset) {
                 userInput += ` / preset=${options.preset}`;
             } else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) {

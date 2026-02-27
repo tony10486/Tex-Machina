@@ -39,17 +39,27 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     }
 
     function pushToCmds() {
-        if (isParallelSection) {return;}// 병렬 구역에서는 명령어를 추가하지 않음
         const trimmed = buffer.trim();
         if (trimmed) {
-            if (!isMainCmdParsed) { mainCmd = trimmed; isMainCmdParsed = true; }
-            else { subCmds.push(trimmed); }
+            if (!isMainCmdParsed) {
+                mainCmd = trimmed;
+                isMainCmdParsed = true;
+            } else {
+                subCmds.push(trimmed);
+            }
         }
         buffer = "";
     }
 
-    pushToCmds();
-    if (isParallelSection) {parallels.push(buffer.trim());}
+    // 최종 정리: 마지막 조각 처리
+    if (isParallelSection) {
+        const trimmed = buffer.trim();
+        if (trimmed) {
+            parallels.push(trimmed);
+        }
+    } else {
+        pushToCmds();
+    }
 
     return { mainCommand: mainCmd, subCommands: subCmds, parallelOptions: parallels, rawSelection: selection };
 }

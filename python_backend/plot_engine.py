@@ -5,6 +5,7 @@ import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 import base64
+import sys
 from io import BytesIO
 from typing import Dict, Any, List, Tuple
 try:
@@ -290,6 +291,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     color_stops = []
     preset_name = None
 
+    # First pass to get basic parameters
     for p in parallels:
         p = p.strip()
         if p.startswith("samples="):
@@ -314,20 +316,15 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             complex_mode = p.split("=")[1]
             is_complex = True
         elif p.startswith("stops="):
-            # stops=0:#ff0000,0.5:#00ff00,1:#0000ff
             try:
                 stop_parts = p.split("=")[1].split(",")
                 for sp_part in stop_parts:
                     pos, col = sp_part.split(":")
                     color_stops.append((float(pos), col))
                 color_stops.sort()
-                # gradient 모드인 경우 해당 모드를 유지 (interpolate_color가 mag 기반 norm을 사용함)
-                if color_scheme != "gradient":
-                    color_scheme = "custom"
             except: pass
         elif p.startswith("preset="):
             preset_name = p.split("=")[1]
-            color_scheme = "preset"
         elif p.startswith("label="):
             label_parts = p.split("=")[1].split(",")
             for lp in label_parts:
@@ -335,17 +332,50 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                     k, v = lp.split(":", 1)
                     labels[k.strip().lower()] = v.strip()
 
-    # 변수 인식
-    if len(var_list) >= 2:
-        v1, v2 = var_list[0], var_list[1]
-    elif len(var_list) == 1:
-        v1 = var_list[0]
-        v2 = sp.Symbol('y')
+    # Finalize color scheme based on available data
+    if color_stops:
+        # stops가 있으면 gradient나 height/custom 모드로 동작
+        if color_scheme not in ["gradient", "height"]:
+            color_scheme = "custom"
+    elif preset_name:
+        color_scheme = "preset"
+    elif color_scheme == "preset": # preset= 옵션 없이 scheme=preset만 온 경우 (기본값 설정)
+        preset_name = "viridis"
+    
+    # [복소수 시각화 변수 확장 개선]
+    # 사용자가 'complex=' 옵션을 주었거나 수식에 허수 단위 i가 포함된 경우 처리
+    is_complex_by_opt = any(p.startswith("complex=") for p in parallels) or is_complex
+    
+    if is_complex_by_opt:
+        if len(var_list) == 1:
+            # 단일 변수 (z 등) -> x + iy로 확장
+            v_orig = var_list[0]
+            v1 = sp.Symbol('x', real=True)
+            v2 = sp.Symbol('y', real=True)
+            expr = expr.subs(v_orig, v1 + sp.I * v2)
+            # 변수 목록 갱신
+            var_list = [v1, v2]
+        elif len(var_list) >= 2:
+            # 이미 x, y가 있는 경우 (rerender 시 sp.latex 결과물인 경우 포함)
+            # 심볼 이름으로 매칭 시도
+            v1 = next((s for s in var_list if s.name == 'x'), var_list[0])
+            v2 = next((s for s in var_list if s.name == 'y'), var_list[1])
+            # x, y가 아닌 다른 이름이면 그대로 사용하되 v1, v2로 할당
+        else:
+            v1, v2 = sp.Symbol('x'), sp.Symbol('y')
     else:
-        v1, v2 = sp.Symbol('x'), sp.Symbol('y')
+        # 일반 실수 그래프
+        if len(var_list) >= 2:
+            v1, v2 = var_list[0], var_list[1]
+        elif len(var_list) == 1:
+            v1 = var_list[0]
+            v2 = sp.Symbol('y')
+        else:
+            v1, v2 = sp.Symbol('x'), sp.Symbol('y')
 
-    # 메시 생성
-    f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+    # 메시 생성 (확장된 v1, v2 사용)
+    # 복소수 연산을 위해 modules에 'numpy', 'scipy'와 특수 함수들 명시
+    f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy', {'gamma': sp.gamma, 'zeta': sp.zeta}])
     x = np.linspace(x_range[0], x_range[1], grid_res)
     y = np.linspace(y_range[0], y_range[1], grid_res)
     X, Y = np.meshgrid(x, y)
@@ -367,7 +397,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         elif complex_mode == "imag_real":
             Z = np.imag(W)
             C_val = np.real(W)
-        else: # abs_abs, real_real etc
+        else:
             Z = np.abs(W)
             C_val = Z
     else:
@@ -375,7 +405,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         C_val = Z
 
     # NaN/Inf 처리
-    # z_range보다 충분히 큰 범위로 클리핑하여 '반듯하게' 잘릴 여지를 줌
     z_margin = (z_range[1] - z_range[0]) * 2
     Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1] + z_margin, neginf=z_range[0] - z_margin)
     
@@ -395,36 +424,54 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         if p.startswith("axis="):
             axis_style = p.split("=")[1].lower()
 
-    # 컬러 스키마 계산
-    # 색상 계산을 위해 실제 값 범위를 사용 (Z_range가 아닌 데이터의 Z 사용)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        # 무한대/NaN을 제외한 유효한 범위 계산
-        finite_c = C_val[np.isfinite(C_val)]
-        if len(finite_c) > 0:
-            c_min, c_max = np.min(finite_c), np.max(finite_c)
-        else:
-            c_min, c_max = 0.0, 1.0
-    c_span = c_max - c_min if c_max != c_min else 1.0
+    # [컬러 스키마 계산 최적화]
+    # 실제 데이터의 유효 범위를 먼저 계산하고, 필요시 가시 범위로 클리핑하여 대비를 높임
+    finite_c_full = C_val[np.isfinite(C_val)]
+    if len(finite_c_full) > 0:
+        actual_min, actual_max = np.min(finite_c_full), np.max(finite_c_full)
+    else:
+        actual_min, actual_max = z_range[0], z_range[1]
+
+    if not (is_complex and complex_mode == "abs_phase"):
+        c_min = max(actual_min, z_range[0])
+        c_max = min(actual_max, z_range[1])
+        if c_min >= c_max:
+            if actual_min < actual_max:
+                c_min, c_max = actual_min, actual_max
+            else:
+                c_min, c_max = z_range[0], z_range[1]
+    else:
+        c_min, c_max = actual_min, actual_max
+
+    c_span = c_max - c_min if c_max > c_min else 1e-9
+
+    # Default stops if none provided for schemes that need them
+    if not color_stops and color_scheme in ["height", "gradient", "custom"]:
+        # Blue to Red default gradient
+        color_stops = [(0.0, "#0000ff"), (1.0, "#ff0000")]
 
     mag = None
     if color_scheme == "gradient":
-        dz_dy, dz_dx = np.gradient(Z, y[1]-y[0], x[1]-x[0])
+        W_real = np.real(W)
+        finite_w = W_real[np.isfinite(W_real)]
+        if len(finite_w) > 0:
+            W_safe = np.clip(W_real, z_range[0]*2, z_range[1]*2)
+        else:
+            W_safe = Z
+        dz_dy, dz_dx = np.gradient(W_safe, y[1]-y[0], x[1]-x[0])
         mag = np.sqrt(dz_dx**2 + dz_dy**2)
         finite_mag = mag[np.isfinite(mag)]
         if len(finite_mag) > 0:
             m_min, m_max = np.min(finite_mag), np.max(finite_mag)
         else:
             m_min, m_max = 0.0, 1.0
-        m_span = m_max - m_min if m_max != m_min else 1.0
+        m_span = m_max - m_min if m_max > m_min else 1e-9
 
-    # Custom gradient interpolator
     def interpolate_color(val):
         if not color_stops: return get_rgb(custom_color)
         val = float(val)
-        if np.isnan(val): val = 0.0
-        val = max(0.0, min(1.0, val)) # Clamp to [0, 1]
-        
+        if np.isnan(val): val = 0.5
+        val = max(0.0, min(1.0, val))
         if val <= color_stops[0][0]: return get_rgb(color_stops[0][1])
         if val >= color_stops[-1][0]: return get_rgb(color_stops[-1][1])
         for i in range(len(color_stops)-1):
@@ -435,52 +482,55 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                 return [c1[j]*(1-t) + c2[j]*t for j in range(3)]
         return get_rgb(custom_color)
 
-    # Preset colormap
     cmap = None
     if (color_scheme == "preset" or preset_name) and preset_name:
-        try:
-            from matplotlib import colormaps
-            cmap = colormaps.get_cmap(preset_name)
-        except:
+        if preset_name == "mathematica":
+            from matplotlib.colors import LinearSegmentedColormap
+            math_colors = ["#0000cd", "#00ffff", "#00ff00", "#ffff00", "#ff0000"]
+            cmap = LinearSegmentedColormap.from_list("mathematica", math_colors)
+        else:
             try:
-                cmap = plt.get_cmap(preset_name)
+                from matplotlib import colormaps
+                cmap = colormaps.get_cmap(preset_name)
             except:
-                pass
+                try:
+                    import matplotlib.cm as cm
+                    cmap = cm.get_cmap(preset_name)
+                except:
+                    pass
 
     for i in range(len(y)):
         for j in range(len(x)):
             points.append([float(X[i,j]), float(Y[i,j]), float(Z[i,j])])
-            
             if color_scheme == "uniform":
                 colors.append(get_rgb(custom_color))
             elif color_scheme == "gradient":
                 val = mag[i,j]
-                if np.isposinf(val): norm = 1.0
+                if np.isnan(val): norm = 0.5
+                elif np.isposinf(val): norm = 1.0
                 elif np.isneginf(val): norm = 0.0
-                else: norm = (val - m_min) / m_span if np.isfinite(val) else 0.5
+                else: norm = (val - m_min) / m_span
                 norm = max(0.0, min(1.0, norm))
                 if color_stops:
                     colors.append(interpolate_color(norm))
                 elif cmap:
                     colors.append([float(c) for c in cmap(norm)[:3]])
                 else:
-                    # 개선된 기본 그래디언트 (경사도에 따른 색상)
                     colors.append([float(0.1 + 0.9*norm), float(0.8 - 0.4*norm), float(0.3 + 0.2*norm)])
-            else: # height, preset, custom
+            else:
                 val = C_val[i,j]
-                if np.isposinf(val): norm = 1.0
+                if np.isnan(val): norm = 0.5
+                elif np.isposinf(val): norm = 1.0
                 elif np.isneginf(val): norm = 0.0
-                else: norm = (val - c_min) / c_span if np.isfinite(val) else 0.5
+                else: norm = (val - c_min) / c_span
                 norm = max(0.0, min(1.0, norm))
-                if color_scheme == "custom" or (color_scheme == "height" and color_stops):
-                    colors.append(interpolate_color(norm))
-                elif cmap:
+                if cmap:
                     colors.append([float(c) for c in cmap(norm)[:3]])
-                else: # Fallback height
+                elif color_scheme == "custom" or color_scheme == "height":
+                    colors.append(interpolate_color(norm))
+                else:
                     colors.append([float(norm), float(0.5 + 0.5*np.sin(norm*np.pi)), float(1.0 - norm)])
 
-
-    # 내보내기 처리 (PDF, PNG, JPG)
     export_content = None
     export_format = "pdf"
     for p in parallels:
@@ -490,26 +540,27 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     if "export" in parallels or any(p.startswith("export=") for p in parallels):
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
-        
-        # Matplotlib에서도 클리핑 적용 (Z축 범위)
         ax.set_zlim(z_range)
-
-        # Color mapping for matplotlib
         if color_scheme == "uniform":
             ax.plot_surface(X, Y, Z, color=custom_color, alpha=0.8, edgecolor='none')
-        elif color_scheme == "preset" and cmap:
+        elif cmap:
             ax.plot_surface(X, Y, Z, cmap=cmap, alpha=0.8, edgecolor='none')
-        elif color_scheme == "gradient":
-             # Matplotlib에서는 얼굴별 색상 지정이 복잡하므로 viridis로 대체하거나 facecolors 사용
-             ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.8, edgecolor='none')
+        elif color_scheme == "gradient" or color_scheme == "custom" or color_scheme == "height":
+            if color_stops:
+                from matplotlib.colors import LinearSegmentedColormap
+                sorted_stops = sorted(color_stops)
+                c_list = [get_rgb(s[1]) for s in sorted_stops]
+                temp_cmap = LinearSegmentedColormap.from_list("custom", c_list)
+                ax.plot_surface(X, Y, Z, cmap=temp_cmap, alpha=0.8, edgecolor='none')
+            else:
+                ax.plot_surface(X, Y, Z, cmap='coolwarm', alpha=0.8, edgecolor='none')
         else:
             ax.plot_surface(X, Y, Z, cmap='coolwarm', alpha=0.8, edgecolor='none')
-        
+
         ax.set_xlabel(labels['x'])
         ax.set_ylabel(labels['y'])
         ax.set_zlabel(labels['z'])
         ax.view_init(elev=30, azim=45)
-        
         buf = BytesIO()
         plt.savefig(buf, format=export_format, bbox_inches='tight')
         plt.close()

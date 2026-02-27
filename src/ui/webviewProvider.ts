@@ -104,7 +104,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         <label>End</label><input type="color" id="col-e" value="#ff0000">
                     </div>
                     <div class="group" id="preset-grp" style="display:none"><label>Preset</label><select id="preset">
-                        <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option>
+                        <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option><option value="mathematica">Mathematica (Z-Blend)</option><option value="Spectral">Spectral</option><option value="cool">Cool</option><option value="hot">Hot</option><option value="terrain">Terrain</option>
                     </select></div>
                     <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
                     <div class="group"><label>Background</label><input type="color" id="bg" value="#ffffff"></div>
@@ -194,12 +194,19 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
                 window.addEventListener('message', e => {
                     const { type, x3d_data, latex } = e.data;
+                    console.log("Webview received message:", type, x3d_data ? "has x3d" : "no x3d");
                     if (type === 'update' && x3d_data) {
                         last = x3d_data.expr;
                         document.getElementById('ui').style.display = 'grid';
                         const [c, r] = x3d_data.grid_size;
                         const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
                         
+                        // [추가] UI 입력 필드 동기화
+                        document.getElementById('res').value = c;
+                        document.getElementById('xr').value = rx.join(',');
+                        document.getElementById('yr').value = ry.join(',');
+                        document.getElementById('zr').value = rz.join(',');
+
                         // Smooth indices (no skipping, ClipPlane will handle the cut)
                         const idx = [];
                         for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
