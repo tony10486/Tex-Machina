@@ -62,7 +62,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://www.x3dom.org; style-src 'unsafe-inline' ${webview.cspSource} https://www.x3dom.org; font-src https://www.x3dom.org;">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://www.x3dom.org; style-src 'unsafe-inline' ${webview.cspSource} https://www.x3dom.org; font-src https://www.x3dom.org; connect-src https://www.x3dom.org;">
             <link rel="stylesheet" href="${x3domCss}">
             <script src="${x3domJs}"></script>
             <script src="${mathjaxUri}"></script>
@@ -74,7 +74,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 .preview-header { font-weight: bold; margin-top: 15px; font-size: 0.9em; opacity: 0.7; }
                 
                 /* X3D Styles */
-                x3d { width: 100%; height: 450px; border: 1px solid #444; margin-top: 10px; background: #1e1e1e; }
+                x3d { width: 100%; height: 450px; border: 1px solid #444; margin-top: 10px; background: #1e1e1e; display: block; }
+                .x3dom-canvas { border: none; width: 100%; height: 100%; }
                 .x3d-controls { 
                     background: var(--vscode-sideBar-background); 
                     padding: 12px; 
@@ -105,7 +106,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <div id="preview-img"></div>
             </div>
 
-            <div id="x3d-container"></div>
+            <div id="x3d-container" style="min-height: 450px;"></div>
             <div id="x3d-ui" class="x3d-controls" style="display:none;">
                 <div class="control-group">
                     <label>Surface Color</label>
@@ -293,7 +294,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             }
 
                             x3dContainer.innerHTML = \`
-                                <x3d id="x3d_el">
+                                <x3d id="x3d_el" style="width: 100%; height: 450px;">
                                     <scene>
                                         <viewpoint position="0 0 15" centerOfRotation="0 0 0"></viewpoint>
                                         <background skyColor="0.12 0.12 0.12"></background>
@@ -310,99 +311,18 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 </x3d>
                             \`;
 
+                            // Force re-init of x3dom if already loaded, or wait for it
                             if (window.x3dom) {
                                 window.x3dom.reload();
-                                initX3dHandlers();
-                                syncX3d();
+                                setTimeout(() => {
+                                    initX3dHandlers();
+                                    syncX3d();
+                                }, 100);
                             }
                             return;
                         }
 
                         if (latex.trim().startsWith('{')) {
-                            try {
-                                const jsonData = JSON.parse(latex);
-                                if (jsonData.type === 'plot') {
-                                    out.innerHTML = '수치적 해 그래프 (Numerical Plot):';
-                                    imgContainer.innerHTML = '<img src="' + jsonData.data + '" />';
-                                    return;
-                                }
-                            } catch (err) {}
-                        }
-
-                        out.innerHTML = '\\\\[' + latex + '\\\\]';
-
-                        if (analysis) {
-                            analysisDiv.style.display = 'block';
-                            analysisDiv.innerHTML = '<b>Analysis:</b>';
-                            for (const [key, value] of Object.entries(analysis)) {
-                                const item = document.createElement('div');
-                                item.className = 'analysis-item';
-                                item.innerHTML = '<span class="analysis-key">' + key + ':</span> \\\\[ ' + value + ' \\\\]';
-                                analysisDiv.appendChild(item);
-                            }
-                        }
-
-                        if (window.MathJax && window.MathJax.typesetPromise) {
-                            window.MathJax.typesetPromise();
-                        }
-                    }
-                });
-
-                            x3dContainer.innerHTML = \`
-                                <x3d id="x3d_el">
-                                    <scene>
-                                        <viewpoint position="0 0 15" centerOfRotation="0 0 0"></viewpoint>
-                                        <background skyColor="0.12 0.12 0.12"></background>
-                                        <navigationInfo type="examine"></navigationInfo>
-                                        <shape>
-                                            <appearance>
-                                                <material id="mainMat" diffuseColor="0.1 0.6 0.8" specularColor="0.5 0.5 0.5" shininess="0.5"></material>
-                                            </appearance>
-                                            <IndexedFaceSet solid="false" coordIndex="\${indices.join(' ')}">
-                                                <coordinate point="\${x3d_data.points.map(p => p.join(' ')).join(' ')}"></coordinate>
-                                            </IndexedFaceSet>
-                                        </shape>
-                                    </scene>
-                                </x3d>
-                            \`;
-
-                            if (window.x3dom) {
-                                window.x3dom.reload();
-                                initX3dHandlers();
-                                syncX3d();
-                            }
-                            return;
-                        }
-
-                        if (latex.trim().startsWith('{')) {
-                            try {
-                                const jsonData = JSON.parse(latex);
-                                if (jsonData.type === 'plot') {
-                                    out.innerHTML = '수치적 해 그래프 (Numerical Plot):';
-                                    imgContainer.innerHTML = '<img src="' + jsonData.data + '" />';
-                                    return;
-                                }
-                            } catch (err) {}
-                        }
-
-                        out.innerHTML = '\\\\[' + latex + '\\\\]';
-
-                        if (analysis) {
-                            analysisDiv.style.display = 'block';
-                            analysisDiv.innerHTML = '<b>Analysis:</b>';
-                            for (const [key, value] of Object.entries(analysis)) {
-                                const item = document.createElement('div');
-                                item.className = 'analysis-item';
-                                item.innerHTML = '<span class="analysis-key">' + key + ':</span> \\\\[ ' + value + ' \\\\]';
-                                analysisDiv.appendChild(item);
-                            }
-                        }
-
-                        if (window.MathJax && window.MathJax.typesetPromise) {
-                            window.MathJax.typesetPromise();
-                        }
-                    }
-                });
             </script>
         </body></html>`;
     }

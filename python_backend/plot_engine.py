@@ -73,7 +73,16 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
             if n <= 0 and domain[0] <= n <= domain[1]:
                 sings_found.add(float(n))
 
-    # 4. 수치적 스캔 (급격한 변화 탐지)
+    # 4. tan(x) 특이점 (pi/2 + n*pi)
+    if expr.has(sp.tan):
+        start = int(np.floor(domain[0] / np.pi - 0.5))
+        end = int(np.ceil(domain[1] / np.pi - 0.5))
+        for n in range(start, end + 1):
+            s = (n + 0.5) * np.pi
+            if domain[0] <= s <= domain[1]:
+                sings_found.add(float(s))
+
+    # 5. 수치적 스캔 (급격한 변화 탐지)
     f = sp.lambdify(var, expr, modules=['numpy', 'scipy'])
     x_scan = np.linspace(domain[0], domain[1], 1000)
     with warnings.catch_warnings():
@@ -104,6 +113,10 @@ def is_pgfplots_compatible(expr: sp.Expr) -> bool:
 
 def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
     """비호환 함수를 exp나 기본 삼각함수로 재작성 시도합니다 (예: sinh -> exp)."""
+    # 이미 호환되면 그대로 반환
+    if is_pgfplots_compatible(expr):
+        return expr
+
     # 쌍곡선 함수는 exp로 변환 가능
     rewritten = expr.rewrite(sp.exp)
     if is_pgfplots_compatible(rewritten):
@@ -200,7 +213,9 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     sings = detect_singularities(expr, var, domain)
     intervals = []
     current_min = domain[0]
-    epsilon = 0.05
+    # 특이점 근처에서 약간의 여유(epsilon)를 두어 발산하는 값이 plot에 직접 포함되지 않게 함
+    # 하지만 도메인 전체 범위는 유지하도록 노력
+    epsilon = 0.01 
     for s in sings:
         if current_min < s - epsilon:
             intervals.append((current_min, s - epsilon))
@@ -235,8 +250,8 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
 
     if needs_dat:
         dat_content, preview_img = generate_numerical_data(expr, var, intervals, samples_per_interval, y_limit)
-        # addplot table 시 점(marks)이 표시되지 않도록 [no marks] 추가
-        return "    \\addplot[no marks] table {data/plot_data.dat};\n", warning_msg, dat_content, preview_img
+        # addplot table 시 점(marks)이 표시되지 않도록 [no marks] 추가, 그리고 domain 반영
+        return f"    \\addplot[no marks, domain={domain[0]}:{domain[1]}] table {{data/plot_data.dat}};\n", warning_msg, dat_content, preview_img
 
     # Native PGFPlots: 구간별로 addplot 생성 (separate)
     expr_str = sympy_to_pgfplots_str(target_expr)
@@ -429,6 +444,7 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         
         # 데이터 파일 계산 범위 (y_limit) 동적 설정
         y_limit = max(abs(ymin), abs(ymax)) * y_multiplier
+        line_color = config.get('lineColor', 'blue')
         
         # 데이터 파일 이름 생성 (중복 방지를 위해 타임스탬프 추가)
         import datetime
@@ -437,9 +453,11 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         
         pgf_code, warning_msg, dat_content, preview_img = generate_2d_pgfplots(expr, var, domain, parallels, dat_samples, y_limit)
         
-        # PGFPlots 코드 내의 파일 경로 수정
+        # PGFPlots 코드 내의 파일 경로 및 색상 수정
         pgf_code = pgf_code.replace("data/plot_data.dat", f"data/{dat_filename}")
-        
+        if line_color != "blue":
+            pgf_code = pgf_code.replace("\\addplot[", f"\\addplot[{line_color}, ")
+
         final_latex = (
             "\\begin{tikzpicture}\n"
             f"\\begin{{axis}}[\n"
@@ -447,6 +465,7 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
             f"    xlabel=${sp.latex(var)}$,\n"
             f"    ylabel=$f({sp.latex(var)})$,\n"
             f"    trig format plots=rad,\n"
+            f"    restrict x to domain={domain[0]}:{domain[1]},\n"
             f"    restrict y to domain={ymin}:{ymax},\n"
             f"    xmin={domain[0]}, xmax={domain[1]},\n"
             f"    ymin={ymin}, ymax={ymax}\n"

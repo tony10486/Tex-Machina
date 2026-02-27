@@ -111,18 +111,29 @@ export function activate(context: vscode.ExtensionContext) {
                         const datFilename = response.dat_filename || 'plot_data.dat';
                         const datPath = path.join(dataDir, datFilename);
 
-                        const answer = await vscode.window.showInformationMessage(
-                            `PGFPlots 데이터 파일을 생성하시겠습니까?\n경로: data/${datFilename}`,
-                            "예", "아니오"
-                        );
-
-                        if (answer === "예") {
-                            try {
-                                if (!fs.existsSync(dataDir)) {
+                        let shouldWrite = true;
+                        if (!fs.existsSync(dataDir)) {
+                            const answer = await vscode.window.showInformationMessage(
+                                `PGFPlots 데이터를 위한 'data' 폴더가 없습니다. 생성하시겠습니까?\n경로: ${dataDir}`,
+                                "예", "아니오"
+                            );
+                            if (answer === "예") {
+                                try {
                                     fs.mkdirSync(dataDir, { recursive: true });
+                                } catch (err: any) {
+                                    vscode.window.showErrorMessage(`폴더 생성 실패: ${err.message}`);
+                                    shouldWrite = false;
                                 }
+                            } else {
+                                shouldWrite = false;
+                            }
+                        }
+
+                        if (shouldWrite) {
+                            try {
                                 fs.writeFileSync(datPath, response.dat_content);
-                                vscode.window.showInformationMessage(`데이터 파일이 저장되었습니다: ${datPath}`);
+                                // 파일 저장 성공 시에는 알림을 띄우지 않거나 조용히 처리 (사용자 피드백 반영)
+                                // vscode.window.showInformationMessage(`데이터 파일이 저장되었습니다: data/${datFilename}`);
                             } catch (err: any) {
                                 vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
                             }
@@ -289,6 +300,7 @@ export function activate(context: vscode.ExtensionContext) {
             const angleUnit = config.get('angleUnit', 'deg');
             const datDensity = config.get('plot.datDensity', 500);
             const yMultiplier = config.get('plot.yMultiplier', 5.0);
+            const lineColor = config.get('plot.lineColor', 'blue');
 
             const payload = {
                 ...parsed,
@@ -296,7 +308,8 @@ export function activate(context: vscode.ExtensionContext) {
                     laplace: laplaceConfig,
                     angleUnit: angleUnit,
                     datDensity: datDensity,
-                    yMultiplier: yMultiplier
+                    yMultiplier: yMultiplier,
+                    lineColor: lineColor
                 }
             };
 

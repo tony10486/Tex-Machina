@@ -49,6 +49,11 @@
           "minimum": 1.0,
           "maximum": 50.0,
           "description": "2D 그래프 데이터(.dat) 생성 시 y축 표시 범위를 넘어서 계산할 배수 (Clipping Limit)"
+        },
+        "tex-machina.plot.lineColor": {
+          "type": "string",
+          "default": "blue",
+          "description": "2D PGFPlots 그래프의 기본 선 색상 (예: blue, red, black, cyan!50!blue)"
         }
       }
     },
