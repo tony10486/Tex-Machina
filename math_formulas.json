@@ -1,0 +1,667 @@
+{
+  "version": "1.2.0",
+  "last_updated": "2026-02-28",
+  "formulas": [
+    {
+      "id": "q28088158",
+      "name": "Q10 (temperature coefficient)",
+      "category": "방정식",
+      "latex": "Q_{10} = \\left( \\frac{k_2}{k_1} \\right )^\\frac{10\\,\\mathrm{K}}{T_2 - T_1}\\approx 2.5",
+      "description": "equation that connects rate-determining step and temperature",
+      "tags": [
+        "(temperature",
+        "and",
+        "coefficient)",
+        "connects",
+        "determining",
+        "equation",
+        "q10",
+        "rate",
+        "step",
+        "temperature",
+        "that",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q5548480",
+      "name": "Georgi–Jarlskog mass relation",
+      "category": "방정식",
+      "latex": "\\begin{aligned}m_{\\mathrm d}\\approx 9m_{\\mathrm e}\\\\m_{\\mathrm s}\\approx m_{\\mu }\\\\m_{\\mathrm b}\\approx 3m_{\\tau }\\end{aligned}",
+      "description": "In Grand Unified Theories of the SU(5) or SO(10) type, there is a mass relation predicted between the electron and the down quark, the muon and the strange quark and the tau lepton and the bottom quark called the Georgi–Jarlskog mass relations. The relations were formulated by Howard Georgi and Cecilia Jarlskog.",
+      "tags": [
+        "georgi–jarlskog",
+        "grand",
+        "in",
+        "mass",
+        "of",
+        "or",
+        "relation",
+        "so",
+        "su",
+        "the",
+        "theories",
+        "type",
+        "unified",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q55754202",
+      "name": "Fox equation",
+      "category": "방정식",
+      "latex": "\\frac{1}{T_{g}} = \\frac{w_{1}}{T_{g,1}}+\\frac{w_{2}}{T_{g,2}}",
+      "description": "",
+      "tags": [
+        "equation",
+        "fox",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q263369",
+      "name": "rendering equation",
+      "category": "방정식",
+      "latex": "L_o(x, \\vec w) = L_e(x, \\vec w) + \\int_\\Omega f_r(x, \\vec w', \\vec w) L_i(x, \\vec w') (\\vec w' \\cdot \\vec n) \\mathrm{d}\\vec w'",
+      "description": "In computer graphics, the rendering equation is an integral equation that expresses the amount of light leaving a point on a surface as the sum of emitted light and reflected light. It was independently introduced into computer graphics by David Immel et al. and James Kajiya in 1986.",
+      "tags": [
+        "an",
+        "computer",
+        "equation",
+        "graphics",
+        "in",
+        "integral",
+        "is",
+        "rendering",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q601818",
+      "name": "헨더슨-하셀바흐 방정식",
+      "category": "방정식",
+      "latex": "pH = pK_\\mathrm{a} + log([A-]/[HA])",
+      "description": "핸더슨-하셀바흐 방정식( - 方程式, 영어: Henderson–Hasselbalch equation)은 로렌스 조셉 헨더슨이 1908년 만든 공식으로, 완충 용액으로의 산을 묘사하기 위한 것이다. 카를 알버트 하셀바흐가 대수적으로 공식화함으로써 헨더슨-하셀바흐 방정식을 완성했다. 하셀바흐는 혈액 내 탄산 농도를 측정하는 데에 이 공식을 사용하였다.",
+      "tags": [
+        "equation",
+        "hasselbalch",
+        "henderson",
+        "로렌스",
+        "방정식",
+        "영어",
+        "조셉",
+        "하셀바흐",
+        "핸더슨",
+        "헨더슨-하셀바흐",
+        "헨더슨이"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q899155",
+      "name": "Gibbs–Duhem equation",
+      "category": "방정식",
+      "latex": "\\sum_i n_i \\mathrm{d} \\mu_i = -S \\mathrm{d} T + V \\mathrm{d} p",
+      "description": "In thermodynamics, the Gibbs–Duhem equation describes the relationship between changes in chemical potential for components in a thermodynamic system:",
+      "tags": [
+        "between",
+        "describes",
+        "duhem",
+        "equation",
+        "gibbs",
+        "gibbs–duhem",
+        "in",
+        "relationship",
+        "the",
+        "thermodynamics",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q98936",
+      "name": "블랙의 방정식",
+      "category": "방정식",
+      "latex": "{\\displaystyle MTTF={\\frac {A}{j^{n}}}e^{\\left({\\frac {Q}{kT}}\\right)}}",
+      "description": "블랙의 방정식(Black's equation)은 전기전진에 의해 반도체가 평균적으로 고장에 이르게 하는 시간(the mean time to failure,MTTF)을 구하는 수학적인 방법이다.",
+      "tags": [
+        "black",
+        "equation",
+        "고장에",
+        "반도체가",
+        "방정식",
+        "블랙의",
+        "의해",
+        "이르게",
+        "전기전진에",
+        "평균적으로"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q805099",
+      "name": "Euler–Bernoulli beam theory",
+      "category": "방정식",
+      "latex": "S=\\int _{t_1}^{t_2}\\int_0^L\\left[\\frac12\\mu\\left(\\frac {\\partial w}{\\partial t}\\right)^2-\\frac12EI\\left(\\frac {\\partial^2w}{\\partial x^2}\\right)^2+q(x)w(x,t)\\right]\\,\\mathrm dx\\,\\mathrm dt",
+      "description": "Euler–Bernoulli beam theory is a simplification of the linear theory of elasticity which provides a means of calculating the load-carrying capacity and deflection of beams.",
+      "tags": [
+        "beam",
+        "bernoulli",
+        "euler",
+        "euler–bernoulli",
+        "is",
+        "linear",
+        "of",
+        "simplification",
+        "the",
+        "theory",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q25447164",
+      "name": "Bernoulli's equation",
+      "category": "방정식",
+      "latex": "\\frac{1}{2}\\rho v^2+\\rho g z+p = \\text{const}",
+      "description": "",
+      "tags": [
+        "bernoulli's",
+        "equation",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q1322787",
+      "name": "Chebychev–Grübler–Kutzbach criterion",
+      "category": "방정식",
+      "latex": "M = 6n - \\sum_{i=1}^j\\ (6 - f_i) =  6(N-1 - j) + \\sum_{i=1}^j\\ f_i",
+      "description": "The Chebychev–Grübler–Kutzbach criterion determines the number of degrees of freedom of a kinematic chain, that is, a coupling of rigid bodies by means of mechanical constraints. These devices are also called linkages.",
+      "tags": [
+        "bler",
+        "chebychev",
+        "chebychev–grübler–kutzbach",
+        "criterion",
+        "determines",
+        "gr",
+        "kutzbach",
+        "number",
+        "of",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q1368870",
+      "name": "휠러-드위트 방정식",
+      "category": "방정식",
+      "latex": "\\hat H(x)|\\psi\\rangle = \\vec P(x)|\\psi\\rangle=0",
+      "description": "휠러-디윗 방정식(-方程式, Wheeler-deWitt equation)은 정준 양자 중력을 나타내는 함수형 미분 방정식이다. 중력의 미분동형사상 불변성을 나타낸다.",
+      "tags": [
+        "dewitt",
+        "equation",
+        "wheeler",
+        "나타내는",
+        "디윗",
+        "방정식",
+        "양자",
+        "정준",
+        "중력을",
+        "휠러",
+        "휠러-드위트"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q868967",
+      "name": "클라인-고든 방정식",
+      "category": "방정식",
+      "latex": "\\frac {1}{c^2} \\frac{\\partial^2}{\\partial t^2} \\psi - \\nabla^2 \\psi + \\frac {m^2 c^2}{\\hbar^2} \\psi = 0",
+      "description": "양자장론에서 클라인-고든 방정식(Klein-Gordon方程式, 영어: Klein–Gordon equation) 또는 클레인-고르돈 방정식은 (유사) 스칼라 장을 다루는 상대론적 파동 방정식이다. 상대론적인 질량-에너지 동등성 을 나타낸다.",
+      "tags": [
+        "equation",
+        "gordon",
+        "klein",
+        "고든",
+        "방정식",
+        "양자장론에서",
+        "영어",
+        "클라인",
+        "클라인-고든"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q5461949",
+      "name": "Flory–Fox equation",
+      "category": "방정식",
+      "latex": "T_{g} = T_{g,\\infty}-\\frac{K}{M_{n}}",
+      "description": "In polymer chemistry and polymer physics, the Flory–Fox equation is a simple empirical formula that relates molecular weight to the glass transition temperature of a polymer system. The equation was first proposed in 1950 by Paul J. Flory and Thomas G.",
+      "tags": [
+        "and",
+        "chemistry",
+        "equation",
+        "flory",
+        "flory–fox",
+        "fox",
+        "in",
+        "physics",
+        "polymer",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q131161017",
+      "name": "Renouard equation",
+      "category": "방정식",
+      "latex": "\\Delta Y =232 \\cdot 10000 \\cdot d^* \\cdot \\frac{Q^{1,82}}{D^{4,82}}",
+      "description": "",
+      "tags": [
+        "equation",
+        "renouard",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q631222",
+      "name": "사하 이온화 방정식",
+      "category": "방정식",
+      "latex": "\\frac{n_{i+1}n_e}{n_i} = \\frac{2}{\\Lambda^{3}}\\frac{g_{i+1}}{g_i}\\exp\\left[-\\frac{(\\epsilon_{i+1}-\\epsilon_i)}{k_BT}\\right]",
+      "description": "사하 이온화 방정식은 Saha-Langmuir 방정식으로도 알려져 있는, 사하 이온화 방정식은 인도의 천체물리학자 사하에 의해서 개발되었다. 이 방정식의 중요한 응용은 별들의 스펙트럼의 분류에 있다. 이 방정식은 양자 역학과 통계 역학의 아이디어를 합친 결과이다.\n충분히 높은 온도의 가스에서 원자들이 열적으로 충돌하게 되면 몇몇 원자들은 이온화 될 것이다.",
+      "tags": [
+        "langmuir",
+        "saha",
+        "방정식",
+        "방정식으로도",
+        "방정식은",
+        "사하",
+        "알려져",
+        "이온화",
+        "있는"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q864883",
+      "name": "Jarzynski equality",
+      "category": "방정식",
+      "latex": "\\exp(-\\Delta F/k_{\\mathrm B}T)=\\overline {\\exp(-W/k_{\\mathrm B}T)}",
+      "description": "The Jarzynski equality (JE) is an equation in statistical mechanics that relates free energy differences between two states and the irreversible work along an ensemble of trajectories joining the same states. It is named after the physicist Christopher Jarzynski who derived it in 1996. Fundamentally, the Jarzynski equality points to the fact that the fluctuations in the work satisfy certain constraints separately from the average value of the work that occurs in some process.",
+      "tags": [
+        "an",
+        "equality",
+        "equation",
+        "in",
+        "is",
+        "jarzynski",
+        "je",
+        "mechanics",
+        "statistical",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q1428292",
+      "name": "Sellmeier equation",
+      "category": "방정식",
+      "latex": "n^2(\\lambda) = 1 + \\sum_i \\frac{B_i \\lambda^2}{\\lambda^2 - C_i}",
+      "description": "The Sellmeier equation is an empirical relationship between refractive index and wavelength for a particular transparent medium. The equation is used to determine the dispersion of light in the medium.",
+      "tags": [
+        "an",
+        "between",
+        "empirical",
+        "equation",
+        "index",
+        "is",
+        "refractive",
+        "relationship",
+        "sellmeier",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q7653004",
+      "name": "Swain equation",
+      "category": "방정식",
+      "latex": "\\frac{k_H}{k_T} =  (\\frac{k_H}{k_D})^{1.442}",
+      "description": "The Swain equation relates the kinetic isotope effect for the protium/tritium combination with that of the protium/deuterium combination according to:",
+      "tags": [
+        "effect",
+        "equation",
+        "for",
+        "isotope",
+        "kinetic",
+        "relates",
+        "swain",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q381680",
+      "name": "Barlow's formula",
+      "category": "방정식",
+      "latex": "P=\\frac {2St} {D}",
+      "description": "Barlow's formula relates the internal pressure that a pipe can withstand to its dimensions and the strength of its material.",
+      "tags": [
+        "barlow",
+        "barlow's",
+        "can",
+        "formula",
+        "internal",
+        "pipe",
+        "pressure",
+        "relates",
+        "that",
+        "the",
+        "withstand",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q2804046",
+      "name": "Sauerbrey equation",
+      "category": "방정식",
+      "latex": "\\Delta f = -\\frac{2f_0^2}{A \\sqrt{ \\rho_q \\mu_q } }\\Delta m",
+      "description": "\nThe Sauerbrey equation was developed by the German Günter Sauerbrey in 1959, while working on his doctoral thesis at Technische Universität Berlin, Germany. It is a method for correlating changes in the oscillation frequency of a piezoelectric crystal with the mass deposited on it. He simultaneously developed a method for measuring the characteristic frequency and its changes by using the crystal as the frequency determining component of an oscillator circuit.",
+      "tags": [
+        "by",
+        "developed",
+        "equation",
+        "german",
+        "nter",
+        "sauerbrey",
+        "the",
+        "was",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q4115573",
+      "name": "2학년의 꿈",
+      "category": "방정식",
+      "latex": "\\int_0^1x^{-x}\\,\\mathrm dx = \\sum_{n=1}^\\infty n^{-n}",
+      "description": "2학년의 꿈(영어: sophomore's dream)은 아래의 식으로, 구별이 없으면 첫번째를 일컫는 일이 많다.",
+      "tags": [
+        "2학년의",
+        "dream",
+        "sophomore",
+        "구별이",
+        "방정식",
+        "식으로",
+        "아래의",
+        "없으면",
+        "영어",
+        "일컫는",
+        "첫번째를",
+        "학년의"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q2470526",
+      "name": "Mason–Weaver equation",
+      "category": "방정식",
+      "latex": "\\Delta P =\\; C\\, a\\; h\\; \\bigg(\\frac {1}{T_o} - \\frac {1}{T_i}\\bigg)",
+      "description": "The Mason–Weaver equation describes the sedimentation and diffusion of solutes under a uniform force, usually a gravitational field. Assuming that the gravitational field is aligned in the z direction, the Mason–Weaver equation may be written",
+      "tags": [
+        "and",
+        "describes",
+        "diffusion",
+        "equation",
+        "mason",
+        "mason–weaver",
+        "of",
+        "sedimentation",
+        "the",
+        "weaver",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q5975803",
+      "name": "I = PAT",
+      "category": "방정식",
+      "latex": "I = P \\times A \\times T",
+      "description": "I = (PAT) is the mathematical notation of a formula put forward to describe the impact of human activity on the environment.I = P × A × T",
+      "tags": [
+        "formula",
+        "forward",
+        "is",
+        "mathematical",
+        "notation",
+        "of",
+        "pat",
+        "put",
+        "the",
+        "to",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q1142285",
+      "name": "달시-바이스바하 방정식",
+      "category": "방정식",
+      "latex": "\\Delta h = \\xi \\cdot \\frac{V^2}{2g}",
+      "description": "유체 역학에서 달시-바이스바하 방정식(Darcy–Weisbach equation)은 일정한 길이의 파이프에서 유체가 흐를 때 따르는 마찰로 인한 압력 손실 또는 수두 손실과 비압축성 유체의 유체 흐름의 평균 속도를 관련시키는 상태 방정식이다. 방정식은 앙리 다르시(Henry Darcy)와 줄리어스 바이스바흐(Julius Weisbach)의 이름을 따서 명명되었다.",
+      "tags": [
+        "darcy",
+        "equation",
+        "weisbach",
+        "길이의",
+        "달시",
+        "달시-바이스바하",
+        "바이스바하",
+        "방정식",
+        "역학에서",
+        "유체",
+        "일정한"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q507505",
+      "name": "아레니우스 방정식",
+      "category": "방정식",
+      "latex": "k=Ae^{-E_a/(R T)}",
+      "description": "아레니우스 방정식은 반응 속도의 온도 의존도를 나타낸 물리학의 공식이다. 스웨덴의 물리학자인 스반테 아레니우스는 1889년에 평형 상수의 온도 의존에 대한 판트호프 방정식을 제안한 네덜란드의 화학자인 야코뷔스 헨리퀴스 판트 호프의 연구에 근거하여 아레니우스 방정식을 제안하였다. 이 방정식은 화학 반응의 속도와 활성화 에너지 계산에 중요하게 적용된다.",
+      "tags": [
+        "공식이다",
+        "나타낸",
+        "물리학의",
+        "반응",
+        "방정식",
+        "방정식은",
+        "속도의",
+        "스웨덴의",
+        "아레니우스",
+        "온도",
+        "의존도를"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q5226082",
+      "name": "Darwin–Radau equation",
+      "category": "방정식",
+      "latex": "\\frac C{MR_{e}^2}=\\frac2{3\\lambda}=\\frac23\\left(1-\\frac25\\sqrt{1+\\eta}\\right)",
+      "description": "In astrophysics, the Darwin–Radau equation gives an approximate relation between the moment of inertia factor of a planetary body and its rotational speed and shape. The moment of inertia factor is directly related to the largest principal moment of inertia, C. It is assumed that the rotating body is in hydrostatic equilibrium and is an ellipsoid of revolution.",
+      "tags": [
+        "an",
+        "approximate",
+        "astrophysics",
+        "darwin",
+        "darwin–radau",
+        "equation",
+        "gives",
+        "in",
+        "radau",
+        "relation",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q507393",
+      "name": "야코비 삼중곱",
+      "category": "방정식",
+      "latex": "\\pi\\  \\prod_{i\\in \\mathrm{N}} \\Sigma\\ ^ i \\to \\mathbb{R}^\\mathrm{N}",
+      "description": "야코비 삼중곱(Jacobi triple product)은 수학자 야코비가 발견한 수학 공식으로, 내용은 아래와 같다.",
+      "tags": [
+        "jacobi",
+        "product",
+        "triple",
+        "공식으로",
+        "발견한",
+        "방정식",
+        "삼중곱",
+        "수학",
+        "수학자",
+        "야코비",
+        "야코비가"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q267449",
+      "name": "LSZ 축약 공식",
+      "category": "방정식",
+      "latex": "\\langle p_1,\\dotsc,p_m|-p_{m+1},\\dotsc,-p_n\\rangle \\propto\\prod_{i=1}^n(p_i^2+m^2)\\int\\left(\\prod_{i=1}^n\\mathrm d^dx_i\\exp(\\mathrm ix_i\\cdot p_i)\\right)\\langle\\Omega|\\mathrm T[\\phi(x_1)\\dotsm\\phi(x_n)]|\\Omega\\rangle",
+      "description": "양자장론에서 LSZ 축약 공식(-縮約公式, 영어: LSZ reduction formula) 또는 레만-쥐만치크-치머만 축약 공식(Lehman–Symanzik–Zimmerman)은 산란 행렬을 상관 함수의 극의 유수로 나타내는 공식이다.",
+      "tags": [
+        "formula",
+        "lsz",
+        "reduction",
+        "공식",
+        "또는",
+        "레만",
+        "방정식",
+        "양자장론에서",
+        "영어",
+        "축약"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q847339",
+      "name": "Cauchy's equation",
+      "category": "방정식",
+      "latex": "n(\\lambda) = A + \\frac {B}{\\lambda^2} + \\frac{C}{\\lambda^4} + \\cdots",
+      "description": "In optics, Cauchy's transmission equation is an empirical relationship between the refractive index and wavelength of light for a particular transparent material. It is named for the mathematician Augustin-Louis Cauchy, who originally defined it in 1830 in his article \"The refraction and reflection of light\".",
+      "tags": [
+        "an",
+        "between",
+        "cauchy",
+        "cauchy's",
+        "empirical",
+        "equation",
+        "in",
+        "is",
+        "optics",
+        "relationship",
+        "transmission",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q900716",
+      "name": "Carothers equation",
+      "category": "방정식",
+      "latex": "\\bar{X}_n=\\frac{1}{1-p}",
+      "description": "In step-growth polymerization, the Carothers equation gives the degree of polymerization, Xn, for a given fractional monomer conversion, p.",
+      "tags": [
+        "carothers",
+        "degree",
+        "equation",
+        "gives",
+        "growth",
+        "in",
+        "polymerization",
+        "step",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    },
+    {
+      "id": "q3589404",
+      "name": "Kaya identity",
+      "category": "방정식",
+      "latex": "F = P \\times \\frac{G}{P} \\times \\frac{E}{G} \\times \\frac{F}{E}",
+      "description": "The Kaya identity is a mathematical identity that disaggregates the total emission level of the greenhouse gas carbon dioxide so that it can be expressed as the product of four calculable factors: human population, GDP per capita, energy intensity, and carbon intensity. It is a concrete form of the more general I = PAT equation relating factors that determine the level of human impact on climate. Although the terms in the Kaya identity would in theory cancel out, it is useful in practice to calculate emissions in terms of more readily available data, namely population, GDP per capita, energy per unit GDP, and emissions per unit energy.",
+      "tags": [
+        "disaggregates",
+        "identity",
+        "is",
+        "kaya",
+        "mathematical",
+        "that",
+        "the",
+        "total",
+        "방정식"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q180316",
+      "name": "드레이크 방정식",
+      "category": "방정식",
+      "latex": "N = R_* \\cdot f_\\mathrm{p} \\cdot n_\\mathrm{e} \\cdot f_\\mathrm{l} \\cdot f_\\mathrm{i} \\cdot f_\\mathrm{c} \\cdot L",
+      "description": "드레이크 방정식(영어: Drake equation)은 우리은하 내에서 인류와 교신할 수 있는 지적인 외계 생명체의 수를 추산하는 확률적 방정식이다.",
+      "tags": [
+        "drake",
+        "equation",
+        "교신할",
+        "내에서",
+        "드레이크",
+        "방정식",
+        "영어",
+        "우리은하",
+        "인류와",
+        "있는"
+      ],
+      "complexity": "Advanced"
+    },
+    {
+      "id": "q1753699",
+      "name": "equation of exchange",
+      "category": "방정식",
+      "latex": "M\\cdot V = P\\cdot Q",
+      "description": "In monetary economics, the equation of exchange is the relation:",
+      "tags": [
+        "economics",
+        "equation",
+        "exchange",
+        "in",
+        "is",
+        "monetary",
+        "of",
+        "relation",
+        "the",
+        "방정식"
+      ],
+      "complexity": "Intermediate"
+    }
+  ]
+}
