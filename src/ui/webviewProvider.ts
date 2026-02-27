@@ -142,17 +142,24 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     </select></div>
                 </div>
                 <div class="btn-row full">
+                    <button class="secondary" onclick="fitView()">Fit View (Center Graph)</button>
                     <button onclick="apply()">Apply Changes</button>
                 </div>
+                <div class="controls full" style="grid-template-columns: 1fr 1fr 1fr; border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                    <div class="group"><label>Preset</label><select id="exp-preset" onchange="setExportPreset()">
+                        <option value="custom">Custom</option>
+                        <option value="square">Square (1000)</option>
+                        <option value="hd">HD (1280x720)</option>
+                        <option value="fhd">FHD (1920x1080)</option>
+                        <option value="a4">A4 (2480x1754)</option>
+                    </select></div>
+                    <div class="group"><label>Width</label><input type="number" id="exp-w" value="800"></div>
+                    <div class="group"><label>Height</label><input type="number" id="exp-h" value="600"></div>
+                    <div class="group full"><label><input type="checkbox" id="exp-smart" checked> Smart Crop (Remove empty space)</label></div>
+                </div>
                 <div class="btn-row full">
-                    <button class="secondary" onclick="exportPlot()">Capture View</button>
-                    <select id="exp-scale" style="width:50px; flex:none" title="Resolution Scale">
-                        <option value="1">1x</option>
-                        <option value="2">2x</option>
-                        <option value="3">3x</option>
-                        <option value="4">4x</option>
-                    </select>
-                    <select id="exp-fmt" style="width:60px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
+                    <button class="secondary" onclick="exportPlot()">Capture Image</button>
+                    <select id="exp-fmt" style="width:70px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
                 </div>
                 <div class="btn-row full">
                     <button class="secondary" onclick="hqExport()">HQ Export (Matplotlib PDF)</button>
@@ -201,45 +208,90 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         options: getOptions()
                     });
                 }
+                function fitView(){
+                    const x3d = document.getElementById('x');
+                    if (x3d && x3d.runtime) x3d.runtime.showAll();
+                }
+                function hqExport(){
+                    vscode.postMessage({
+                        command: 'exportPdf', expr: last, samples: document.getElementById('res').value,
+                        color: document.getElementById('col').value,
+                        options: { ...getOptions(), export: 'pdf' }
+                    });
+                }
+                function autoCrop(imgData, bgColor, format, callback) {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        const r_bg = parseInt(bgColor.slice(1, 3), 16);
+                        const g_bg = parseInt(bgColor.slice(3, 5), 16);
+                        const b_bg = parseInt(bgColor.slice(5, 7), 16);
+                        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+                        let found = false;
+                        for (let y = 0; y < canvas.height; y++) {
+                            for (let x = 0; x < canvas.width; x++) {
+                                const i = (y * canvas.width + x) * 4;
+                                const diff = Math.abs(data[i] - r_bg) + Math.abs(data[i+1] - g_bg) + Math.abs(data[i+2] - b_bg);
+                                if (diff > 15) {
+                                    if (x < minX) minX = x;
+                                    if (x > maxX) maxX = x;
+                                    if (y < minY) minY = y;
+                                    if (y > maxY) maxY = y;
+                                    found = true;
+                                }
+                            }
+                        }
+                        if (!found) { callback(imgData); return; }
+                        const pad = 10;
+                        minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+                        maxX = Math.min(canvas.width, maxX + pad); maxY = Math.min(canvas.height, maxY + pad);
+                        const cropW = maxX - minX; const cropH = maxY - minY;
+                        const croppedCanvas = document.createElement('canvas');
+                        croppedCanvas.width = cropW; croppedCanvas.height = cropH;
+                        croppedCanvas.getContext('2d').drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+                        callback(croppedCanvas.toDataURL('image/' + format));
+                    };
+                    img.src = imgData;
+                }
+                function setExportPreset(){
+                    const p = document.getElementById('exp-preset').value;
+                    const w = document.getElementById('exp-w');
+                    const h = document.getElementById('exp-h');
+                    if(p === 'square') { w.value = 1000; h.value = 1000; }
+                    else if(p === 'hd') { w.value = 1280; h.value = 720; }
+                    else if(p === 'fhd') { w.value = 1920; h.value = 1080; }
+                    else if(p === 'a4') { w.value = 2480; h.value = 1754; }
+                }
                 function exportPlot(){
                     const x3d = document.getElementById('x');
-                    if (!x3d) return;
-                    
-                    const runtime = x3d.runtime;
-                    if (!runtime) return;
-
-                    const scale = parseInt(document.getElementById('exp-scale').value) || 1;
+                    if (!x3d || !x3d.runtime) return;
+                    const w = parseInt(document.getElementById('exp-w').value) || 800;
+                    const h = parseInt(document.getElementById('exp-h').value) || 600;
                     const fmt = document.getElementById('exp-fmt').value;
-
-                    if (scale > 1) {
-                        const originalWidth = x3d.style.width;
-                        const originalHeight = x3d.style.height;
-                        const rect = x3d.getBoundingClientRect();
-                        
-                        x3d.style.width = (rect.width * scale) + 'px';
-                        x3d.style.height = (rect.height * scale) + 'px';
-                        
-                        setTimeout(() => {
-                            const imgData = runtime.getScreenshot();
-                            x3d.style.width = originalWidth;
-                            x3d.style.height = originalHeight;
-                            
-                            vscode.postMessage({
-                                command: 'saveImage',
-                                imageData: imgData,
-                                format: fmt,
-                                expr: last
+                    const isSmart = document.getElementById('exp-smart').checked;
+                    const bgColor = document.getElementById('bg').value;
+                    const originalWidth = x3d.style.width;
+                    const originalHeight = x3d.style.height;
+                    x3d.style.width = w + 'px';
+                    x3d.style.height = h + 'px';
+                    setTimeout(() => {
+                        const rawData = x3d.runtime.getScreenshot();
+                        x3d.style.width = originalWidth;
+                        x3d.style.height = originalHeight;
+                        if (isSmart) {
+                            autoCrop(rawData, bgColor, fmt, (croppedData) => {
+                                vscode.postMessage({ command: 'saveImage', imageData: croppedData, format: fmt, expr: last });
                             });
-                        }, 100);
-                    } else {
-                        const imgData = runtime.getScreenshot();
-                        vscode.postMessage({
-                            command: 'saveImage',
-                            imageData: imgData,
-                            format: fmt,
-                            expr: last
-                        });
-                    }
+                        } else {
+                            vscode.postMessage({ command: 'saveImage', imageData: rawData, format: fmt, expr: last });
+                        }
+                    }, 200);
                 }
                 function hexToRgb(hex) {
                     const r = parseInt(hex.slice(1, 3), 16) / 255;

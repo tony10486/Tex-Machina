@@ -638,7 +638,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         export_content = base64.b64encode(buf.getvalue()).decode('utf-8')
 
     return {
-        "latex": f"% 3D Interactive Preview of ${sp.latex(expr)}$",
+        "latex": f"${sp.latex(expr)}$",
         "x3d_data": {
             "points": points,
             "colors": colors,

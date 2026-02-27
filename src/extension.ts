@@ -79,13 +79,12 @@ export function activate(context: vscode.ExtensionContext) {
                                     }
                                     fs.writeFileSync(exportPath, exportBuffer);
                                     
-                                    // LaTeX Figure 코드 생성 및 삽입
-                                    const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
-                                    
-                                    await currentEditor.edit(editBuilder => {
-                                        editBuilder.insert(currentSelection!.end, figureCode);
-                                    });
-                                    
+                                                                    // LaTeX Figure 코드 생성 및 삽입
+                                                                    const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                                                                    
+                                                                    await currentEditor.edit(editBuilder => {
+                                                                        editBuilder.replace(currentSelection!, figureCode);
+                                                                    });                                    
                                     vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
                                 } catch (err: any) {
                                     vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
@@ -459,10 +458,14 @@ export function activate(context: vscode.ExtensionContext) {
             }
             fs.writeFileSync(exportPath, buffer);
             
-            const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
+            const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
             
             await currentEditor.edit(editBuilder => {
-                editBuilder.insert(currentEditor!.selection.end, figureCode);
+                if (currentSelection) {
+                    editBuilder.replace(currentSelection, figureCode);
+                } else {
+                    editBuilder.insert(currentEditor!.selection.end, figureCode);
+                }
             });
             
             vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
