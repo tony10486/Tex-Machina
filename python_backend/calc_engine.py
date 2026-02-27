@@ -33,8 +33,150 @@ def op_tensor_expand(expr, args):
     return result
 
 # ==========================================
-# 1. 특수 연산 헬퍼 함수 (Helper Functions)
+# 1. 특수 연산 및 단계별 풀이 (Step-by-Step)
 # ==========================================
+
+def format_step(text, latex_expr, level, target_level):
+    """레벨에 따른 단계 포맷팅"""
+    if target_level >= level:
+        if latex_expr:
+            return f"\\text{{{text}}}: {sp.latex(latex_expr)}"
+        return f"\\text{{{text}}}"
+    return None
+
+def get_solve_steps(expr, var, level):
+    steps = []
+    # 방정식 형태 확인 (Eq 객체가 아니면 = 0으로 간주)
+    equation = expr if isinstance(expr, sp.Equality) else sp.Eq(expr, 0)
+    lhs = sp.expand(equation.lhs - equation.rhs)
+    
+    # 1. 유형 판별
+    degree = sp.degree(lhs, var)
+    
+    if level >= 1:
+        steps.append(f"\\text{{Step 1: Identify equation type - Degree {degree} polynomial in }}{sp.latex(var)}")
+
+    if degree == 1:
+        # 일차 방정식: ax + b = 0 -> x = -b/a
+        a = lhs.coeff(var, 1)
+        b = lhs.subs(var, 0)
+        if level >= 3:
+            steps.append(f"\\text{{Move constant term to RHS: }}{sp.latex(a*var)} = {sp.latex(-b)}")
+            steps.append(f"\\text{{Divide by coefficient of }}{sp.latex(var)} (a={sp.latex(a)}): {sp.latex(var)} = {sp.latex(-b/a)}")
+        elif level >= 2:
+            steps.append(f"\\text{{Isolate }}{sp.latex(var)}: {sp.latex(var)} = \\frac{{-{sp.latex(b)}}}{{{sp.latex(a)}}}")
+        steps.append(f"\\text{{Final Answer: }}{sp.latex(var)} = {sp.latex(sp.solve(equation, var)[0])}")
+        
+    elif degree == 2:
+        # 이차 방정식: ax^2 + bx + c = 0
+        a = lhs.coeff(var, 2)
+        b = lhs.coeff(var, 1)
+        c = lhs.subs(var, 0)
+        
+        if level >= 1:
+            steps.append(f"\\text{{Apply Quadratic Formula: }} {sp.latex(var)} = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}")
+        
+        if level >= 2:
+            disc = b**2 - 4*a*c
+            steps.append(f"\\text{{Calculate Discriminant (D): }} D = b^2 - 4ac = {sp.latex(disc)}")
+            if level >= 3:
+                steps.append(f"\\text{{Substitute values: }} a={sp.latex(a)}, b={sp.latex(b)}, c={sp.latex(c)}")
+                steps.append(f"\\text{{Numerator: }} -({sp.latex(b)}) \\pm \\sqrt{{{sp.latex(disc)}}}")
+                steps.append(f"\\text{{Denominator: }} 2({sp.latex(a)}) = {sp.latex(2*a)}")
+        
+        sols = sp.solve(equation, var)
+        steps.append(f"\\text{{Solutions: }} {sp.latex(sols)}")
+    else:
+        steps.append(r"\text{Complex equation detected. Using general solver.}")
+        steps.append(f"\\text{{Result: }} {sp.latex(sp.solve(equation, var))}")
+        
+    return steps
+
+def get_int_steps(expr, var, level):
+    steps = []
+    try:
+        from sympy.integrals.manualintegrate import integral_steps
+        
+        def format_rule(rule):
+            name = type(rule).__name__.replace("Rule", "")
+            if name == "Power":
+                return f"\\text{{Power Rule: }}\\int x^n dx = \\frac{{x^{{n+1}}}}{{n+1}}"
+            elif name == "ConstantTimes":
+                return f"\\text{{Constant Multiple Rule: }}\\int a f(x) dx = a \\int f(x) dx"
+            elif name == "Add":
+                return f"\\text{{Sum Rule: }}\\int (f+g) dx = \\int f dx + \\int g dx"
+            elif name == "Parts":
+                return f"\\text{{Integration by Parts: }} u = {sp.latex(rule.u)}, dv = {sp.latex(rule.dv)}dx"
+            elif name == "U":
+                return f"\\text{{U-Substitution: }} u = {sp.latex(rule.u_func)}"
+            elif name == "Exp":
+                return f"\\text{{Exponential Rule: }}\\int e^x dx = e^x"
+            elif name == "Trig":
+                return f"\\text{{Trigonometric Integral: }}\\int {sp.latex(rule.integrand)} dx"
+            elif name == "Alternative":
+                return None
+            return f"\\text{{Applying {name} Rule}}"
+
+        rule_tree = integral_steps(expr, var)
+        
+        # 트리 재귀 탐색
+        def extract_steps(rule):
+            res = []
+            f = format_rule(rule)
+            if f: res.append(f)
+            
+            if hasattr(rule, 'substep'):
+                res.extend(extract_steps(rule.substep))
+            elif hasattr(rule, 'substeps'):
+                for s in rule.substeps:
+                    res.extend(extract_steps(s))
+            elif hasattr(rule, 'alternatives'):
+                # 가장 좋은 첫 번째 대안 선택
+                res.extend(extract_steps(rule.alternatives[0]))
+            return res
+
+        visited_rules = extract_steps(rule_tree)
+        # 중복 설명 제거 (순서 유지)
+        seen = set()
+        unique_rules = []
+        for r in visited_rules:
+            if r not in seen:
+                unique_rules.append(r)
+                seen.add(r)
+        
+        if level == 1:
+            steps.append(unique_rules[0] if unique_rules else r"\text{Basic Integration}")
+        elif level == 2:
+            steps.extend(unique_rules[:3])
+        else:
+            steps.extend(unique_rules)
+            
+        res = sp.integrate(expr, var)
+        steps.append(f"\\text{{Final Result: }} {sp.latex(res)} + C")
+    except:
+        steps.append(r"\text{Calculated using standard integration techniques.}")
+        steps.append(f"\\text{{Result: }} {sp.latex(sp.integrate(expr, var))} + C")
+    return steps
+
+def get_diff_steps(expr, var, level):
+    steps = []
+    # 단순 미분 분해
+    if level >= 1:
+        steps.append(f"\\text{{Step 1: Differentiate }}{sp.latex(expr)}\\text{{ with respect to }}{sp.latex(var)}")
+    
+    if expr.is_Add:
+        if level >= 2:
+            steps.append(r"\text{Apply Sum Rule: } (f+g)' = f' + g'")
+        if level >= 3:
+            for arg in expr.args:
+                steps.append(f"\\text{{- Term: }}{sp.latex(arg)} \\to {sp.latex(sp.diff(arg, var))}")
+    elif expr.is_Mul:
+        if level >= 2:
+            steps.append(r"\text{Apply Product Rule: } (uv)' = u'v + uv'")
+            
+    res = sp.diff(expr, var)
+    steps.append(f"\\text{{Final Result: }} {sp.latex(res)}")
+    return steps
 
 def op_diff(expr, args):
     """다변수 편미분 및 일반 미분 처리 [cite: 32]"""
@@ -597,9 +739,14 @@ def execute_calc(parsed_json_str):
             # ... (기존 ODE 로직)
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
+            ode_args = sub_cmds.copy()
             for p in parts:
-                if p.strip():
-                    preprocessed = preprocess_latex_ode(p.strip())
+                p_strip = p.strip()
+                if not p_strip: continue
+                if 'ic=' in p_strip:
+                    ode_args.append(p_strip)
+                else:
+                    preprocessed = preprocess_latex_ode(p_strip)
                     # [Pre-process for Gamma and other functions]
                     # \Gamma{\left(z \right)} -> \Gamma(z)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', preprocessed)
@@ -629,7 +776,7 @@ def execute_calc(parsed_json_str):
                 result = sp.dsolve(fixed_exprs, funcs)
             else:
                 # 단일 미분방정식 처리
-                result = op_ode(exprs[0], sub_cmds)
+                result = op_ode(exprs[0], ode_args)
         else:
             # 2. 일반 수식 파싱
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
@@ -683,9 +830,19 @@ def execute_calc(parsed_json_str):
 
         if step_level > 0:
             # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공) [cite: 46, 145]
-            steps.append(r"\text{Step 1: Parse input LaTeX}")
-            steps.append(r"\text{Step 2: Apply " + action + r" operation}")
-            steps.append(final_latex)
+            if action == "solve":
+                var = sp.Symbol(vars_list[0]) if vars_list else sp.Symbol('x')
+                steps = get_solve_steps(expr, var, step_level)
+            elif action == "int":
+                var = sp.Symbol(vars_list[0]) if vars_list else sp.Symbol('x')
+                steps = get_int_steps(expr, var, step_level)
+            elif action == "diff":
+                var = sp.Symbol(vars_list[0]) if vars_list else sp.Symbol('x')
+                steps = get_diff_steps(expr, var, step_level)
+            else:
+                steps.append(r"\text{Step 1: Parse input LaTeX}")
+                steps.append(r"\text{Step 2: Apply " + action + r" operation}")
+                steps.append(final_latex)
             
         return json.dumps({
             "status": "success",

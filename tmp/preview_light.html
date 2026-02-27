@@ -178,29 +178,40 @@
                 arrows: { to: { enabled: true, scaleFactor: 0.5 } },
                 color: { color: '#64748b', highlight: '#4f46e5', opacity: 1.0 },
                 width: 1.5,
-                smooth: false // Straight lines as requested
+                smooth: {
+                    enabled: true,
+                    type: 'cubicBezier',
+                    forceDirection: 'none',
+                    roundness: 0.5
+                }
             })));
 
             const options = {
                 physics: {
                     enabled: true,
-                    timestep: 0.4, 
-                    minVelocity: 0.3, 
-                    solver: 'barnesHut',
-                    barnesHut: {
-                        gravitationalConstant: -2500, 
-                        centralGravity: 0.2,
-                        springLength: 160, 
-                        springConstant: 0.05,
-                        damping: 0.35, 
+                    solver: 'forceAtlas2Based',
+                    forceAtlas2Based: {
+                        gravitationalConstant: -150,
+                        centralGravity: 0.01,
+                        springLength: 200,
+                        springConstant: 0.08,
                         avoidOverlap: 1
                     },
                     stabilization: { 
                         enabled: true,
-                        iterations: 2000,
-                        updateInterval: 50,
-                        onlyDynamic: false
+                        iterations: 1000,
+                        updateInterval: 50
                     }
+                },
+                edges: {
+                    smooth: {
+                        enabled: true,
+                        type: 'cubicBezier',
+                        roundness: 0.5
+                    },
+                    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                    color: { color: '#64748b', highlight: '#4f46e5' },
+                    width: 1.5
                 },
                 interaction: { 
                     hover: true, 
