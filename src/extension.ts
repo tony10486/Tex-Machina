@@ -341,7 +341,7 @@ export function activate(context: vscode.ExtensionContext) {
             // 스키마에 따라 필요한 옵션만 추가 (기본값이 선택된 스키마를 덮어쓰지 않도록)
             if (options.scheme === 'preset' && options.preset) {
                 userInput += ` / preset=${options.preset}`;
-            } else if (options.scheme === 'custom' && options.stops) {
+            } else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) {
                 userInput += ` / stops=${options.stops}`;
             }
 

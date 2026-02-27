@@ -280,7 +280,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     color_scheme = "uniform"
     custom_color = "#1a99cc"
     labels = {"x": "x", "y": "y", "z": "z", "font": "SANS"}
-    bg_color = "#1e1e1e"
+    bg_color = "#ffffff"
     
     # 복소수 맵핑 옵션
     complex_mode = "abs_phase" # height_color mapping
@@ -378,7 +378,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # z_range보다 충분히 큰 범위로 클리핑하여 '반듯하게' 잘릴 여지를 줌
     z_margin = (z_range[1] - z_range[0]) * 2
     Z = np.nan_to_num(Z, nan=0.0, posinf=z_range[1] + z_margin, neginf=z_range[0] - z_margin)
-    C_val = np.nan_to_num(C_val, nan=0.0, posinf=np.nanmax(C_val) if not np.all(np.isnan(C_val)) else 1.0, neginf=np.nanmin(C_val) if not np.all(np.isnan(C_val)) else 0.0)
     
     # x3dom 데이터 형식
     points = []
@@ -400,40 +399,50 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     # 색상 계산을 위해 실제 값 범위를 사용 (Z_range가 아닌 데이터의 Z 사용)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        c_min = np.nanmin(C_val)
-        c_max = np.nanmax(C_val)
+        # 무한대/NaN을 제외한 유효한 범위 계산
+        finite_c = C_val[np.isfinite(C_val)]
+        if len(finite_c) > 0:
+            c_min, c_max = np.min(finite_c), np.max(finite_c)
+        else:
+            c_min, c_max = 0.0, 1.0
     c_span = c_max - c_min if c_max != c_min else 1.0
 
+    mag = None
     if color_scheme == "gradient":
         dz_dy, dz_dx = np.gradient(Z, y[1]-y[0], x[1]-x[0])
         mag = np.sqrt(dz_dx**2 + dz_dy**2)
-        m_min, m_max = np.min(mag), np.max(mag)
+        finite_mag = mag[np.isfinite(mag)]
+        if len(finite_mag) > 0:
+            m_min, m_max = np.min(finite_mag), np.max(finite_mag)
+        else:
+            m_min, m_max = 0.0, 1.0
         m_span = m_max - m_min if m_max != m_min else 1.0
 
     # Custom gradient interpolator
     def interpolate_color(val):
         if not color_stops: return get_rgb(custom_color)
+        val = float(val)
+        if np.isnan(val): val = 0.0
         val = max(0.0, min(1.0, val)) # Clamp to [0, 1]
+        
         if val <= color_stops[0][0]: return get_rgb(color_stops[0][1])
         if val >= color_stops[-1][0]: return get_rgb(color_stops[-1][1])
         for i in range(len(color_stops)-1):
             s1, s2 = color_stops[i], color_stops[i+1]
             if s1[0] <= val <= s2[0]:
-                t = (val - s1[0]) / (s2[0] - s1[0])
+                t = (val - s1[0]) / (s2[0] - s1[0]) if s2[0] != s1[0] else 0.0
                 c1, c2 = get_rgb(s1[1]), get_rgb(s2[1])
                 return [c1[j]*(1-t) + c2[j]*t for j in range(3)]
         return get_rgb(custom_color)
 
     # Preset colormap
     cmap = None
-    if color_scheme == "preset" and preset_name:
+    if (color_scheme == "preset" or preset_name) and preset_name:
         try:
-            # Matplotlib 3.5+
             from matplotlib import colormaps
             cmap = colormaps.get_cmap(preset_name)
         except:
             try:
-                # Older Matplotlib
                 cmap = plt.get_cmap(preset_name)
             except:
                 pass
@@ -444,24 +453,32 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             
             if color_scheme == "uniform":
                 colors.append(get_rgb(custom_color))
-            elif color_scheme == "height" or color_scheme == "preset" or color_scheme == "custom":
-                norm = (C_val[i,j] - c_min) / c_span
-                if color_scheme == "custom":
+            elif color_scheme == "gradient":
+                val = mag[i,j]
+                if np.isposinf(val): norm = 1.0
+                elif np.isneginf(val): norm = 0.0
+                else: norm = (val - m_min) / m_span if np.isfinite(val) else 0.5
+                norm = max(0.0, min(1.0, norm))
+                if color_stops:
                     colors.append(interpolate_color(norm))
                 elif cmap:
                     colors.append([float(c) for c in cmap(norm)[:3]])
-                else: # Fallback height: Blue -> Cyan -> Yellow -> Red
-                    # 더 풍부한 기본 높이 그래디언트
-                    colors.append([float(norm), float(0.5 + 0.5*np.sin(norm*np.pi)), float(1.0 - norm)])
-            elif color_scheme == "gradient":
-                norm = (mag[i,j] - m_min) / m_span
-                if color_stops:
-                    colors.append(interpolate_color(norm))
                 else:
                     # 개선된 기본 그래디언트 (경사도에 따른 색상)
                     colors.append([float(0.1 + 0.9*norm), float(0.8 - 0.4*norm), float(0.3 + 0.2*norm)])
-            else:
-                colors.append(get_rgb(custom_color))
+            else: # height, preset, custom
+                val = C_val[i,j]
+                if np.isposinf(val): norm = 1.0
+                elif np.isneginf(val): norm = 0.0
+                else: norm = (val - c_min) / c_span if np.isfinite(val) else 0.5
+                norm = max(0.0, min(1.0, norm))
+                if color_scheme == "custom" or (color_scheme == "height" and color_stops):
+                    colors.append(interpolate_color(norm))
+                elif cmap:
+                    colors.append([float(c) for c in cmap(norm)[:3]])
+                else: # Fallback height
+                    colors.append([float(norm), float(0.5 + 0.5*np.sin(norm*np.pi)), float(1.0 - norm)])
+
 
     # 내보내기 처리 (PDF, PNG, JPG)
     export_content = None

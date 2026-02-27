@@ -107,7 +107,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option>
                     </select></div>
                     <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
-                    <div class="group"><label>Background</label><input type="color" id="bg" value="#1e1e1e"></div>
+                    <div class="group"><label>Background</label><input type="color" id="bg" value="#ffffff"></div>
                     <div class="group"><label>Antialiasing</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
                 </div>
                 <div id="d" class="full controls" style="display:none; border:none; margin:0; padding:0">
@@ -208,7 +208,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const f = x3d_data.labels.font || "SANS";
                         const showAxes = document.getElementById('show-axes').checked;
                         const axStyle = x3d_data.axis_style || "cross";
-                        const skyCol = hexToRgb(x3d_data.bg_color || "#1e1e1e");
+                        const skyCol = hexToRgb(x3d_data.bg_color || "#ffffff");
                         
                         let axesXml = "";
                         if(showAxes && axStyle !== 'none'){
