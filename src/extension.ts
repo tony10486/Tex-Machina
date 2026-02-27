@@ -59,68 +59,76 @@ export function activate(context: vscode.ExtensionContext) {
                     // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
                     provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
 
-                    // [2] 에디터 삽입 로직 (에디터가 활성화되어 있고, 단순 재랜더링이 아닌 경우에만 수행)
-                    // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 삽입 제외
+                    // [2] 에디터 삽입 로직 (에디터가 활성화되어 있는 경우 수행)
+                    // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 일반 삽입 제외
                     const isRerender = currentParallels.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
 
-                    if (currentEditor && currentSelection && !isRerender) {
-                        // 내보내기 모드인 경우 파일 저장 및 Figure 삽입
-                        if (isExportingPdf && response.export_content) {
-                            const exportBuffer = Buffer.from(response.export_content, 'base64');
-                            const imagesDir = path.join(pdfTargetDir, 'images');
-                            const ext = response.export_format || 'pdf';
-                            const filename = `plot_3d.${ext}`;
-                            const exportPath = path.join(imagesDir, filename);
+                    if (currentEditor && currentSelection) {
+                        // 내보내기 모드인 경우 파일 저장 및 Figure 삽입 (isRerender와 상관없이 수행)
+                        if (isExportingPdf) {
+                            if (response.export_content) {
+                                const exportBuffer = Buffer.from(response.export_content, 'base64');
+                                const imagesDir = path.join(pdfTargetDir, 'images');
+                                const ext = response.export_format || 'pdf';
+                                const filename = `plot_3d.${ext}`;
+                                const exportPath = path.join(imagesDir, filename);
 
-                            try {
-                                if (!fs.existsSync(imagesDir)) {
-                                    fs.mkdirSync(imagesDir, { recursive: true });
+                                try {
+                                    if (!fs.existsSync(imagesDir)) {
+                                        fs.mkdirSync(imagesDir, { recursive: true });
+                                    }
+                                    fs.writeFileSync(exportPath, exportBuffer);
+                                    
+                                    // LaTeX Figure 코드 생성 및 삽입
+                                    const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                                    
+                                    await currentEditor.edit(editBuilder => {
+                                        editBuilder.insert(currentSelection!.end, figureCode);
+                                    });
+                                    
+                                    vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
+                                } catch (err: any) {
+                                    vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
+                                } finally {
+                                    isExportingPdf = false;
                                 }
-                                fs.writeFileSync(exportPath, exportBuffer);
-                                
-                                // LaTeX Figure 코드 생성 및 삽입
-                                const figureCode = `\n\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
-                                
-                                await currentEditor.edit(editBuilder => {
-                                    editBuilder.insert(currentSelection!.end, figureCode);
-                                });
-                                
-                                vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
-                            } catch (err: any) {
-                                vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
-                            } finally {
+                                continue;
+                            } else {
+                                // 내보내기 요청이었으나 콘텐츠가 없는 경우 상태 리셋
                                 isExportingPdf = false;
                             }
-                            continue;
                         }
 
-                        const resultLatex = response.latex;
-                        let outputText = "";
+                        // 일반 결과 삽입 (재랜더링이 아닌 경우에만)
+                        if (!isRerender) {
+                            const resultLatex = response.latex;
+                            let outputText = "";
 
-                        if (currentMainCommand === "matrix") {
-                            outputText = resultLatex;
-                        } else if (currentParallels.includes("newline")) {
-                            outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
-                        } else {
-                            outputText = `${currentOriginalText} = ${resultLatex}`;
-                        }
+                            if (currentMainCommand === "matrix") {
+                                outputText = resultLatex;
+                            } else if (currentParallels.includes("newline")) {
+                                outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
+                            } else {
+                                outputText = `${currentOriginalText} = ${resultLatex}`;
+                            }
 
-                        await currentEditor.edit(editBuilder => {
-                            editBuilder.replace(currentSelection!, outputText);
-                        });
-                        
-                        // .dat 파일 생성 처리
-                        if (response.dat_content) {
-                            const texDir = path.dirname(currentEditor.document.uri.fsPath);
-                            const dataDir = path.join(texDir, 'data');
-                            const datFilename = response.dat_filename || 'plot_data.dat';
-                            const datPath = path.join(dataDir, datFilename);
+                            await currentEditor.edit(editBuilder => {
+                                editBuilder.replace(currentSelection!, outputText);
+                            });
+                            
+                            // .dat 파일 생성 처리
+                            if (response.dat_content) {
+                                const texDir = path.dirname(currentEditor.document.uri.fsPath);
+                                const dataDir = path.join(texDir, 'data');
+                                const datFilename = response.dat_filename || 'plot_data.dat';
+                                const datPath = path.join(dataDir, datFilename);
 
-                            if (fs.existsSync(dataDir)) {
-                                try {
-                                    fs.writeFileSync(datPath, response.dat_content);
-                                } catch (err: any) {
-                                    vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                                if (fs.existsSync(dataDir)) {
+                                    try {
+                                        fs.writeFileSync(datPath, response.dat_content);
+                                    } catch (err: any) {
+                                        vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                                    }
                                 }
                             }
                         }
@@ -132,6 +140,7 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 } else if (response.status === 'error') {
                     vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
+                    isExportingPdf = false;
                 }
             } catch (e) {
                 console.error("결과 처리 중 오류:", e, "원본 데이터:", line);
@@ -311,7 +320,8 @@ export function activate(context: vscode.ExtensionContext) {
                     angleUnit: angleUnit,
                     datDensity: datDensity,
                     yMultiplier: yMultiplier,
-                    lineColor: lineColor
+                    lineColor: lineColor,
+                    workspaceDir: path.dirname(editor.document.uri.fsPath)
                 }
             };
 
@@ -359,7 +369,8 @@ export function activate(context: vscode.ExtensionContext) {
             ...parsed,
             config: {
                 angleUnit: config.get('angleUnit', 'deg'),
-                datDensity: config.get('plot.datDensity', 500)
+                datDensity: config.get('plot.datDensity', 500),
+                workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined
             }
         };
 
@@ -421,7 +432,8 @@ export function activate(context: vscode.ExtensionContext) {
             ...parsed,
             config: {
                 angleUnit: config.get('angleUnit', 'deg'),
-                datDensity: config.get('plot.datDensity', 500)
+                datDensity: config.get('plot.datDensity', 500),
+                workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined
             }
         };
 

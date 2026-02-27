@@ -565,7 +565,8 @@ def execute_calc(parsed_json_str):
 
         if action == "plot":
             # Plot 명령도 전용 핸들러에서 직접 파싱 및 처리
-            plot_res = handle_plot(selection, sub_cmds, parallels, config, os.getcwd())
+            workspace_dir = config.get('workspaceDir', os.getcwd())
+            plot_res = handle_plot(selection, sub_cmds, parallels, config, workspace_dir)
             if plot_res.get("status") == "error":
                 return json.dumps(plot_res)
             return json.dumps({
@@ -576,7 +577,9 @@ def execute_calc(parsed_json_str):
                 "warning": plot_res.get("warning"),
                 "dat_content": plot_res.get("dat_content"),
                 "dat_filename": plot_res.get("dat_filename"),
-                "preview_img": plot_res.get("preview_img")
+                "preview_img": plot_res.get("preview_img"),
+                "export_content": plot_res.get("export_content"),
+                "export_format": plot_res.get("export_format")
             })
 
         # 다른 명령어는 선택 영역이 필요함 
