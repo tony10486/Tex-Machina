@@ -6,6 +6,7 @@ import { parseUserCommand } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
 import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
+import { registerMathSplitter } from './core/mathSplitter';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -21,6 +22,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Smart Auto-bracing] 첨자 자동 괄호 기능 등록
     registerAutoBracing(context);
+
+    // [Math Auto-Splitter] 수식 자동 분할 기능 등록
+    registerMathSplitter(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);

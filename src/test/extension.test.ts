@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { parseUserCommand } from '../core/commandParser';
+import { splitMathString } from '../core/mathSplitter';
 
 suite('Extension Test Suite', () => {
 	vscode.window.showInformationMessage('Start all tests.');
@@ -116,5 +117,33 @@ suite('Extension Test Suite', () => {
         
         // Cleanup: close the editor
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Math Splitter: Basic splitting', () => {
+        const input = "$a = b + c + d$";
+        // \begin{align}\n    a &= b \\\\\n    &+ c \\\\\n    &+ d\n\end{align}
+        const expected = "\\begin{align}\n    a &= b \\\\\n    &+ c \\\\\n    &+ d\n\\end{align}";
+        const result = splitMathString(input);
+        assert.strictEqual(result, expected);
+    });
+
+    test('Math Splitter: Respect nesting', () => {
+        const input = "$$f(x) = \\int_{0}^{1} (x+y) dx + C$$";
+        const expected = "\\begin{align}\n    f(x) &= \\int_{0}^{1} (x+y) dx \\\\\n    &+ C\n\\end{align}";
+        const result = splitMathString(input);
+        assert.strictEqual(result, expected);
+    });
+
+    test('Math Splitter: No operators at top level', () => {
+        const input = "$a$";
+        const result = splitMathString(input);
+        assert.strictEqual(result, input);
+    });
+
+    test('Math Splitter: Handle display math \\[ \\]', () => {
+        const input = "\\[x = y + z\\]";
+        const expected = "\\begin{align}\n    x &= y \\\\\n    &+ z\n\\end{align}";
+        const result = splitMathString(input);
+        assert.strictEqual(result, expected);
     });
 });

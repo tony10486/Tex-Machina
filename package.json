@@ -3,7 +3,7 @@
   "publisher": "Tony29028",
   "displayName": "TeX-Machina",
   "description": "Interactive LaTeX assistant with symbolic computation, 3D plotting, and bibliography management.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/honey/tex-machina"
@@ -91,6 +91,10 @@
       {
         "command": "tex-machina.escapeAutoBracing",
         "title": "LaTeX: Escape Auto-bracing"
+      },
+      {
+        "command": "tex-machina.splitMath",
+        "title": "LaTeX: Auto-split Math Formula"
       }
     ],
     "viewsContainers": {
@@ -122,6 +126,12 @@
         "command": "tex-machina.escapeAutoBracing",
         "key": "escape",
         "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !editorHasSelection && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.splitMath",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
   },

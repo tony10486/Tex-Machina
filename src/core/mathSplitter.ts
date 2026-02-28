@@ -1,0 +1,144 @@
+import * as vscode from 'vscode';
+
+/**
+ * [Math Auto-Splitter]
+ * Converts long inline/display math into \begin{align} ... \end{align}
+ * and splits at outermost = or + operators.
+ */
+export function registerMathSplitter(context: vscode.ExtensionContext) {
+    let splitCommand = vscode.commands.registerCommand('tex-machina.splitMath', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { return; }
+
+        const document = editor.document;
+        const selection = editor.selection;
+        let range: vscode.Range;
+        let text: string;
+
+        if (!selection.isEmpty) {
+            range = new vscode.Range(selection.start, selection.end);
+            text = document.getText(range);
+        } else {
+            // No selection: try to find the math environment at cursor
+            const found = findMathAtPos(document, selection.active);
+            if (!found) {
+                vscode.window.showWarningMessage("커서 위치에서 수식을 찾을 수 없습니다.");
+                return;
+            }
+            range = found.range;
+            text = found.text;
+        }
+
+        const result = splitMathString(text);
+        if (result === text) {
+            vscode.window.showInformationMessage("분할할 수 있는 최외곽 = 또는 + 기호가 없습니다.");
+            return;
+        }
+
+        await editor.edit(editBuilder => {
+            editBuilder.replace(range, result);
+        });
+    });
+
+    context.subscriptions.push(splitCommand);
+}
+
+/**
+ * Finds the math environment ($...$, $$...$$, \[...\]) at the given position.
+ */
+function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
+    const text = document.getText();
+    const offset = document.offsetAt(pos);
+
+    // Regex for various math environments (careful with backslashes in regex string)
+    // $$...$$, $...$, \[...\]
+    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\])/g;
+    let match;
+    while ((match = mathRegex.exec(text)) !== null) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (offset >= start && offset <= end) {
+            return {
+                range: new vscode.Range(document.positionAt(start), document.positionAt(end)),
+                text: match[0]
+            };
+        }
+    }
+    return null;
+}
+
+/**
+ * The core logic for splitting math strings.
+ */
+export function splitMathString(text: string): string {
+    // 1. Remove delimiters
+    let inner = text;
+    
+    if (text.startsWith('$$') && text.endsWith('$$')) {
+        inner = text.substring(2, text.length - 2);
+    } else if (text.startsWith('$') && text.endsWith('$')) {
+        inner = text.substring(1, text.length - 1);
+    } else if (text.startsWith('\\\[') && text.endsWith('\\\]')) {
+        inner = text.substring(2, text.length - 2);
+    } else if (text.startsWith('\\[') && text.endsWith('\\]')) {
+        // Handle case where it might be already literal backslashes
+        inner = text.substring(2, text.length - 2);
+    } else {
+        return text;
+    }
+
+    inner = inner.trim();
+
+    // 2. Find outermost = and +
+    const operators: { pos: number, char: string }[] = [];
+    let depth = 0;
+    
+    for (let i = 0; i < inner.length; i++) {
+        const char = inner[i];
+        
+        // Handle braces/brackets/parens
+        if (char === '{' || char === '(' || char === '[') {
+            depth++;
+        } else if (char === '}' || char === ')' || char === ']') {
+            depth--;
+        } else if (inner.substring(i).startsWith('\\left')) {
+            depth++;
+            i += 5; // Skip '\left'
+        } else if (inner.substring(i).startsWith('\\right')) {
+            depth--;
+            i += 6; // Skip '\right'
+        } else if (depth === 0) {
+            if (char === '=' || char === '+') {
+                operators.push({ pos: i, char });
+            }
+        }
+    }
+
+    if (operators.length === 0) {
+        return text;
+    }
+
+    // 3. Build the new align environment
+    let result = "\\begin{align}\n    ";
+    let lastPos = 0;
+
+    for (let i = 0; i < operators.length; i++) {
+        const op = operators[i];
+        const segment = inner.substring(lastPos, op.pos).trim();
+        
+        if (i === 0) {
+            // First segment: LHS & = ...
+            result += `${segment} &${op.char} `;
+        } else {
+            // Subsequent segments: \\ & + ...
+            result += `${segment} \\\\\n    &${op.char} `;
+        }
+        lastPos = op.pos + 1;
+    }
+
+    // Add the final segment
+    result += inner.substring(lastPos).trim();
+    result += "\n\\end{align}";
+
+    return result;
+}
