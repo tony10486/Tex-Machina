@@ -71,6 +71,11 @@
           "type": "string",
           "default": "blue",
           "description": "2D PGFPlots 그래프의 기본 선 색상 (예: blue, red, black, cyan!50!blue)"
+        },
+        "tex-machina.autoBracing.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "스마트 첨자 자동 괄호 (Auto-bracing for Sub/Superscripts) 기능을 활성화합니다. _나 ^ 뒤에 두 글자 이상 입력 시 자동으로 {}로 묶어줍니다."
         }
       }
     },
