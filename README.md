@@ -17,7 +17,14 @@
 - **Sequence Search (`oeis >`)**: Search for number sequences in the OEIS database and insert them into your document.
 - **Smart Citations (`cite >`)**: Search papers by DOI, arXiv ID, or title, and automatically update your `.bib` files and insert `\cite` commands.
 - **Width Analysis**: Analyze LaTeX formula widths to ensure they fit within your document margins.
-
+- **마크다운 문법 지원** : 다음과 같이 마크다운 문법을 latex에서 바로 사용할 수 있습니다.
+  - `#제목#` + 스페이스 → \section{제목}
+  - `##제목##` + 스페이스 → \subsection{제목}
+  - `**텍스트**` + 스페이스 → \textbf{텍스트}
+  - `*텍스트*` + 스페이스 → \textit{텍스트}
+  - `~~텍스트~~` + 스페이스 → \sout{텍스트}
+  - `> 내용` + 스페이스 → \begin{gather} 내용 \end{gather}
+  - `- ...` + 스페이스 → \begin{itemize} \item ... \end{itemize}
 ## Prerequisites
 
 This extension requires **Python 3.x** and several mathematical libraries to perform symbolic calculations and plotting.
