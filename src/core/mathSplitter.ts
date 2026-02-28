@@ -102,6 +102,14 @@ export function splitMathString(text: string): string {
             depth++;
         } else if (char === '}' || char === ')' || char === ']') {
             depth--;
+        } else if (inner.substring(i).startsWith('\\begin')) {
+            depth++;
+            // Skip the word 'begin' to avoid re-matching
+            i += 5;
+        } else if (inner.substring(i).startsWith('\\end')) {
+            depth--;
+            // Skip the word 'end'
+            i += 3;
         } else if (inner.substring(i).startsWith('\\left')) {
             depth++;
             i += 5;

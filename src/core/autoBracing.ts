@@ -57,24 +57,35 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                     continue;
                 }
 
-                const prefix = lineText[charOffsetAfter - 3];
-                const firstChar = lineText[charOffsetAfter - 2];
-                const secondChar = lineText[charOffsetAfter - 1];
+                // Find if there's an unbraced sequence after ^ or _
+                // Look back from current position to find ^ or _
+                let foundPrefix = -1;
+                for (let i = charOffsetAfter - 2; i >= 0; i--) {
+                    if (lineText[i] === '^' || lineText[i] === '_') {
+                        foundPrefix = i;
+                        break;
+                    }
+                    if (lineText[i] === '{' || lineText[i] === '}' || lineText[i] === ' ') {
+                        break;
+                    }
+                }
 
-                // We are looking for something like ^ab or _12
-                if ((prefix === '^' || prefix === '_') && firstChar !== '{' && firstChar !== '}' && firstChar !== ' ') {
-                    if (secondChar !== '{' && secondChar !== '}' && secondChar !== ' ') {
+                if (foundPrefix !== -1) {
+                    const content = lineText.substring(foundPrefix + 1, charOffsetAfter);
+                    const isDelimiter = (c: string) => c === '{' || c === '}' || c === ' ' || c === '^' || c === '_';
+                    
+                    if (content.length >= 2 && !Array.from(content).some(isDelimiter)) {
                         const rangeToReplace = new vscode.Range(
-                            new vscode.Position(line, charOffsetAfter - 2),
+                            new vscode.Position(line, foundPrefix + 1),
                             new vscode.Position(line, charOffsetAfter)
                         );
-                        const bracedText = `{${firstChar}${secondChar}}`;
+                        const bracedText = `{${content}}`;
 
                         await editor.edit(editBuilder => {
                             editBuilder.replace(rangeToReplace, bracedText);
                         }, { undoStopBefore: false, undoStopAfter: false });
 
-                        const newPosition = new vscode.Position(line, charOffsetAfter + 1);
+                        const newPosition = new vscode.Position(line, foundPrefix + 1 + content.length + 1);
                         editor.selection = new vscode.Selection(newPosition, newPosition);
                     }
                 }

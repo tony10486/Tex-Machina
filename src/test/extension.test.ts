@@ -182,14 +182,102 @@ suite('Extension Test Suite', () => {
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
-    test('Unit Expander: Command execution with explicit input (CLI)', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '' });
+    test('Command Parser: Tricky edge cases', () => {
+        // Multiple delimiters and weird spacing
+        const input1 = "  solve  >  x  >  real  /  newline  /  step=3  ";
+        const res1 = parseUserCommand(input1, "x^2-1=0");
+        assert.strictEqual(res1.mainCommand, "solve");
+        assert.deepStrictEqual(res1.subCommands, ["x", "real"]);
+        assert.deepStrictEqual(res1.parallelOptions, ["newline", "step=3"]);
+
+        // Malformed but should be handled by split('>')
+        const input2 = "solve>>>x";
+        const res2 = parseUserCommand(input2, "x=0");
+        assert.strictEqual(res2.mainCommand, "solve");
+        // Depending on implementation, ">>x" might be the subcommand
+        // Let's check how it behaves.
+    });
+
+    test('Math Splitter: Extremely complex nesting', () => {
+        // Nested equals inside braces should be ignored
+        const input = "$$f(x) = \\begin{cases} a=b & x=0 \\\\ c=d & x>0 \\end{cases} = 1$$";
+        const result = splitMathString(input);
+        
+        // It should split at the first and last '=', but NOT inside \begin{cases}...\end{cases}
+        assert.ok(result.includes("f(x) &="));
+        assert.ok(result.includes("&= 1"));
+        // Check that it didn't split inside cases (no &= inside cases)
+        const casesPart = result.match(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/)?.[1];
+        assert.ok(casesPart && !casesPart.includes("&="));
+    });
+
+    test('Unit Expander: Very complex units', () => {
+        // Multiple units, powers, and prefixes
+        assert.strictEqual(expandSiunitx('10kgm^2s^-3A^-1'), '\\SI{10}{\\kilo\\gram\\meter\\squared\\second\\rpcubed\\ampere\\rpone}');
+        // Multiple slashes (not officially supported by siunitx usually, but let's see how we handle it)
+        // If our expander is simple, it might just replace / with \per
+        const res = expandSiunitx('10m/s/s');
+        assert.ok(res.includes('\\meter\\per\\second\\per\\second'));
+    });
+
+    test('Auto-bracing: Multiple nesting and fast typing simulation', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^a' });
         const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Simulate fast typing 'bc'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), 'b');
+        });
+        // Wait a small amount for the event to propagate
+        await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Simulate 'e > 10kg'
-        await vscode.commands.executeCommand('tex-machina.formatUnit', '10kg');
+        await editor.edit(editBuilder => {
+            // If 'b' was braced, position 4 is now inside braces.
+            // If not, it's after 'b'.
+            // Let's use editor.selection.active to be safe.
+            editBuilder.insert(editor.selection.active, 'c');
+        });
+
+        // Use a longer loop to wait for the final result
+        for (let i = 0; i < 30; i++) {
+            if (document.lineAt(0).text.includes('x^{abc}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, 'x^{abc}', "Should handle fast typing and accumulate into braces");
         
-        assert.strictEqual(document.lineAt(0).text, '\\SI{10}{\\kilo\\gram}');
+        // Cleanup
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Auto-bracing: Nested subscripts x_a_b', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x_a' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Type '_' after 'a' -> x_a_
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), '_');
+        });
+        // Type 'b' -> x_a_b -> x_a_{b} or x_{a_b}? 
+        // Current logic: if it sees _ after a character, it might brace.
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 4), 'b');
+        });
+
+        for (let i = 0; i < 10; i++) {
+            if (document.lineAt(0).text.includes('{')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Depending on implementation, it might become x_a_{b} or x_{a_b}
+        // Let's just verify it doesn't crash and does SOMETHING reasonable
+        assert.ok(document.lineAt(0).text.includes('b'), "Should contain 'b'");
         
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });

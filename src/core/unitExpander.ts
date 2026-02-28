@@ -184,12 +184,15 @@ function parseUnitSequence(seq: string): string {
     let remaining = seq.trim();
 
     while (remaining.length > 0) {
-        // Handle powers like ^2
-        const powerMatch = remaining.match(/^\^([0-9]+)/);
+        // Handle powers like ^2, ^-2
+        const powerMatch = remaining.match(/^\^([-]?[0-9]+)/);
         if (powerMatch) {
             const power = powerMatch[1];
             if (power === '2') { result += '\\squared'; }
             else if (power === '3') { result += '\\cubed'; }
+            else if (power === '-1') { result += '\\rpone'; }
+            else if (power === '-2') { result += '\\rpsquared'; }
+            else if (power === '-3') { result += '\\rpcubed'; }
             else { result += `\\tothe{${power}}`; }
             remaining = remaining.substring(powerMatch[0].length).trim();
             continue;

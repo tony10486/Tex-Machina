@@ -4,14 +4,13 @@ import json
 import re
 import os
 
-def op_tensor_expand(expr, args):
+def op_tensor_expand(expr, args, selection=None):
     """
     아인슈타인 합 규약(Einstein summation) 해석 모듈
     문자열 레벨에서 위/아래 반복되는 인덱스를 찾아 Sum 연산으로 치환합니다.
     """
-    # SymPy 객체로 넘어오기 전 원시 LaTeX 문자열을 받아 처리한다고 가정
-    # 예: A_i B^i 형태에서 반복되는 인덱스 i를 찾음
-    raw_str = args[0] if args else str(expr)
+    # SymPy 객체로 넘어오기 전 원시 LaTeX 문자열을 받아 처리
+    raw_str = selection if selection else (args[0] if args else str(expr))
     
     # 1. 아랫첨자(_)와 윗첨자(^) 추출
     lower_indices = re.findall(r'_([a-zA-Z\d])', raw_str)
@@ -27,8 +26,26 @@ def op_tensor_expand(expr, args):
     result = expr
     for idx in dummy_indices:
         idx_sym = sp.Symbol(idx)
-        # 예: 1부터 3까지 합산
-        result = sp.Sum(result, (idx_sym, 1, 3)).doit()
+        # Indexed Symbol 처리: A_i 형태의 심볼들을 찾아 교체용 딕셔너리 생성
+        # SymPy의 Sum은 Symbol('A_i') 내부의 i를 자동으로 인식하지 못하므로 수동 교체 필요
+        def expand_sum(e, i_sym, start, end):
+            sum_res = 0
+            for val in range(start, end + 1):
+                # 1. 일반 변수 i 교체
+                term = e.subs(i_sym, val)
+                # 2. A_i, B_i, A_{i}, B^{i} 형태의 심볼 교체
+                for s in term.free_symbols:
+                    # A_{i} 또는 A_i 형태 매칭
+                    if s.name.endswith('_{' + i_sym.name + '}') or s.name.endswith('_' + i_sym.name):
+                        base = s.name.split('_')[0]
+                        # 교체할 심볼 이름도 일관성 있게 생성
+                        term = term.subs(s, sp.Symbol(f"{base}_{{{val}}}"))
+                    elif s.name == i_sym.name:
+                        term = term.subs(s, val)
+                sum_res += term
+            return sum_res
+
+        result = expand_sum(result, idx_sym, 1, 3)
         
     return result
 
@@ -767,7 +784,7 @@ def get_calc_operations():
         # 8. 물리 / 공학 유틸리티 [cite: 100, 115]
         "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
         "error_prop": lambda x, v, p, c, s: op_error_prop(x, v, p),
-        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v),
+        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v, s),
 
         # 9. 시각화 (Plotting)
         "plot": lambda x, v, p, c, s: handle_plot(s, v, p, c, os.getcwd())
