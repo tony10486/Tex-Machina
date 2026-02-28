@@ -709,7 +709,9 @@ def get_calc_operations():
         "oeis": lambda x, v, p, c, s: handle_oeis(v),
 
         # 1. 기본 대수 및 해석 
-        "simplify": lambda x, v, p, c, s: sp.simplify(x),
+        "calc": lambda x, v, p, c, s: x.doit(),
+        "evaluate": lambda x, v, p, c, s: x.doit(),
+        "simplify": lambda x, v, p, c, s: sp.simplify(x.doit()),
         "expand": lambda x, v, p, c, s: sp.expand(x),
         "factor": lambda x, v, p, c, s: sp.factor(x),
         "solve": lambda x, v, p, c, s: sp.solve(x),
