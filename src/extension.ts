@@ -8,6 +8,7 @@ import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
 import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
+import { registerMarkdownLatex } from './core/markdownLatex';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 
 let pythonProcess: ChildProcess | null = null;
@@ -30,6 +31,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Unit Expander] siunitx 단위 확장 기능 등록
     registerUnitExpander(context);
+
+    // [Markdown Latex] 마크다운 스타일 자동 변환 등록
+    registerMarkdownLatex(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);

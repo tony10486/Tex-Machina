@@ -281,4 +281,165 @@ suite('Extension Test Suite', () => {
         
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
+
+    test('Markdown: **bold** space should become \\textbf{bold} ', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '**bold**' });
+        const editor = await vscode.window.showTextDocument(document);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Type space at the end
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 8), ' ');
+        });
+
+        // Wait for transformation
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text === '\\textbf{bold} ') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, '\\textbf{bold} ', "Text should be converted to \\textbf");
+        
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: - space at start should become itemize environment', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '-' });
+        const editor = await vscode.window.showTextDocument(document);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Type space at the end
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), ' ');
+        });
+
+        // Wait for transformation
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text.includes('\\begin{itemize}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        const text = document.getText();
+        assert.ok(text.includes('\\begin{itemize}'), "Should contain \\begin{itemize}");
+        assert.ok(text.includes('\\item'), "Should contain \\item");
+        assert.ok(text.includes('\\end{itemize}'), "Should contain \\end{itemize}");
+        
+        // Check cursor position: after \item 
+        // line 0: \begin{itemize}
+        // line 1:     \item 
+        // char index should be 10 (4 spaces + \item + 1 space)
+        assert.strictEqual(editor.selection.active.line, 1, "Cursor should be on the second line");
+        assert.strictEqual(editor.selection.active.character, 10, "Cursor should be after \\item ");
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: #Section# space should become \\section{Section}', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '#My Section#' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 12), ' ');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text.includes('\\section{My Section}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.ok(document.lineAt(0).text.includes('\\section{My Section}'));
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: ##Subsection## space should become \\subsection{Subsection}', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '##My Sub##' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 10), ' ');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text.includes('\\subsection{My Sub}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.ok(document.lineAt(0).text.includes('\\subsection{My Sub}'));
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: > Text space should become gather environment', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '> a=b' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 5), ' ');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.getText().includes('\\begin{gather}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        const text = document.getText();
+        assert.ok(text.includes('\\begin{gather}'));
+        assert.ok(text.includes('a=b'));
+        assert.ok(text.includes('\\end{gather}'));
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: *italic* space should become \\textit{italic}', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '*italic*' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 8), ' ');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text.includes('\\textit{italic}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.ok(document.lineAt(0).text.includes('\\textit{italic}'));
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Markdown: ~~strike~~ space should become \\sout{strike}', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '~~strike~~' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 10), ' ');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text.includes('\\sout{strike}')) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.ok(document.lineAt(0).text.includes('\\sout{strike}'));
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
 });
