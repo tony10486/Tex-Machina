@@ -94,6 +94,12 @@ def get_solve_steps(expr, var, level):
 
 def get_int_steps(expr, var, level):
     steps = []
+    # 이미 Integral 객체인 경우 integrand의 단계를 추출
+    if isinstance(expr, sp.Integral):
+        if not var or var in expr.variables:
+            var = expr.variables[0]
+            expr = expr.function
+
     try:
         from sympy.integrals.manualintegrate import integral_steps
         
@@ -160,6 +166,12 @@ def get_int_steps(expr, var, level):
 
 def get_diff_steps(expr, var, level):
     steps = []
+    # 이미 Derivative 객체인 경우 미분 대상 수식을 추출
+    if isinstance(expr, sp.Derivative):
+        if not var or var in expr.variables:
+            var = expr.variables[0]
+            expr = expr.expr
+
     # 단순 미분 분해
     if level >= 1:
         steps.append(f"\\text{{Step 1: Differentiate }}{sp.latex(expr)}\\text{{ with respect to }}{sp.latex(var)}")
@@ -180,6 +192,18 @@ def get_diff_steps(expr, var, level):
 
 def op_diff(expr, args):
     """다변수 편미분 및 일반 미분 처리 [cite: 32]"""
+    # 이미 Derivative 객체인 경우 (LaTeX에 \frac{d}{dx} 등이 포함됨)
+    if isinstance(expr, sp.Derivative):
+        if not args:
+            return expr.doit()
+        # 변수가 명시된 경우, 일단 doit() 한 뒤에 추가 미분을 수행하거나 
+        # 혹은 명시된 변수가 이미 미분 변수에 포함되어 있다면 redundant한 요청으로 보고 doit()만 수행
+        vars_to_diff = [sp.Symbol(v.strip()) for v in args[0].split(',')]
+        if all(v in expr.variables for v in vars_to_diff):
+            return expr.doit()
+        # 그 외의 경우 (예: d/dx 를 선택하고 diff > y 를 호출) doit() 후 새로 미분
+        expr = expr.doit()
+
     # 변수가 명시되지 않으면 첫 번째 자유 변수(알파벳 순)로 미분 [cite: 139]
     if not args:
         symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
@@ -236,6 +260,18 @@ def op_taylor(expr, args, parallels):
 
 def op_int(expr, args):
     """부정적분 및 정적분 처리 [cite: 32]"""
+    # 이미 Integral 객체인 경우 (LaTeX에 \int 가 포함됨)
+    if isinstance(expr, sp.Integral):
+        if not args:
+            return expr.doit()
+        # 사용자가 변수나 구간을 명시한 경우, 기존 적분은 풀고 새로 적용
+        # 단, 명시된 변수가 이미 Integral의 변수에 포함되어 있다면 redundant로 보고 doit()
+        params = [p.strip() for p in args[0].split(',')]
+        var = sp.Symbol(params[0])
+        if var in expr.variables:
+            return expr.doit()
+        expr = expr.doit()
+
     if not args:
         symbols = list(expr.free_symbols)
         return sp.integrate(expr, symbols[0]) if symbols else expr
@@ -249,6 +285,19 @@ def op_int(expr, args):
 
 def op_limit(expr, args):
     """극한 계산: limit > x, 0 또는 limit > x, oo, -"""
+    # 이미 Limit 객체인 경우 (LaTeX에 \lim 이 포함됨)
+    if isinstance(expr, sp.Limit):
+        if not args:
+            return expr.doit()
+        # 사용자가 변수나 대상을 명시한 경우, 기존 극한은 풀고 새로 적용
+        # 단, 명시된 변수와 대상이 이미 Limit의 정보와 같다면 redundant로 보고 doit()
+        params = [p.strip() for p in args[0].split(',')]
+        var = sp.Symbol(params[0])
+        target = sp.sympify(params[1]) if len(params) > 1 else 0
+        if var == expr.variables[0] and target == expr.z0:
+            return expr.doit()
+        expr = expr.doit()
+
     if not args: return expr
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
@@ -926,7 +975,12 @@ def execute_calc(parsed_json_str):
                 # \Gamma{\left(z \right)} -> \Gamma(z)
                 preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', selection)
                 preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
+                
+                # e를 sp.E로 변환하기 위해 parse_latex의 결과를 보정하거나 
+                # 파싱 전에 텍스트 레벨에서 e^... 형태를 변환 시도
                 expr = parse_latex(preprocessed)
+                if sp.Symbol('e') in expr.free_symbols:
+                    expr = expr.subs(sp.Symbol('e'), sp.E)
             
             # 3. 명령어 실행
             ops = get_calc_operations()
