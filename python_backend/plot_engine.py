@@ -790,6 +790,7 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         return {
             "status": "success",
             "latex": final_latex,
+            "expr_latex": f"${sp.latex(expr)}$",
             "vars": [str(s) for s in free_symbols],
             "warning": warning_msg,
             "dat_content": dat_content,

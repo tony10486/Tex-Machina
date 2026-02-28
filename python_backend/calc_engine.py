@@ -838,6 +838,7 @@ def execute_calc(parsed_json_str):
             return json.dumps({
                 "status": "success",
                 "latex": plot_res["latex"],
+                "expr_latex": plot_res.get("expr_latex"),
                 "vars": plot_res.get("vars", []),
                 "x3d_data": plot_res.get("x3d_data"),
                 "warning": plot_res.get("warning"),

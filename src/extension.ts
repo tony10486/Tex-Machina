@@ -143,7 +143,7 @@ export function activate(context: vscode.ExtensionContext) {
                     }
 
                     // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
-                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img);
+                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex);
 
                     // [2] 에디터 삽입 로직 (에디터가 활성화되어 있는 경우 수행)
                     // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 일반 삽입 제외

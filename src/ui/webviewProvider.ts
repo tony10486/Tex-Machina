@@ -28,20 +28,22 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible && this._lastLatex) {
-                this.updatePreview(this._lastLatex, this._lastVars, this._lastAnalysis, this._lastX3dData, this._lastWarning, this._lastPreviewImg);
+                this.updatePreview(this._lastLatex, this._lastVars, this._lastAnalysis, this._lastX3dData, this._lastWarning, this._lastPreviewImg, this._lastExprLatex);
             }
         });
     }
 
     private _lastLatex: string = "";
+    private _lastExprLatex: string = "";
     private _lastVars: string[] = [];
     private _lastAnalysis: any = null;
     private _lastX3dData: any = null;
     private _lastWarning: string = "";
     private _lastPreviewImg: string = "";
 
-    public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string) {
+    public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string, expr_latex?: string) {
         this._lastLatex = latex;
+        this._lastExprLatex = expr_latex || "";
         this._lastVars = vars;
         this._lastAnalysis = analysis;
         this._lastX3dData = x3d_data;
@@ -52,7 +54,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             vscode.commands.executeCommand('tex-machina.preview.focus');
         }
         
-        this._view?.webview.postMessage({ type: 'update', latex, vars, analysis, x3d_data, warning, preview_img });
+        this._view?.webview.postMessage({ type: 'update', latex, vars, analysis, x3d_data, warning, preview_img, expr_latex });
         if (this._view) {
             this._view.show?.(true);
         }
@@ -512,15 +514,19 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     return r + " " + g + " " + b;
                 }
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex, preview_img, warning } = e.data;
+                    const { type, x3d_data, latex, preview_img, warning, expr_latex } = e.data;
                     if (type === 'update') {
-                        let content = latex || "TeX-Machina";
-                        if (latex && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture') && !latex.includes('\\\\begin') && !latex.includes('\\\\left')) {
-                            content = \`$$\${latex}$$\`;
+                        let content = expr_latex || latex || "TeX-Machina";
+                        if (!expr_latex && latex && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture') && !latex.includes('\\\\begin') && !latex.includes('\\\\left')) {
+                            content = '$$' + latex + '$$';
                         }
 
+                        // tikzpicture가 포함된 경우 MathJax 오류를 방지하기 위해 expr_latex가 없으면 내용을 비우거나 대체
+                        if (!expr_latex && content.includes('tikzpicture')) {
+                            content = "Plot Preview";
+                        }
                         if (warning) {
-                            document.getElementById('out').innerHTML = \`<div style="color: #ffa500; margin-bottom: 5px;">⚠️ \\\${warning}</div>\` + content;
+                            document.getElementById('out').innerHTML = '<div style="color: #ffa500; margin-bottom: 5px;">⚠️ ' + warning + '</div>' + content;
                         } else {
                             document.getElementById('out').innerHTML = content;
                         }
