@@ -36,6 +36,9 @@ async function main() {
 		platform: 'node',
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
+		define: {
+			'PACKAGE_VERSION': '"3.2.1"'
+		},
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */

@@ -61,6 +61,10 @@
       {
         "command": "tex-machina.openCLI",
         "title": "Open TeX-Machina CLI"
+      },
+      {
+        "command": "tex-machina.analyzeWidth",
+        "title": "LaTeX: Analyze Formula Width"
       }
     ],
     "viewsContainers": {
@@ -103,6 +107,9 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test"
+  },
+  "dependencies": {
+    "mathjax-full": "^3.2.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.109.0",

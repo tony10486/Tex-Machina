@@ -4,6 +4,7 @@ import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { parseUserCommand } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
+import { performWidthAnalysis } from './core/widthAnalyzer';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -254,7 +255,8 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "matrix >", description: "행렬 생성 및 분석" },
                 { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" },
                 { label: "cite >", description: "논문 인용 (arXiv ID, DOI, 또는 제목)" },
-                { label: "oeis >", description: "OEIS 수열 검색" }
+                { label: "oeis >", description: "OEIS 수열 검색" },
+                { label: "analyze >", description: "문서 및 수식 분석 (너비 등)" }
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
@@ -298,6 +300,9 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "cite > 2109.12345", description: "arXiv ID로 인용 정보 가져오기" },
                 { label: "cite > 10.1038/nature14539", description: "DOI로 인용 정보 가져오기" },
                 { label: "cite > Attention is all you need", description: "제목으로 논문 검색" }
+            ],
+            analyze: [
+                { label: "analyze > width", description: "수식 너비 분석 (문서 너비 초과 여부 확인)" }
             ]
         };
 
@@ -315,6 +320,8 @@ export function activate(context: vscode.ExtensionContext) {
                 quickPick.items = commandLib.plot;
             } else if (value.startsWith("cite >")) {
                 quickPick.items = commandLib.cite;
+            } else if (value.startsWith("analyze >")) {
+                quickPick.items = commandLib.analyze;
             } else if (value === "") {
                 quickPick.items = commandLib.root;
             }
@@ -336,6 +343,12 @@ export function activate(context: vscode.ExtensionContext) {
             quickPick.hide();
 
             if (!userInput) {return;}
+
+            // 특수 커맨드 (분석) 처리
+            if (userInput === "analyze > width") {
+                vscode.commands.executeCommand('tex-machina.analyzeWidth');
+                return;
+            }
 
             // 행렬 명령어일 경우 빈 칸 확인 팝업 (Interactive Popup)
             if (userInput.includes("matrix")) {
@@ -578,6 +591,17 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
     context.subscriptions.push(internalSaveCommand);
+
+    // 8. 수식 너비 분석 커맨드 등록
+    let analyzeWidthCommand = vscode.commands.registerCommand('tex-machina.analyzeWidth', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || !editor.document.fileName.endsWith('.tex')) {
+            vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다.");
+            return;
+        }
+        await performWidthAnalysis(editor.document);
+    });
+    context.subscriptions.push(analyzeWidthCommand);
 }
 
 export function deactivate() {
