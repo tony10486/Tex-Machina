@@ -357,6 +357,16 @@ export function activate(context: vscode.ExtensionContext) {
                 userInput = quickPick.value;
             }
 
+            // [New Fix] 이미 완전한 명령어(예: 'calc')를 입력했을 때 자동완성(' >')이 강제되는 현상 방지
+            // 사용자가 입력한 내용이 선택된 항목의 명령어 그룹(Prefix)과 정확히 일치하면 사용자의 입력을 우선함.
+            if (selected && selected.label.endsWith(" >") && quickPick.value) {
+                const lastGTIndex = selected.label.lastIndexOf(" >");
+                const baseCmd = selected.label.substring(0, lastGTIndex).trim();
+                if (quickPick.value.trim() === baseCmd) {
+                    userInput = quickPick.value.trim();
+                }
+            }
+
             // 만약 끝이 '>'로 끝나면 (그룹 선택), 입력창에 채워주고 계속 진행
             if (userInput.trim().endsWith(">")) {
                 quickPick.value = userInput.trim() + " ";
