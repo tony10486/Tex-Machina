@@ -113,12 +113,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <div id="container"></div>
             <div id="ui" class="controls">
                 <div class="tabs full">
-                    <div class="tab" onclick="tab('s')">Style</div>
-                    <div class="tab" onclick="tab('v')">View</div>
-                    <div class="tab" onclick="tab('d')">Domain</div>
-                    <div class="tab" onclick="tab('l')">Axes</div>
-                    <div class="tab" onclick="tab('light-tab')">Light</div>
-                    <div class="tab" onclick="tab('c')">Complex</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('s')">Style</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('v')">View</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('d')">Domain</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('l')">Axes</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('light-tab')">Light</div>
+                    <div class="tab plot-ui" style="display:none" onclick="tab('c')">Complex</div>
                     <div class="tab active" onclick="tab('t')">Table</div>
                 </div>
                 <div id="t" class="full controls" style="display:grid; border:none; margin:0; padding:0">
@@ -236,11 +236,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         <option value="abs_abs">Abs | Abs</option>
                     </select></div>
                 </div>
-                <div class="btn-row full">
+                <div class="btn-row full plot-btn-row" style="display:none">
                     <button class="secondary" onclick="fitView()">Fit View (Center Graph)</button>
                     <button onclick="apply()">Apply Changes</button>
                 </div>
-                <div class="controls full" style="grid-template-columns: 1fr 1fr 1fr; border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                <div class="controls full plot-btn-row" style="display:none; grid-template-columns: 1fr 1fr 1fr; border: 1px solid #444; padding: 5px; margin-top: 5px;">
                     <div class="group"><label>Preset</label><select id="exp-preset" onchange="setExportPreset()">
                         <option value="custom">Custom</option>
                         <option value="square">Square (1000)</option>
@@ -252,11 +252,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     <div class="group"><label>Height</label><input type="number" id="exp-h" value="600"></div>
                     <div class="group full"><label><input type="checkbox" id="exp-smart" checked> Smart Crop (Remove empty space)</label></div>
                 </div>
-                <div class="btn-row full">
+                <div class="btn-row full plot-btn-row" style="display:none">
                     <button class="secondary" onclick="exportPlot()">Capture Image</button>
                     <select id="exp-fmt" style="width:70px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
                 </div>
-                <div class="btn-row full">
+                <div class="btn-row full plot-btn-row" style="display:none">
                     <button class="secondary" onclick="hqExport()">HQ Export (Matplotlib PDF)</button>
                 </div>
             </div>
@@ -625,7 +625,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
                         if (x3d_data) {
                             last = x3d_data.expr;
-                            // 3D 데이터가 오면 Style 탭 등으로 전환할 수 있지만, 일단 UI는 유지
+                            document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'block');
+                            document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'flex');
+                            
                             const [c, r] = x3d_data.grid_size;
                             const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
                             
@@ -731,8 +733,14 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 setTimeout(updateFromSliders, 200);
                             }
                         } else if (preview_img) {
+                            document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
+                            document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
+                            tab('t');
                             document.getElementById('container').innerHTML = \`<div style="text-align:center; margin-top:10px;"><img src="\${preview_img}" style="max-width:100%; border:1px solid #444;"></div>\`;
                         } else {
+                            document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
+                            document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
+                            tab('t');
                             document.getElementById('container').innerHTML = '';
                         }
                         
