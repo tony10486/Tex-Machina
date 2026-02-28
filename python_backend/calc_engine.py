@@ -257,44 +257,76 @@ def op_limit(expr, args):
     return sp.limit(expr, var, target, dir=direction)
 
 def preprocess_latex_ode(latex_str):
-    r"""\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하고, \prime 등 LaTeX 특수 기호를 정리합니다."""
-    # 1. \prime, \doubleprime 등 처리
+    r"""\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하고, 독립 변수를 추출합니다."""
+    indep = None
+    
+    # 그리스 문자 목록 (백슬래시 포함 여부와 상관없이)
+    greek_pattern = r'\\?(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)'
+    # 단일 알파벳 또는 그리스 문자 (캡처 그룹 포함)
+    var_pattern = r'([a-zA-Z]|' + greek_pattern + r')'
+
+    # 1. 점(dot) 표기법 처리 (보통 t를 독립변수로 함)
+    if r'\ddot' in latex_str or r'\dot' in latex_str:
+        indep = 't'
+        # \ddot{theta} 또는 \ddot theta 처리
+        latex_str = re.sub(r'\\ddot\{' + var_pattern + r'\}', r"\1''", latex_str)
+        latex_str = re.sub(r'\\ddot\s+' + var_pattern, r"\1''", latex_str)
+        latex_str = re.sub(r'\\dot\{' + var_pattern + r'\}', r"\1'", latex_str)
+        latex_str = re.sub(r'\\dot\s+' + var_pattern, r"\1'", latex_str)
+
+    # 2. \prime, \doubleprime 등 처리
     latex_str = latex_str.replace(r'^{\prime\prime}', "''").replace(r'^{\prime}', "'")
     latex_str = latex_str.replace(r'\prime\prime', "''").replace(r'\prime', "'")
     
-    # 2. \frac{d^2y}{dx^2} -> y''
-    latex_str = re.sub(r'\\frac\{d\^(\d+)([a-zA-Z])\}\{d([a-zA-Z])\^\1\}', lambda m: m.group(2) + "'" * int(m.group(1)), latex_str)
-    # 3. \frac{dy}{dx} -> y'
-    latex_str = re.sub(r'\\frac\{d([a-zA-Z])\}\{d([a-zA-Z])\}', r"\1'", latex_str)
-    return latex_str
+    # 3. \frac{d^2y}{dx^2} -> y'' (공백 및 변수 유연하게 대응)
+    def repl_n(m):
+        nonlocal indep
+        indep = m.group(3).replace('\\', '')
+        return m.group(2).replace('\\', '') + "'" * int(m.group(1))
+    
+    # var_pattern이 캡처 그룹을 가지고 있으므로 group 번호 주의 (1: 차수, 2: 종속변수, 3: 독립변수)
+    # \frac{d^2 theta}{dt^2} 등
+    latex_str = re.sub(r'\\frac\{d\^(\d+)\s*' + var_pattern + r'\}\{d' + var_pattern + r'\^\1\}', repl_n, latex_str)
+    
+    # 4. \frac{dy}{dx} -> y' (공백 허용)
+    def repl_1(m):
+        nonlocal indep
+        indep = m.group(2).replace('\\', '')
+        return m.group(1).replace('\\', '') + "'"
+        
+    latex_str = re.sub(r'\\frac\{d' + var_pattern + r'\}\{d' + var_pattern + r'\}', repl_1, latex_str)
+    
+    # 5. 백슬래시 기호 정리 (파서가 theta''를 인식하도록)
+    latex_str = latex_str.replace('\\theta', 'theta').replace('\\phi', 'phi').replace('\\psi', 'psi').replace('\\omega', 'omega')
+    
+    return latex_str, indep
 
 def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     """파싱된 SymPy 수식을 ODE 풀이가 가능한 형태로 변환합니다."""
-    # 0. e를 sp.E로 변환 (상수로 처리하여 독립 변수 오판 방지)
+    # 0. e를 sp.E로 변환
     if sp.Symbol('e') in expr.free_symbols:
         expr = expr.subs(sp.Symbol('e'), sp.E)
 
     # 독립 변수 감지
     if indep_var_name is None:
-        # expr에 이미 Function(dep_var_name)(...)이 있는지 확인
-        # f.func.name이 없을 수 있으므로 getattr 사용 (주로 UndefinedFunction인 경우에만 name이 있음)
         existing_funcs = [f for f in expr.atoms(sp.Function) if getattr(f.func, 'name', None) == dep_var_name]
         if existing_funcs:
-            # 첫 번째 발견된 함수의 인자를 독립 변수로 사용
             args = existing_funcs[0].args
             x = args[0] if args else sp.Symbol('x')
         else:
-            # expr의 모든 자유 변수 중 dep_var_name이 아닌 것 추출
             other_symbols = [s for s in expr.free_symbols if not s.name.startswith(dep_var_name)]
-            # e, pi, I 등 상수 제외
-            other_symbols = [s for s in other_symbols if s.name not in ['e', 'pi', 'I', 'i', 'j']]
+            # e, pi, I 등 수학 상수 및 g, L, k, m, M 등 물리 상수 제외
+            constants = ['e', 'E', 'pi', 'I', 'i', 'j', 'g', 'L', 'k', 'm', 'M', 'G', 'R', 'C']
+            other_symbols = [s for s in other_symbols if s.name not in constants]
             
-            # x, t, s, r 우선순위
-            preferred = [s for s in other_symbols if s.name in ['x', 't', 's', 'r']]
+            # x, t, s, r, tau 등 우선순위
+            preferred_names = ['x', 't', 's', 'r', 'tau', 'z']
+            preferred = [s for s in other_symbols if s.name in preferred_names]
             if preferred:
                 x = preferred[0]
             elif other_symbols:
-                x = sorted(other_symbols, key=lambda s: s.name)[0]
+                # 알파벳 역순으로 하여 보통 x, t 등이 선택되도록 유도 (a, b 보다는)
+                x = sorted(other_symbols, key=lambda s: s.name, reverse=True)[0]
             else:
                 x = sp.Symbol('x')
     else:
@@ -302,7 +334,10 @@ def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
         
     y = sp.Function(dep_var_name)(x)
     
+    # Derivative 객체와 SymPy 심볼(') 모두 처리
     substitutions = {}
+    
+    # 1. 심볼 형태(y', y'') 처리
     for sym in expr.free_symbols:
         name = sym.name
         if name == dep_var_name:
@@ -311,7 +346,30 @@ def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
             order = name.count("'")
             substitutions[sym] = y.diff(x, order)
             
-    return expr.subs(substitutions), y, x
+    # 2. 이미 존재하는 Derivative 객체 보정 (예: \frac{d}{dx}가 직접 파싱된 경우)
+    def fix_derivatives(e):
+        if isinstance(e, sp.Derivative):
+            if getattr(e.expr, 'name', None) == dep_var_name:
+                return e.subs(e.expr, y).subs(e.variables[0], x)
+        return e
+        
+    fixed_expr = expr.subs(substitutions)
+    # Derivative 객체 내부의 변수를 일치시킴 (Symbol 또는 Function 형태 모두 대응)
+    def is_target_deriv(e):
+        if not isinstance(e, sp.Derivative): return False
+        sub_expr = e.expr
+        # theta 형태
+        if getattr(sub_expr, 'name', None) == dep_var_name: return True
+        # theta(t) 형태
+        if hasattr(sub_expr, 'func') and getattr(sub_expr.func, 'name', None) == dep_var_name: return True
+        return False
+
+    fixed_expr = fixed_expr.replace(
+        is_target_deriv,
+        lambda e: y.diff(x, len(e.variables))
+    )
+    
+    return fixed_expr, y, x
 
 def parse_ics(ics_str, y, x):
     """ic=y(0):1,y'(0):0 형태의 초기조건을 파싱합니다."""
@@ -355,33 +413,37 @@ def fix_system_ode(exprs, dep_var_names, indep_var_name='t'):
         
     return fixed_exprs, list(funcs.values()), t
 
-def op_ode(expr, args):
+def op_ode(expr, args, indep_var_name=None):
     """상미분방정식(단일/연립) 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
     # 1. 종속 변수 감지: 프라임(')이 붙은 변수 우선, 그 외 y, u, v, w 등
     symbols_with_primes = [sym for sym in expr.free_symbols if sym.name.endswith("'")]
     if symbols_with_primes:
-        found_vars = {sym.name.rstrip("'") for sym in symbols_with_primes}
+        found_vars = {sym.name.rstrip("'").replace('\\', '') for sym in symbols_with_primes}
     else:
         # expr.atoms(sp.Function) 도 확인 (UndefinedFunction만 추출)
         existing_funcs = [getattr(f.func, 'name', None) for f in expr.atoms(sp.Function) 
                           if isinstance(f.func, sp.core.function.UndefinedFunction)]
-        found_vars = {name for name in existing_funcs if name}
+        found_vars = {name.replace('\\', '') for name in existing_funcs if name}
         
         if not found_vars:
-            potential_dep_vars = ['y', 'u', 'v', 'w', 'z']
-            found_vars = {sym.name for sym in expr.free_symbols if sym.name in potential_dep_vars}
+            # 그리스 문자 포함 확장
+            potential_dep_vars = {'y', 'u', 'v', 'w', 'z', 'theta', 'phi', 'psi', 'eta', 'xi', 'omega'}
+            found_vars = {sym.name.replace('\\', '') for sym in expr.free_symbols if sym.name.replace('\\', '') in potential_dep_vars}
             
     if not found_vars:
         found_vars = {'y'}
             
     # 연립 방정식 처리 (여러 변수가 발견된 경우)
     if len(found_vars) > 1:
-        fixed_exprs, funcs, t = fix_system_ode([expr], list(found_vars))
-        return sp.dsolve(fixed_exprs, funcs)
+        fixed_exprs, funcs, t = fix_system_ode([expr], list(found_vars), indep_var_name or 't')
+        try:
+            return sp.dsolve(fixed_exprs, funcs)
+        except Exception as e:
+            return f"\\text{{System ODE solver failed: }}{sp.latex(str(e))}"
 
     # 단일 방정식 처리
     dep_var = list(found_vars)[0]
-    fixed_expr, y, x = fix_ode_expression(expr, dep_var_name=dep_var)
+    fixed_expr, y, x = fix_ode_expression(expr, dep_var_name=dep_var, indep_var_name=indep_var_name)
     
     ics = {}
     if args:
@@ -391,7 +453,15 @@ def op_ode(expr, args):
                 ics = parse_ics(ics_str, y, x)
                 break
                 
-    return sp.dsolve(fixed_expr, y, ics=ics if ics else None)
+    try:
+        # Eq 객체가 아니면 = 0으로 간주
+        equation = fixed_expr if isinstance(fixed_expr, sp.Equality) else sp.Eq(fixed_expr, 0)
+        return sp.dsolve(equation, y, ics=ics if ics else None)
+    except Exception as e:
+        # 에러 메시지를 정제하여 사용자에게 수학적 한계를 알림
+        err_msg = str(e)
+        expr_latex = sp.latex(equation)
+        return f"\\text{{The ODE solver failed for }} {expr_latex}: {sp.latex(err_msg)}. \\\\ \\text{{This non-linear ODE may not have a closed-form solution.}} \\\\ \\text{{Recommendation: Use 'calc > num_solve' for numerical results.}}"
 
 def op_dimcheck_wrapper(expr, args, parallels, selection):
     """차원 및 단위 검사기 (Dimensional Analysis Check) [cite: 100]"""
@@ -713,6 +783,9 @@ def preprocess_matrix_latex(latex_str):
 
 def execute_calc(parsed_json_str):
     try:
+        from sympy.core.cache import clear_cache
+        clear_cache()
+        
         req = json.loads(parsed_json_str)
         main_cmd = req.get('mainCommand', '').strip()
         sub_cmds = req.get('subCommands', [])
@@ -783,13 +856,15 @@ def execute_calc(parsed_json_str):
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
             ode_args = sub_cmds.copy()
+            detected_indeps = []
             for p in parts:
                 p_strip = p.strip()
                 if not p_strip: continue
                 if 'ic=' in p_strip:
                     ode_args.append(p_strip)
                 else:
-                    preprocessed = preprocess_latex_ode(p_strip)
+                    preprocessed, indep = preprocess_latex_ode(p_strip)
+                    if indep: detected_indeps.append(indep)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', preprocessed)
                     preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
                     exprs.append(parse_latex(preprocessed))
@@ -803,28 +878,34 @@ def execute_calc(parsed_json_str):
             for e in exprs:
                 all_symbols.update(e.free_symbols)
                 # UndefinedFunction(사용자 정의 함수)만 종속 변수 후보로 추출
-                all_funcs.update([getattr(f.func, 'name', None) for f in e.atoms(sp.Function) 
-                                  if isinstance(f.func, sp.core.function.UndefinedFunction)])
-            all_funcs = {name for name in all_funcs if name}
-                
-            # 종속 변수 감지: 프라임 붙은 변수 + y, u, v, w, z
-            potential_dep_vars = {'y', 'u', 'v', 'w', 'z'}
-            found_vars = {sym.name.rstrip("'") for sym in all_symbols if sym.name.endswith("'")}
+                # 이름을 추출할 때 백슬래시 제거하여 일관성 유지
+                for f in e.atoms(sp.Function):
+                    if isinstance(f.func, sp.core.function.UndefinedFunction):
+                        name = getattr(f.func, 'name', None)
+                        if name:
+                            all_funcs.add(name.replace('\\', ''))
+            
+            # 종속 변수 감지: 프라임 붙은 변수 + y, u, v, w, z + 주요 그리스 문자
+            potential_dep_vars = {'y', 'u', 'v', 'w', 'z', 'theta', 'phi', 'psi', 'eta', 'xi', 'omega'}
+            found_vars = {sym.name.rstrip("'").replace('\\', '') for sym in all_symbols if sym.name.endswith("'")}
             found_vars.update(all_funcs)
             # 만약 위에서 아무것도 발견되지 않았다면 기본 후보군에서 검색
             if not found_vars:
-                found_vars.update({sym.name for sym in all_symbols if sym.name in potential_dep_vars})
+                found_vars.update({sym.name.replace('\\', '') for sym in all_symbols if sym.name.replace('\\', '') in potential_dep_vars})
             
+            # 주 독립 변수 결정 (가장 먼저 감지된 것 우선)
+            main_indep = detected_indeps[0] if detected_indeps else None
+
             if len(exprs) > 1 or len(found_vars) > 1:
                 # 연립 미분방정식 처리
                 if not found_vars: found_vars = {'y'}
-                fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars))
+                fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars), main_indep or 't')
                 while len(fixed_exprs) < len(funcs):
                     fixed_exprs.append(sp.Eq(0, 0))
                 result = sp.dsolve(fixed_exprs, funcs)
             else:
                 # 단일 미분방정식 처리
-                result = op_ode(exprs[0], ode_args)
+                result = op_ode(exprs[0], ode_args, indep_var_name=main_indep)
         else:
             # 2. 일반 수식 파싱
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
