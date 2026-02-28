@@ -27,7 +27,7 @@ suite('Webview UI Test Suite', () => {
         provider.resolveWebviewView(mockView);
 
         // UI 항목 존재 여부 검증 (사용자가 요청한 "무슨 항목이 있는지" 확인)
-        assert.ok(capturedHtml.includes("tab('t')"), "Table tab should be present");
+        assert.ok(capturedHtml.includes('id="details-t"'), "Table section (details) should be present");
         assert.ok(capturedHtml.includes('id="table-grid-container"'), "Table grid container should be present");
         assert.ok(capturedHtml.includes('id="tbl-rows"'), "Rows input should be present");
         assert.ok(capturedHtml.includes('id="tbl-cols"'), "Columns input should be present");

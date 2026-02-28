@@ -91,16 +91,58 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             </script>
             <script src="${mathjaxUri}"></script>
             <style>
-                body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; font-size: 13px; }
+                body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 0; font-size: 13px; }
+                #out { padding: 10px; }
+                #container { padding: 0 10px; }
                 x3d { width: 100%; height: 400px; border: 1px solid #444; background: #000; }
-                .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; border-top: 1px solid #444; padding-top: 10px; }
+                .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
                 .group { display: flex; flex-direction: column; }
                 label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
                 input, select { background: #333; color: #eee; border: 1px solid #555; padding: 2px; }
                 .full { grid-column: 1 / span 2; }
-                .tabs { display: flex; gap: 4px; margin-bottom: 5px; }
-                .tab { padding: 4px 8px; cursor: pointer; background: #333; border: 1px solid #444; border-bottom: none; }
-                .tab.active { background: #555; font-weight: bold; }
+
+                /* Collapsible Sections (VS Code Style) */
+                details {
+                    border-top: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(128, 128, 128, 0.2));
+                }
+                details:last-of-type {
+                    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(128, 128, 128, 0.2));
+                }
+                summary {
+                    list-style: none;
+                    padding: 4px 8px;
+                    background-color: var(--vscode-sideBarSectionHeader-background, rgba(128, 128, 128, 0.1));
+                    color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+                    cursor: pointer;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    user-select: none;
+                }
+                summary::-webkit-details-marker {
+                    display: none;
+                }
+                summary:hover {
+                    background-color: var(--vscode-sideBarSectionHeader-backgroundHover, rgba(128, 128, 128, 0.2));
+                }
+                summary::before {
+                    content: '›';
+                    display: inline-block;
+                    width: 16px;
+                    height: 16px;
+                    line-height: 16px;
+                    text-align: center;
+                    transition: transform 0.1s;
+                    margin-right: 4px;
+                    font-size: 14px;
+                    font-weight: normal;
+                }
+                details[open] > summary::before {
+                    transform: rotate(90deg);
+                }
+
                 .btn-row { display: flex; gap: 4px; margin-top: 5px; }
                 button { background: #007acc; color: white; border: none; padding: 6px; cursor: pointer; flex: 1; }
                 button:hover { background: #0062a3; }
@@ -111,136 +153,154 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         <body>
             <div id="out">TeX-Machina</div>
             <div id="container"></div>
-            <div id="ui" class="controls">
-                <div class="tabs full">
-                    <div class="tab plot-ui" style="display:none" onclick="tab('s')">Style</div>
-                    <div class="tab plot-ui" style="display:none" onclick="tab('v')">View</div>
-                    <div class="tab plot-ui" style="display:none" onclick="tab('d')">Domain</div>
-                    <div class="tab plot-ui" style="display:none" onclick="tab('l')">Axes</div>
-                    <div class="tab plot-ui" style="display:none" onclick="tab('light-tab')">Light</div>
-                    <div class="tab plot-ui" style="display:none" onclick="tab('c')">Complex</div>
-                    <div class="tab active" onclick="tab('t')">Table</div>
-                </div>
-                <div id="t" class="full controls" style="display:grid; border:none; margin:0; padding:0">
-                    <div class="group full">
-                        <label>Table Wizard</label>
-                        <div id="table-grid-container" style="display: grid; grid-template-columns: repeat(10, 20px); gap: 2px; margin: 10px 0; border: 1px solid #444; padding: 5px; width: fit-content;">
-                            <!-- Grid cells will be generated by JS -->
+            <div id="ui">
+                <details id="details-t" open>
+                    <summary>Table Wizard</summary>
+                    <div id="t" class="controls" style="display:grid;">
+                        <div class="group full">
+                            <div id="table-grid-container" style="display: grid; grid-template-columns: repeat(10, 20px); gap: 2px; margin: 10px 0; border: 1px solid #444; padding: 5px; width: fit-content;">
+                                <!-- Grid cells will be generated by JS -->
+                            </div>
+                            <div id="table-size-info" style="margin-bottom: 10px;">Size: 0 x 0</div>
                         </div>
-                        <div id="table-size-info" style="margin-bottom: 10px;">Size: 0 x 0</div>
-                    </div>
-                    <div class="group"><label>Rows</label><input type="number" id="tbl-rows" value="3" min="1" max="20"></div>
-                    <div class="group"><label>Cols</label><input type="number" id="tbl-cols" value="3" min="1" max="10"></div>
-                    <div class="group"><label>Alignment</label><select id="tbl-align">
-                        <option value="l">Left</option>
-                        <option value="c" selected>Center</option>
-                        <option value="r">Right</option>
-                    </select></div>
-                    <div class="group"><label><input type="checkbox" id="tbl-border" checked> Borders</label></div>
-                    <div class="group"><label><input type="checkbox" id="tbl-header" checked> Header Row</label></div>
-                    <div class="btn-row full">
-                        <button onclick="insertTable()">Insert Table</button>
-                    </div>
-                </div>
-                <div id="s" class="full controls" style="display:grid; border:none; margin:0; padding:0">
-                    <div class="group"><label>Scheme</label><select id="sch" onchange="toggleScheme()">
-                        <option value="uniform">Uniform</option>
-                        <option value="height">Height</option>
-                        <option value="gradient">Gradient</option>
-                        <option value="preset">Preset</option>
-                        <option value="custom">Custom stops</option>
-                    </select></div>
-                    <div class="group" id="col-grp"><label>Color</label><input type="color" id="col" value="#1a99cc"></div>
-                    <div class="group" id="grad-grp" style="display:none">
-                        <label>Start</label><input type="color" id="col-s" value="#0000ff">
-                        <label>End</label><input type="color" id="col-e" value="#ff0000">
-                    </div>
-                    <div class="group" id="preset-grp" style="display:none"><label>Preset</label><select id="preset">
-                        <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option><option value="mathematica">Mathematica (Z-Blend)</option><option value="Spectral">Spectral</option><option value="cool">Cool</option><option value="hot">Hot</option><option value="terrain">Terrain</option>
-                    </select></div>
-                    <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
-                    <div class="group"><label>Background</label><input type="color" id="bg" value="#ffffff"></div>
-                    <div class="group"><label>Antialiasing</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
-                </div>
-                <div id="v" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>Projection</label><select id="proj" onchange="updateViewpoint()">
-                        <option value="perspective">Perspective</option>
-                        <option value="ortho">Orthographic</option>
-                    </select></div>
-                    <div class="group"><label>Standard Views</label>
-                        <div class="btn-row">
-                            <button class="secondary" onclick="setView('iso')">Iso</button>
-                            <button class="secondary" onclick="setView('top')">Top</button>
-                            <button class="secondary" onclick="setView('front')">Front</button>
-                            <button class="secondary" onclick="setView('side')">Side</button>
+                        <div class="group"><label>Rows</label><input type="number" id="tbl-rows" value="3" min="1" max="20"></div>
+                        <div class="group"><label>Cols</label><input type="number" id="tbl-cols" value="3" min="1" max="10"></div>
+                        <div class="group"><label>Alignment</label><select id="tbl-align">
+                            <option value="l">Left</option>
+                            <option value="c" selected>Center</option>
+                            <option value="r">Right</option>
+                        </select></div>
+                        <div class="group"><label><input type="checkbox" id="tbl-border" checked> Borders</label></div>
+                        <div class="group"><label><input type="checkbox" id="tbl-header" checked> Header Row</label></div>
+                        <div class="btn-row full">
+                            <button onclick="insertTable()">Insert Table</button>
                         </div>
                     </div>
-                    <div class="group full" style="border: 1px solid #444; padding: 5px; margin-top: 5px;">
-                        <label>Rotation & Zoom</label>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-top:5px">
-                            <label style="width: 40px;">Elev</label>
-                            <input type="range" id="rot-elev" min="-90" max="90" value="30" oninput="updateFromSliders()">
-                            <span id="val-elev" style="width: 30px;">30</span>
+                </details>
+
+                <details id="details-s" class="plot-ui" style="display:none">
+                    <summary>Style</summary>
+                    <div id="s" class="controls" style="display:grid;">
+                        <div class="group"><label>Scheme</label><select id="sch" onchange="toggleScheme()">
+                            <option value="uniform">Uniform</option>
+                            <option value="height">Height</option>
+                            <option value="gradient">Gradient</option>
+                            <option value="preset">Preset</option>
+                            <option value="custom">Custom stops</option>
+                        </select></div>
+                        <div class="group" id="col-grp"><label>Color</label><input type="color" id="col" value="#1a99cc"></div>
+                        <div class="group" id="grad-grp" style="display:none">
+                            <label>Start</label><input type="color" id="col-s" value="#0000ff">
+                            <label>End</label><input type="color" id="col-e" value="#ff0000">
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <label style="width: 40px;">Azim</label>
-                            <input type="range" id="rot-azim" min="-180" max="180" value="45" oninput="updateFromSliders()">
-                            <span id="val-azim" style="width: 30px;">45</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <label style="width: 40px;">Zoom</label>
-                            <input type="range" id="zoom" min="5" max="150" value="30" oninput="updateFromSliders()">
-                            <span id="val-zoom" style="width: 30px;">30</span>
-                        </div>
-                        <div class="btn-row" style="margin-top:5px">
-                            <button class="secondary" onclick="alignZ()">Align Z Axis</button>
-                        </div>
+                        <div class="group" id="preset-grp" style="display:none"><label>Preset</label><select id="preset">
+                            <option value="viridis">Viridis</option><option value="magma">Magma</option><option value="plasma">Plasma</option><option value="inferno">Inferno</option><option value="jet">Jet</option><option value="coolwarm">CoolWarm</option><option value="mathematica">Mathematica (Z-Blend)</option><option value="Spectral">Spectral</option><option value="cool">Cool</option><option value="hot">Hot</option><option value="terrain">Terrain</option>
+                        </select></div>
+                        <div class="group" id="stops-grp" style="display:none"><label>Stops (pos:hex,...)</label><input id="stops" value="0:#0000ff,0.5:#00ff00,1:#ff0000"></div>
+                        <div class="group"><label>Background</label><input type="color" id="bg" value="#ffffff"></div>
+                        <div class="group"><label>Antialiasing</label><select id="aa"><option value="true">On</option><option value="false">Off</option></select></div>
                     </div>
-                    <div class="group full"><label><input type="checkbox" id="textbook-mode" onchange="toggleTextbook()"> Textbook Mode (Clean White + Ortho + Iso)</label></div>
-                </div>
-                <div id="light-tab" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>Ambient Intensity</label><input type="range" id="amb-int" min="0" max="1" step="0.05" value="0.3" oninput="updateLights()"></div>
-                    <div class="group"><label>Direct Intensity</label><input type="range" id="dir-int" min="0" max="2" step="0.1" value="1.0" oninput="updateLights()"></div>
-                    <div class="group"><label>Shadow Intensity</label><input type="range" id="shd-int" min="0" max="1" step="0.1" value="0.0" oninput="updateLights()"></div>
-                    <div class="group"><label>Light Position</label><select id="light-pos" onchange="updateLights()">
-                        <option value="top">Top Right</option>
-                        <option value="front">Front</option>
-                        <option value="left">Left High</option>
-                    </select></div>
-                    <div class="group full"><label><input type="checkbox" id="headlight" checked onchange="updateLights()"> Headlight (Camera follow)</label></div>
-                </div>
-                <div id="d" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>X Range</label><input id="xr" value="-5,5"></div>
-                    <div class="group"><label>Y Range</label><input id="yr" value="-5,5"></div>
-                    <div class="group"><label>Z Range</label><input id="zr" value="-15,15"></div>
-                    <div class="group"><label>Res</label><input type="number" id="res" value="50"></div>
-                </div>
-                <div id="l" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group"><label>X Label</label><input id="xl" value="x"></div>
-                    <div class="group"><label>Y Label</label><input id="yl" value="y"></div>
-                    <div class="group"><label>Z Label</label><input id="zl" value="z"></div>
-                    <div class="group"><label>Axis Style</label><select id="ax-style">
-                        <option value="cross">Cross (Origin)</option>
-                        <option value="box">Box (Bounds)</option>
-                        <option value="arrows">Arrows</option>
-                        <option value="none">None</option>
-                    </select></div>
-                    <div class="group"><label>Font</label><select id="f"><option value="SANS">Sans</option><option value="SERIF">Serif</option><option value="TYPEWRITER">Typewriter</option></select></div>
-                    <div class="group full"><label><input type="checkbox" id="show-axes" checked> Show Axes Lines</label></div>
-                </div>
-                <div id="c" class="full controls" style="display:none; border:none; margin:0; padding:0">
-                    <div class="group full"><label>Complex Mapping (Height | Color)</label><select id="cm">
-                        <option value="abs_phase">Abs | Phase</option>
-                        <option value="real_imag">Real | Imag</option>
-                        <option value="imag_real">Imag | Real</option>
-                        <option value="abs_abs">Abs | Abs</option>
-                    </select></div>
-                </div>
-                <div class="btn-row full plot-btn-row" style="display:none">
-                    <button class="secondary" onclick="fitView()">Fit View (Center Graph)</button>
+                </details>
+
+                <details id="details-v" class="plot-ui" style="display:none">
+                    <summary>View</summary>
+                    <div id="v" class="controls" style="display:grid;">
+                        <div class="group"><label>Projection</label><select id="proj" onchange="updateViewpoint()">
+                            <option value="perspective">Perspective</option>
+                            <option value="ortho">Orthographic</option>
+                        </select></div>
+                        <div class="group"><label>Standard Views</label>
+                            <div class="btn-row">
+                                <button class="secondary" onclick="setView('iso')">Iso</button>
+                                <button class="secondary" onclick="setView('top')">Top</button>
+                                <button class="secondary" onclick="setView('front')">Front</button>
+                                <button class="secondary" onclick="setView('side')">Side</button>
+                            </div>
+                        </div>
+                        <div class="group full" style="border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                            <label>Rotation & Zoom</label>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top:5px">
+                                <label style="width: 40px;">Elev</label>
+                                <input type="range" id="rot-elev" min="-90" max="90" value="30" oninput="updateFromSliders()">
+                                <span id="val-elev" style="width: 30px;">30</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="width: 40px;">Azim</label>
+                                <input type="range" id="rot-azim" min="-180" max="180" value="45" oninput="updateFromSliders()">
+                                <span id="val-azim" style="width: 30px;">45</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="width: 40px;">Zoom</label>
+                                <input type="range" id="zoom" min="5" max="150" value="30" oninput="updateFromSliders()">
+                                <span id="val-zoom" style="width: 30px;">30</span>
+                            </div>
+                            <div class="btn-row" style="margin-top:5px">
+                                <button class="secondary" onclick="alignZ()">Align Z Axis</button>
+                            </div>
+                        </div>
+                        <div class="group full"><label><input type="checkbox" id="textbook-mode" onchange="toggleTextbook()"> Textbook Mode</label></div>
+                    </div>
+                </details>
+
+                <details id="details-l" class="plot-ui" style="display:none">
+                    <summary>Axes</summary>
+                    <div id="l" class="controls" style="display:grid;">
+                        <div class="group"><label>X Label</label><input id="xl" value="x"></div>
+                        <div class="group"><label>Y Label</label><input id="yl" value="y"></div>
+                        <div class="group"><label>Z Label</label><input id="zl" value="z"></div>
+                        <div class="group"><label>Axis Style</label><select id="ax-style">
+                            <option value="cross">Cross (Origin)</option>
+                            <option value="box">Box (Bounds)</option>
+                            <option value="arrows">Arrows</option>
+                            <option value="none">None</option>
+                        </select></div>
+                        <div class="group"><label>Font</label><select id="f"><option value="SANS">Sans</option><option value="SERIF">Serif</option><option value="TYPEWRITER">Typewriter</option></select></div>
+                        <div class="group full"><label><input type="checkbox" id="show-axes" checked> Show Axes Lines</label></div>
+                    </div>
+                </details>
+
+                <details id="details-d" class="plot-ui" style="display:none">
+                    <summary>Domain</summary>
+                    <div id="d" class="controls" style="display:grid;">
+                        <div class="group"><label>X Range</label><input id="xr" value="-5,5"></div>
+                        <div class="group"><label>Y Range</label><input id="yr" value="-5,5"></div>
+                        <div class="group"><label>Z Range</label><input id="zr" value="-15,15"></div>
+                        <div class="group"><label>Res</label><input type="number" id="res" value="50"></div>
+                    </div>
+                </details>
+
+                <details id="details-light" class="plot-ui" style="display:none">
+                    <summary>Light</summary>
+                    <div id="light-tab" class="controls" style="display:grid;">
+                        <div class="group"><label>Ambient Intensity</label><input type="range" id="amb-int" min="0" max="1" step="0.05" value="0.3" oninput="updateLights()"></div>
+                        <div class="group"><label>Direct Intensity</label><input type="range" id="dir-int" min="0" max="2" step="0.1" value="1.0" oninput="updateLights()"></div>
+                        <div class="group"><label>Shadow Intensity</label><input type="range" id="shd-int" min="0" max="1" step="0.1" value="0.0" oninput="updateLights()"></div>
+                        <div class="group"><label>Light Position</label><select id="light-pos" onchange="updateLights()">
+                            <option value="top">Top Right</option>
+                            <option value="front">Front</option>
+                            <option value="left">Left High</option>
+                        </select></div>
+                        <div class="group full"><label><input type="checkbox" id="headlight" checked onchange="updateLights()"> Headlight</label></div>
+                    </div>
+                </details>
+
+                <details id="details-c" class="plot-ui" style="display:none">
+                    <summary>Complex Mapping</summary>
+                    <div id="c" class="controls" style="display:grid;">
+                        <div class="group full"><label>Complex Mapping (Height | Color)</label><select id="cm">
+                            <option value="abs_phase">Abs | Phase</option>
+                            <option value="real_imag">Real | Imag</option>
+                            <option value="imag_real">Imag | Real</option>
+                            <option value="abs_abs">Abs | Abs</option>
+                        </select></div>
+                    </div>
+                </details>
+
+                <div class="btn-row full plot-btn-row" style="display:none; padding: 10px;">
+                    <button class="secondary" onclick="fitView()">Fit View</button>
                     <button onclick="apply()">Apply Changes</button>
                 </div>
-                <div class="controls full plot-btn-row" style="display:none; grid-template-columns: 1fr 1fr 1fr; border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                <div class="controls full plot-btn-row" style="display:none; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #444; margin-top: 5px;">
                     <div class="group"><label>Preset</label><select id="exp-preset" onchange="setExportPreset()">
                         <option value="custom">Custom</option>
                         <option value="square">Square (1000)</option>
@@ -250,13 +310,13 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     </select></div>
                     <div class="group"><label>Width</label><input type="number" id="exp-w" value="800"></div>
                     <div class="group"><label>Height</label><input type="number" id="exp-h" value="600"></div>
-                    <div class="group full"><label><input type="checkbox" id="exp-smart" checked> Smart Crop (Remove empty space)</label></div>
+                    <div class="group full"><label><input type="checkbox" id="exp-smart" checked> Smart Crop</label></div>
                 </div>
-                <div class="btn-row full plot-btn-row" style="display:none">
+                <div class="btn-row full plot-btn-row" style="display:none; padding: 0 10px 10px 10px;">
                     <button class="secondary" onclick="exportPlot()">Capture Image</button>
                     <select id="exp-fmt" style="width:70px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
                 </div>
-                <div class="btn-row full plot-btn-row" style="display:none">
+                <div class="btn-row full plot-btn-row" style="display:none; padding: 0 10px 10px 10px;">
                     <button class="secondary" onclick="hqExport()">HQ Export (Matplotlib PDF)</button>
                 </div>
             </div>
@@ -271,18 +331,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         options: { ...getOptions(), export: 'pdf' }
                     });
                 }
-                function tab(n){
-                    ['s','v','d','l','c','light-tab','t'].forEach(t => {
-                        const el = document.getElementById(t);
-                        if (el) el.style.display = t===n?'grid':'none';
-                    });
-                    document.querySelectorAll('.tab').forEach(t => {
-                        const onclick = t.getAttribute('onclick');
-                        if (onclick) {
-                            t.classList.toggle('active', onclick.includes("'"+n+"'"));
-                        }
-                    });
-                }
+
 
                 // Table Wizard Logic
                 const gridContainer = document.getElementById('table-grid-container');
@@ -735,12 +784,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         } else if (preview_img) {
                             document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
                             document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
-                            tab('t');
+                            document.getElementById('details-t').open = true;
                             document.getElementById('container').innerHTML = \`<div style="text-align:center; margin-top:10px;"><img src="\${preview_img}" style="max-width:100%; border:1px solid #444;"></div>\`;
                         } else {
                             document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
                             document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
-                            tab('t');
+                            document.getElementById('details-t').open = true;
                             document.getElementById('container').innerHTML = '';
                         }
                         
