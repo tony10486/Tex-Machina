@@ -343,9 +343,17 @@ export function activate(context: vscode.ExtensionContext) {
             const selected = quickPick.selectedItems[0];
             let userInput = selected ? selected.label : quickPick.value;
             
+            // [Bug Fix] 사용자가 선택 항목보다 더 길게 타이핑했다면 (예: 데이터 입력), 타이핑한 내용을 우선함.
+            // 이는 자동완성 후 추가 입력 시 이전 선택 항목(Prefix)으로 롤백되는 현상을 방지함.
+            if (selected && quickPick.value.length > selected.label.length) {
+                userInput = quickPick.value;
+            }
+
             // 만약 끝이 '>'로 끝나면 (그룹 선택), 입력창에 채워주고 계속 진행
-            if (userInput.endsWith(">")) {
-                quickPick.value = userInput + " ";
+            if (userInput.trim().endsWith(">")) {
+                quickPick.value = userInput.trim() + " ";
+                // 다음 단계 필터링을 위해 선택 상태 초기화
+                quickPick.selectedItems = [];
                 return;
             }
 
