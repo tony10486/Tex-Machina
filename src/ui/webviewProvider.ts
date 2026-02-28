@@ -517,7 +517,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     const { type, x3d_data, latex, preview_img, warning, expr_latex } = e.data;
                     if (type === 'update') {
                         let content = expr_latex || latex || "TeX-Machina";
-                        if (!expr_latex && latex && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture') && !latex.includes('\\\\begin') && !latex.includes('\\\\left')) {
+                        if (!expr_latex && latex && latex !== "TeX-Machina" && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture')) {
                             content = '$$' + latex + '$$';
                         }
 

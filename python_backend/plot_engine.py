@@ -33,9 +33,9 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
         # 1. 기본적인 LaTeX 명령어 보정
         # \Gamma{\left(z \right)} -> \Gamma(z) 형태로 변환 (parse_latex가 Mul로 오인하는 것 방지)
         # 모든 그리스 문자나 함수 이름 뒤의 {\left( ... \right)} 패턴을 찾아 (...)로 치환
-        processed_latex = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', processed_latex)
+        processed_latex = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', processed_latex)
         # \left( ... \right) 만 있는 경우도 보정
-        processed_latex = processed_latex.replace(r'\left(', '(').replace(r'\right)', ')')
+        processed_latex = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', processed_latex)
         # \text{gamma} -> gamma 변환
         processed_latex = re.sub(r'\\text\{([a-zA-Z]+)\}', r'\1', processed_latex)
         

@@ -917,8 +917,8 @@ def execute_calc(parsed_json_str):
                 else:
                     preprocessed, indep = preprocess_latex_ode(p_strip)
                     if indep: detected_indeps.append(indep)
-                    preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', preprocessed)
-                    preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
+                    preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', preprocessed)
+                    preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
                     exprs.append(parse_latex(preprocessed))
             
             if not exprs:
@@ -975,8 +975,8 @@ def execute_calc(parsed_json_str):
             else:
                 # [Pre-process for Gamma and other functions]
                 # \Gamma{\left(z \right)} -> \Gamma(z)
-                preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', selection)
-                preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
+                preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', selection)
+                preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
                 
                 # e를 sp.E로 변환하기 위해 parse_latex의 결과를 보정하거나 
                 # 파싱 전에 텍스트 레벨에서 e^... 형태를 변환 시도
