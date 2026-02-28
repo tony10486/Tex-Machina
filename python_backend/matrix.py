@@ -258,6 +258,15 @@ def handle_matrix(sub_cmds, parallels, config=None):
                             matrix_data[i][j] = "0"
                             continue
                         
+                        # [Bug Fix] 사용자 요청: 맨 위/아래 줄은 \cdots, 양 옆 줄은 \vdots 우선 적용
+                        if fill_dots:
+                            if i == 0 or i == rows - 1:
+                                matrix_data[i][j] = r"\cdots"
+                                continue
+                            if j == 0 or j == cols - 1:
+                                matrix_data[i][j] = r"\vdots"
+                                continue
+
                         has_up = any(is_real_val(matrix_data[k][j]) for k in range(i))
                         has_down = any(is_real_val(matrix_data[k][j]) for k in range(i+1, rows))
                         has_left = any(is_real_val(matrix_data[i][k]) for k in range(j))
