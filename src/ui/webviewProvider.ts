@@ -28,7 +28,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible && this._lastLatex) {
-                this.updatePreview(this._lastLatex, this._lastVars);
+                this.updatePreview(this._lastLatex, this._lastVars, this._lastAnalysis, this._lastX3dData, this._lastWarning, this._lastPreviewImg);
             }
         });
     }
@@ -37,12 +37,16 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     private _lastVars: string[] = [];
     private _lastAnalysis: any = null;
     private _lastX3dData: any = null;
+    private _lastWarning: string = "";
+    private _lastPreviewImg: string = "";
 
     public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string) {
         this._lastLatex = latex;
         this._lastVars = vars;
         this._lastAnalysis = analysis;
         this._lastX3dData = x3d_data;
+        this._lastWarning = warning || "";
+        this._lastPreviewImg = preview_img || "";
         
         if (!this._view) {
             vscode.commands.executeCommand('tex-machina.preview.focus');
@@ -235,8 +239,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 function alignZ() {
-                    // Set elevation to 0 if it was negative, or maintain if positive
-                    // Azimuth is kept. This makes the Z axis (scene Y) look "up"
                     updateFromSliders();
                 }
 
@@ -252,7 +254,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     const e = elev * Math.PI / 180;
                     const a = azim * Math.PI / 180;
                     
-                    // Calculate position on a sphere centered at (0,0,0)
                     const x = zoom * Math.cos(e) * Math.sin(a);
                     const y = zoom * Math.sin(e);
                     const z = zoom * Math.cos(e) * Math.cos(a);
@@ -262,12 +263,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     
                     vp.setAttribute('position', \`\${x} \${y} \${z}\`);
                     
-                    // Calculate orientation (axis-angle) to look at origin with Y-up
-                    // We rotate by Azim around Y, then by Elev around LOCAL X.
                     const s_a = Math.sin(a/2), c_a = Math.cos(a/2);
                     const s_e = Math.sin(-e/2), c_e = Math.cos(-e/2);
                     
-                    // Quaternion multiplication for Y-rotation then X-rotation
                     const qx = c_a * s_e;
                     const qy = s_a * c_e;
                     const qz = -s_a * s_e;
@@ -284,10 +282,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     
                     vp.setAttribute('orientation', \`\${axisX} \${axisY} \${axisZ} \${angle}\`);
                     
-                    // Handle Zoom for OrthoViewpoint via fieldOfView
                     if (vp.tagName.toLowerCase() === 'orthoviewpoint') {
-                        const aspect = 1.0; 
-                        const size = zoom * 0.4; // Scale zoom for ortho view
+                        const size = zoom * 0.4;
                         vp.setAttribute('fieldOfView', \`\${-size} \${-size} \${size} \${size}\`);
                     }
                     vp.setAttribute('set_bind', 'true');
@@ -299,7 +295,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         document.getElementById('rot-azim').value = 45;
                         document.getElementById('zoom').value = 28;
                     } else if (type === 'top') {
-                        document.getElementById('rot-elev').value = 89; // Avoid gimbal lock at 90
+                        document.getElementById('rot-elev').value = 89;
                         document.getElementById('rot-azim').value = 0;
                         document.getElementById('zoom').value = 28;
                     } else if (type === 'front') {
@@ -363,7 +359,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         document.getElementById('aa').value = "true";
                         document.getElementById('ax-style').value = "box";
                         document.getElementById('f').value = "SERIF";
-                        // Optimized light for white background
                         document.getElementById('amb-int').value = "0.6";
                         document.getElementById('dir-int').value = "0.8";
                         document.getElementById('shd-int').value = "0.15";
@@ -502,116 +497,129 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     return r + " " + g + " " + b;
                 }
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex } = e.data;
-                    if (type === 'update' && x3d_data) {
-                        last = x3d_data.expr;
-                        document.getElementById('ui').style.display = 'grid';
-                        const [c, r] = x3d_data.grid_size;
-                        const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
-                        
-                        document.getElementById('res').value = c;
-                        document.getElementById('xr').value = rx.join(',');
-                        document.getElementById('yr').value = ry.join(',');
-                        document.getElementById('zr').value = rz.join(',');
-                        
-                        if (x3d_data.bg_color) document.getElementById('bg').value = x3d_data.bg_color;
-                        if (x3d_data.axis_style) document.getElementById('ax-style').value = x3d_data.axis_style;
-                        
-                        if (x3d_data.color_scheme) {
-                            document.getElementById('sch').value = x3d_data.color_scheme;
-                            toggleScheme();
-                        }
-                        if (x3d_data.preset_name) document.getElementById('preset').value = x3d_data.preset_name;
-                        if (x3d_data.complex_mode) document.getElementById('cm').value = x3d_data.complex_mode;
-
-                        if (x3d_data.labels) {
-                            if (x3d_data.labels.x) document.getElementById('xl').value = x3d_data.labels.x;
-                            if (x3d_data.labels.y) document.getElementById('yl').value = x3d_data.labels.y;
-                            if (x3d_data.labels.z) document.getElementById('zl').value = x3d_data.labels.z;
+                    const { type, x3d_data, latex, preview_img, warning } = e.data;
+                    if (type === 'update') {
+                        if (warning) {
+                            document.getElementById('out').innerHTML = \`<div style="color: #ffa500; margin-bottom: 5px;">⚠️ \${warning}</div>\` + (latex || "");
+                        } else {
+                            document.getElementById('out').innerHTML = latex || "TeX-Machina";
                         }
 
-                        const idx = [];
-                        for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
-                        
-                        const aa = document.getElementById('aa').value;
-                        const f = x3d_data.labels.font || "SANS";
-                        const showAxes = document.getElementById('show-axes').checked;
-                        const axStyle = x3d_data.axis_style || "cross";
-                        const skyCol = hexToRgb(x3d_data.bg_color || "#ffffff");
-                        
-                        const ambInt = document.getElementById('amb-int').value;
-                        const dirInt = document.getElementById('dir-int').value;
-                        const shdInt = document.getElementById('shd-int').value;
-                        const head = document.getElementById('headlight').checked ? 'true' : 'false';
-
-                        let axesXml = "";
-                        if(showAxes && axStyle !== 'none'){
-                            if(axStyle === 'cross' || axStyle === 'arrows'){
-                                axesXml = \`
-                                    <transform>
-                                        <shape>
-                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="1 0 0"></material></appearance>
-                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="\${rx[0]} 0 0 \${rx[1]} 0 0"></coordinate></indexedlineset>
-                                        </shape>
-                                        <shape>
-                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 1 0"></material></appearance>
-                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="0 \${ry[0]} 0 0 \${ry[1]} 0"></coordinate></indexedlineset>
-                                        </shape>
-                                        <shape>
-                                            <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 0 1"></material></appearance>
-                                            <indexedlineset coordIndex="0 1 -1"><coordinate point="0 0 \${rz[0]} 0 0 \${rz[1]}"></coordinate></indexedlineset>
-                                        </shape>
-                                    </transform>\`;
-                                if(axStyle === 'arrows'){
-                                    axesXml += \`
-                                        <transform translation="\${rx[1]} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 0 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
-                                        <transform translation="0 \${ry[1]} 0"><shape><appearance><material diffuseColor="0 1 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
-                                        <transform translation="0 0 \${rz[1]}" rotation="1 0 0 1.57"><shape><appearance><material diffuseColor="0 0 1"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>\`;
-                                }
-                            } else if(axStyle === 'box'){
-                                axesXml = \`
-                                    <transform>
-                                        <shape>
-                                            <appearance><lineproperties linewidth="1"></lineproperties><material emissiveColor="0.6 0.6 0.6"></material></appearance>
-                                            <indexedlineset coordIndex="0 1 2 3 0 -1 4 5 6 7 4 -1 0 4 -1 1 5 -1 2 6 -1 3 7 -1">
-                                                <coordinate point="\${rx[0]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[1]} \${rz[1]} \${rx[0]} \${ry[1]} \${rz[1]}"></coordinate>
-                                            </indexedlineset>
-                                        </shape>
-                                    </transform>\`;
+                        if (x3d_data) {
+                            last = x3d_data.expr;
+                            document.getElementById('ui').style.display = 'grid';
+                            const [c, r] = x3d_data.grid_size;
+                            const rx = x3d_data.ranges.x, ry = x3d_data.ranges.y, rz = x3d_data.ranges.z;
+                            
+                            document.getElementById('res').value = c;
+                            document.getElementById('xr').value = rx.join(',');
+                            document.getElementById('yr').value = ry.join(',');
+                            document.getElementById('zr').value = rz.join(',');
+                            
+                            if (x3d_data.bg_color) document.getElementById('bg').value = x3d_data.bg_color;
+                            if (x3d_data.axis_style) document.getElementById('ax-style').value = x3d_data.axis_style;
+                            
+                            if (x3d_data.color_scheme) {
+                                document.getElementById('sch').value = x3d_data.color_scheme;
+                                toggleScheme();
                             }
-                        }
+                            if (x3d_data.preset_name) document.getElementById('preset').value = x3d_data.preset_name;
+                            if (x3d_data.complex_mode) document.getElementById('cm').value = x3d_data.complex_mode;
 
-                        document.getElementById('container').innerHTML = \`
-                            <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
-                                <scene>
-                                    <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
-                                    <directionalLight id="dir-light" direction="-1 -1 -1" intensity="\${dirInt}" shadowIntensity="\${shdInt}" shadowMapSize="1024"></directionalLight>
-                                    <ambientLight id="amb-light" intensity="\${ambInt}"></ambientLight>
-                                    <\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')} id="vp" position="0 15 15" orientation="1 0 0 -0.785" \${(document.getElementById('proj').value === 'ortho' ? 'fieldOfView="-5 -5 5 5"' : '')}></\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')}>
-                                    <background skyColor="\${skyCol}"></background>
-                                    \${axesXml}
-                                    <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform translation="0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                    <transform rotation="1 0 0 -1.57">
-                                        <ClipPlane plane="0 0 -1 \${rz[1]}" enabled="true"></ClipPlane>
-                                        <ClipPlane plane="0 0 1 \${-rz[0]}" enabled="true"></ClipPlane>
-                                        <shape>
-                                            <appearance><material></material></appearance>
-                                            <IndexedFaceSet solid="false" colorPerVertex="true" coordIndex="\${idx.join(' ')}">
-                                                <coordinate point="\${x3d_data.points.map(p=>p.join(' ')).join(' ')}"></coordinate>
-                                                <color color="\${x3d_data.colors.map(c=>c.join(' ')).join(' ')}"></color>
-                                            </IndexedFaceSet>
-                                        </shape>
-                                    </transform>
-                                </scene>
-                            </x3d>\`;
-                        if(window.x3dom) {
-                            window.x3dom.reload();
-                            setTimeout(updateFromSliders, 200);
+                            if (x3d_data.labels) {
+                                if (x3d_data.labels.x) document.getElementById('xl').value = x3d_data.labels.x;
+                                if (x3d_data.labels.y) document.getElementById('yl').value = x3d_data.labels.y;
+                                if (x3d_data.labels.z) document.getElementById('zl').value = x3d_data.labels.z;
+                            }
+
+                            const idx = [];
+                            for(let i=0; i<r-1; i++) for(let j=0; j<c-1; j++) idx.push(i*c+j, i*c+j+1, (i+1)*c+j+1, (i+1)*c+j, -1);
+                            
+                            const aa = document.getElementById('aa').value;
+                            const f = x3d_data.labels.font || "SANS";
+                            const showAxes = document.getElementById('show-axes').checked;
+                            const axStyle = x3d_data.axis_style || "cross";
+                            const skyCol = hexToRgb(x3d_data.bg_color || "#ffffff");
+                            
+                            const ambInt = document.getElementById('amb-int').value;
+                            const dirInt = document.getElementById('dir-int').value;
+                            const shdInt = document.getElementById('shd-int').value;
+                            const head = document.getElementById('headlight').checked ? 'true' : 'false';
+
+                            let axesXml = "";
+                            if(showAxes && axStyle !== 'none'){
+                                if(axStyle === 'cross' || axStyle === 'arrows'){
+                                    axesXml = \`
+                                        <transform>
+                                            <shape>
+                                                <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="1 0 0"></material></appearance>
+                                                <indexedlineset coordIndex="0 1 -1"><coordinate point="\${rx[0]} 0 0 \${rx[1]} 0 0"></coordinate></indexedlineset>
+                                            </shape>
+                                            <shape>
+                                                <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 1 0"></material></appearance>
+                                                <indexedlineset coordIndex="0 1 -1"><coordinate point="0 \${ry[0]} 0 0 \${ry[1]} 0"></coordinate></indexedlineset>
+                                            </shape>
+                                            <shape>
+                                                <appearance><lineproperties linewidth="2"></lineproperties><material emissiveColor="0 0 1"></material></appearance>
+                                                <indexedlineset coordIndex="0 1 -1"><coordinate point="0 0 \${rz[0]} 0 0 \${rz[1]}"></coordinate></indexedlineset>
+                                            </shape>
+                                        </transform>\`;
+                                    if(axStyle === 'arrows'){
+                                        axesXml += \`
+                                            <transform translation="\${rx[1]} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 0 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
+                                            <transform translation="0 \${ry[1]} 0"><shape><appearance><material diffuseColor="0 1 0"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>
+                                            <transform translation="0 0 \${rz[1]}" rotation="1 0 0 1.57"><shape><appearance><material diffuseColor="0 0 1"></material></appearance><cone bottomRadius="0.2" height="0.5"></cone></shape></transform>\`;
+                                    }
+                                } else if(axStyle === 'box'){
+                                    axesXml = \`
+                                        <transform>
+                                            <shape>
+                                                <appearance><lineproperties linewidth="1"></lineproperties><material emissiveColor="0.6 0.6 0.6"></material></appearance>
+                                                <indexedlineset coordIndex="0 1 2 3 0 -1 4 5 6 7 4 -1 0 4 -1 1 5 -1 2 6 -1 3 7 -1">
+                                                    <coordinate point="\${rx[0]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[0]} \${rz[0]} \${rx[1]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[1]} \${rz[0]} \${rx[0]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[0]} \${rz[1]} \${rx[1]} \${ry[1]} \${rz[1]} \${rx[0]} \${ry[1]} \${rz[1]}"></coordinate>
+                                                </indexedlineset>
+                                            </shape>
+                                        </transform>\`;
+                                }
+                            }
+
+                            document.getElementById('container').innerHTML = \`
+                                <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
+                                    <scene>
+                                        <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
+                                        <directionalLight id="dir-light" direction="-1 -1 -1" intensity="\${dirInt}" shadowIntensity="\${shdInt}" shadowMapSize="1024"></directionalLight>
+                                        <ambientLight id="amb-light" intensity="\${ambInt}"></ambientLight>
+                                        <\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')} id="vp" position="0 15 15" orientation="1 0 0 -0.785" \${(document.getElementById('proj').value === 'ortho' ? 'fieldOfView="-5 -5 5 5"' : '')}></\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')}>
+                                        <background skyColor="\${skyCol}"></background>
+                                        \${axesXml}
+                                        <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                        <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                        <transform translation="0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                        <transform rotation="1 0 0 -1.57">
+                                            <ClipPlane plane="0 0 -1 \${rz[1]}" enabled="true"></ClipPlane>
+                                            <ClipPlane plane="0 0 1 \${-rz[0]}" enabled="true"></ClipPlane>
+                                            <shape>
+                                                <appearance><material></material></appearance>
+                                                <IndexedFaceSet solid="false" colorPerVertex="true" coordIndex="\${idx.join(' ')}">
+                                                    <coordinate point="\${x3d_data.points.map(p=>p.join(' ')).join(' ')}"></coordinate>
+                                                    <color color="\${x3d_data.colors.map(c=>c.join(' ')).join(' ')}"></color>
+                                                </IndexedFaceSet>
+                                            </shape>
+                                        </transform>
+                                    </scene>
+                                </x3d>\`;
+                            if(window.x3dom) {
+                                window.x3dom.reload();
+                                setTimeout(updateFromSliders, 200);
+                            }
+                        } else if (preview_img) {
+                            document.getElementById('ui').style.display = 'none';
+                            document.getElementById('container').innerHTML = \`<div style="text-align:center; margin-top:10px;"><img src="\${preview_img}" style="max-width:100%; border:1px solid #444;"></div>\`;
+                        } else {
+                            document.getElementById('ui').style.display = 'none';
+                            document.getElementById('container').innerHTML = '';
                         }
-                    } else if (type === 'update' && latex) {
-                        document.getElementById('out').innerHTML = latex;
+                        
                         if(window.MathJax) MathJax.typesetPromise();
                     }
                 });

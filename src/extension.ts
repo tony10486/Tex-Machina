@@ -189,38 +189,43 @@ export function activate(context: vscode.ExtensionContext) {
                             const resultLatex = response.latex;
                             let outputText = "";
 
-                            if (currentMainCommand === "matrix") {
-                                outputText = resultLatex;
-                            } else if (currentMainCommand === "plot") {
-                                // Plot의 경우 에디터 수식을 수정하지 않고 웹뷰 프리뷰만 업데이트함
-                                outputText = currentOriginalText;
-                            } else if (currentParallels.includes("newline")) {
-                                outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
-                            } else {
-                                outputText = `${currentOriginalText} = ${resultLatex}`;
-                            }
-
-                            // plot이 아닐 때만 에디터 텍스트 교체 수행
-                            if (currentMainCommand !== "plot") {
-                                await currentEditor.edit(editBuilder => {
-                                    editBuilder.replace(currentSelection!, outputText);
-                                });
-                            }
-                            
-                            // .dat 파일 생성 처리
+                            // .dat 파일 생성 처리 (텍스트 교체 전에 수행하여 파일이 존재하도록 함)
                             if (response.dat_content) {
                                 const texDir = path.dirname(currentEditor.document.uri.fsPath);
                                 const dataDir = path.join(texDir, 'data');
                                 const datFilename = response.dat_filename || 'plot_data.dat';
                                 const datPath = path.join(dataDir, datFilename);
 
-                                if (fs.existsSync(dataDir)) {
-                                    try {
-                                        fs.writeFileSync(datPath, response.dat_content);
-                                    } catch (err: any) {
-                                        vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
+                                try {
+                                    if (!fs.existsSync(dataDir)) {
+                                        fs.mkdirSync(dataDir, { recursive: true });
                                     }
+                                    fs.writeFileSync(datPath, response.dat_content);
+                                } catch (err: any) {
+                                    vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
                                 }
+                            }
+
+                            if (currentMainCommand === "matrix") {
+                                outputText = resultLatex;
+                            } else if (currentMainCommand === "plot") {
+                                // 2D Plot(PGFPlots)인 경우에만 에디터에 삽입, 3D는 웹뷰 프리뷰만 유지
+                                if (response.latex.includes("tikzpicture")) {
+                                    outputText = resultLatex;
+                                } else {
+                                    outputText = currentOriginalText;
+                                }
+                            } else if (currentParallels.includes("newline")) {
+                                outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
+                            } else {
+                                outputText = `${currentOriginalText} = ${resultLatex}`;
+                            }
+
+                            // 2D plot이거나 plot이 아닐 때 에디터 텍스트 교체 수행
+                            if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && response.latex.includes("tikzpicture"))) {
+                                await currentEditor.edit(editBuilder => {
+                                    editBuilder.replace(currentSelection!, outputText);
+                                });
                             }
                         }
                     }

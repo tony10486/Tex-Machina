@@ -19,8 +19,9 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 PGF_SUPPORTED_FUNCS = (
-    sp.sin, sp.cos, sp.tan, sp.asin, sp.acos, sp.atan, sp.atan2,
-    sp.exp, sp.log, sp.Abs, sp.floor, sp.ceiling,
+    sp.sin, sp.cos, sp.tan, sp.asin, sp.acos, sp.atan,
+    sp.sinh, sp.cosh, sp.tanh,
+    sp.exp, sp.log, sp.Abs, sp.floor, sp.ceiling, sp.sqrt
 )
 
 def _safe_latex_parse(raw_latex: str) -> sp.Expr:
@@ -51,11 +52,15 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
 
 def sympy_to_pgfplots_str(expr: sp.Expr) -> str:
     """SymPy 수식을 PGFPlots가 이해할 수 있는 대수적 문자열로 변환합니다."""
+    # Abs(x) -> abs(x) 변환을 위해 expr 단계에서 처리 시도 (단순 문자열 치환보다 안전)
+    # 하지만 SymPy 객체 구조를 유지하며 문자열로 바꾼 후 보정하는 것이 PGFPlots 문법에 더 가까움
     expr_str = str(expr)
     expr_str = expr_str.replace('**', '^')
     expr_str = expr_str.replace('E', 'e')
     # SymPy의 log(x)는 PGFPlots에서 ln(x)로 변환
     expr_str = expr_str.replace('log(', 'ln(')
+    # Abs(x) -> abs(x)
+    expr_str = expr_str.replace('Abs(', 'abs(')
     return expr_str
 
 def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, float]) -> List[float]:
@@ -82,7 +87,9 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
         except: pass
 
     # 3. Gamma/Zeta 등 특수 함수의 폴(Pole) 수동 탐색
-    if expr.has(sp.gamma):
+    # parse_latex 결과물이 sp.gamma와 타입이 다를 수 있으므로 이름으로도 확인
+    is_gamma = expr.has(sp.gamma) or any(f.func.__name__.lower() == 'gamma' for f in expr.atoms(sp.Function))
+    if is_gamma:
         # Gamma(x)는 0, -1, -2, ... 에서 폴을 가짐
         start = int(np.floor(domain[0]))
         end = int(np.ceil(domain[1]))
@@ -122,10 +129,26 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
 
 def is_pgfplots_compatible(expr: sp.Expr) -> bool:
     """PGFPlots 네이티브 엔진이 지원하는 함수인지 검사합니다."""
+    # 모든 함수 원자(atoms)를 추출하여 화이트리스트와 비교
     funcs = expr.atoms(sp.Function)
     for f in funcs:
-        if not isinstance(f, PGF_SUPPORTED_FUNCS):
-            return False
+        # f의 타입이 화이트리스트에 있는지 직접 확인
+        if type(f) in PGF_SUPPORTED_FUNCS:
+            continue
+            
+        # isinstance로 한 번 더 확인 (상속 관계 대응)
+        try:
+            # PGF_SUPPORTED_FUNCS 중 타입(class)인 것들만 골라내어 isinstance 체크
+            types_only = tuple(t for t in PGF_SUPPORTED_FUNCS if isinstance(t, type))
+            if isinstance(f, types_only):
+                continue
+        except:
+            pass
+            
+        return False
+            
+    # sqrt는 Pow(x, 0.5)로 표현되므로 Function atoms에 잡히지 않음
+    # 하지만 Pow 자체는 PGFPlots가 지원하므로(^) 별도 체크 불필요
     return True
 
 def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
@@ -133,11 +156,6 @@ def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
     # 이미 호환되면 그대로 반환
     if is_pgfplots_compatible(expr):
         return expr
-
-    # 쌍곡선 함수는 exp로 변환 가능
-    rewritten = expr.rewrite(sp.exp)
-    if is_pgfplots_compatible(rewritten):
-        return rewritten
     
     # sec, csc, cot 등은 sin, cos, tan으로 변환 가능
     rewritten = expr.rewrite(sp.sin).rewrite(sp.cos).rewrite(sp.tan)
@@ -145,22 +163,6 @@ def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
         return rewritten
         
     return expr
-
-def try_taylor_approximation(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, float]) -> sp.Expr:
-    """테일러 전개를 통해 PGFPlots 호환 수식으로 근사를 시도합니다."""
-    try:
-        # 도메인 중앙에서 전개
-        x0 = (domain[0] + domain[1]) / 2
-        if not expr.subs(var, x0).is_finite:
-            x0 = domain[0] + 0.1
-            
-        # 6차 테일러 다항식 생성 및 수치화
-        poly = expr.series(var, x0, 6).removeO().evalf()
-        if is_pgfplots_compatible(poly):
-            return poly
-    except:
-        pass
-    return None
 
 def generate_numerical_data(expr: sp.Expr, var: sp.Symbol, intervals: List[Tuple[float, float]], samples_per_interval: int = 100, y_limit: float = 50.0) -> Tuple[str, str]:
     """수치적 좌표 데이터를 생성하고 미리보기 이미지를 반환합니다. 다중 구간(특이점 분리)을 지원합니다."""
@@ -249,26 +251,26 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     # 2. 재작성 시도 (sinh -> exp 등)
     target_expr = try_rewrite_for_pgfplots(expr)
     
-    # 3. PGFPlots 호환성 검사 및 데이터 파일 사용 여부 결정
+    # 3. PGFPlots 호환성 검사 및 데이터 파일 사용 여부 결정 (Whitelist 기반)
     needs_dat = False
     if not is_pgfplots_compatible(target_expr):
-        # 테일러 전개 시도
-        taylor_expr = try_taylor_approximation(target_expr, var, domain)
-        if taylor_expr:
-            target_expr = taylor_expr
-            warning_msg = f"PGFPlots 비호환 함수가 테일러 급수로 근사되었습니다: {sp.latex(taylor_expr)}"
-        else:
-            needs_dat = True
-            warning_msg = "PGFPlots 비호환 함수입니다. 외부 데이터(.dat)를 사용합니다."
+        needs_dat = True
+        warning_msg = "PGFPlots 비호환 함수가 감지되었습니다. 외부 데이터(.dat)를 사용합니다."
 
-    # 샘플 수가 많거나 명시적으로 데이터 파일 사용 요청 시
-    if dat_samples > 150 or any(p == "use_dat" for p in parallels):
+    # 샘플 수가 너무 많거나 명시적으로 데이터 파일 사용 요청 시 (Native 엔진의 한계 고려)
+    if dat_samples > 200 or any(p == "use_dat" for p in parallels):
         needs_dat = True
 
     if needs_dat:
         dat_content, preview_img = generate_numerical_data(expr, var, intervals, samples_per_interval, y_limit)
-        # addplot table 시 점(marks)이 표시되지 않도록 [no marks] 추가, 그리고 domain 반영
-        return f"    \\addplot[no marks, domain={domain[0]}:{domain[1]}] table {{data/plot_data.dat}};\n", warning_msg, dat_content, preview_img
+        
+        latex_code = ""
+        for start, end in intervals:
+            # 각 구간별로 별도의 addplot을 생성하여 불연속 지점에서 선이 이어지지 않게 함
+            # restrict x to domain을 사용하여 .dat 파일 내의 해당 구간 데이터만 필터링
+            latex_code += f"    \\addplot[no marks, restrict x to domain={start}:{end}] table {{data/plot_data.dat}};\n"
+            
+        return latex_code, warning_msg, dat_content, preview_img
 
     # Native PGFPlots: 구간별로 addplot 생성 (separate)
     expr_str = sympy_to_pgfplots_str(target_expr)
