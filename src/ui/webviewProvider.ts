@@ -62,7 +62,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         const mathjaxUri = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
         const x3domJs = "https://www.x3dom.org/download/1.8.3/x3dom.js";
         const x3domCss = "https://www.x3dom.org/download/1.8.3/x3dom.css";
-        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org; style-src 'unsafe-inline' ${webview.cspSource} https://www.x3dom.org; font-src https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
+        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net https://www.x3dom.org; font-src https://cdn.jsdelivr.net https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
 
         return `<!DOCTYPE html>
         <html>
@@ -70,6 +70,21 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <meta http-equiv="Content-Security-Policy" content="${csp}">
             <link rel="stylesheet" href="${x3domCss}">
             <script src="${x3domJs}"></script>
+            <script>
+                window.MathJax = {
+                    tex: {
+                        inlineMath: [['$', '$'], ['\\(', '\\)']],
+                        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                        processEnvironments: true
+                    },
+                    options: {
+                        enableMenu: false
+                    },
+                    chtml: {
+                        displayAlign: 'center'
+                    }
+                };
+            </script>
             <script src="${mathjaxUri}"></script>
             <style>
                 body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 10px; font-size: 13px; }
@@ -499,10 +514,15 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 window.addEventListener('message', e => {
                     const { type, x3d_data, latex, preview_img, warning } = e.data;
                     if (type === 'update') {
+                        let content = latex || "TeX-Machina";
+                        if (latex && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture') && !latex.includes('\\\\begin') && !latex.includes('\\\\left')) {
+                            content = \`$$\${latex}$$\`;
+                        }
+
                         if (warning) {
-                            document.getElementById('out').innerHTML = \`<div style="color: #ffa500; margin-bottom: 5px;">⚠️ \${warning}</div>\` + (latex || "");
+                            document.getElementById('out').innerHTML = \`<div style="color: #ffa500; margin-bottom: 5px;">⚠️ \\\${warning}</div>\` + content;
                         } else {
-                            document.getElementById('out').innerHTML = latex || "TeX-Machina";
+                            document.getElementById('out').innerHTML = content;
                         }
 
                         if (x3d_data) {
