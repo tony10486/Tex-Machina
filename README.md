@@ -5,7 +5,10 @@
 
 - **심볼릭 연산(Symbolic Calculation) `calc >`**: NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다. 정말 많은 기능을 지원하지만, 그 중에서 대표적인 몇 가지 기능의 예시를 보여드리자면...
   1. 미분과 적분 : 원하는 수식의 미분과 적분을 수행합니다.
-  > `\frac{\sinh (x) \log (x) }{e^{x}}  = - e^{- x} \log{\left(x \right)} \sinh{\left(x \right)} + e^{- x} \log{\left(x \right)} \cosh{\left(x \right)} + \frac{e^{- x} \sinh{\left(x \right)}}{x} = \frac{\left(x e^{- x} \log{\left(x \right)} + \sinh{\left(x \right)}\right) e^{- x}}{x}`
+    > `\frac{\sinh (x) \log (x) }{e^{x}}  = - e^{- x} \log{\left(x \right)} \sinh{\left(x \right)} + e^{- x} \log{\left(x \right)} \cosh{\left(x \right)} + \frac{e^{- x} \sinh{\left(x \right)}}{x} = \frac{\left(x e^{- x} \log{\left(x \right)} + \sinh{\left(x \right)}\right) e^{- x}}{x}`
+<img width="910" height="61" alt="Screenshot 2026-03-01 at 2 09 59 AM" src="https://github.com/user-attachments/assets/00814eac-f38c-4820-90c3-33f412053b68" />
+(최종 결과는 `calc > simplify` 명령어를 입력한 결과입니다.)
+  2. 
 - **Matrix Tools (`matrix >`)**: Generate various matrix environments (pmatrix, bmatrix, etc.) with automatic "smart dots" and analysis (determinant, inverse, RREF).
 - **Advanced Plotting (`plot >`)**: 
   - **2D**: Generate PGFPlots data and LaTeX code.
