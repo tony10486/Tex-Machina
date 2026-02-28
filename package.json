@@ -95,6 +95,10 @@
       {
         "command": "tex-machina.splitMath",
         "title": "LaTeX: Auto-split Math Formula"
+      },
+      {
+        "command": "tex-machina.formatUnit",
+        "title": "LaTeX: Format Unit (siunitx)"
       }
     ],
     "viewsContainers": {
@@ -131,6 +135,12 @@
         "command": "tex-machina.splitMath",
         "key": "ctrl+shift+l",
         "mac": "cmd+shift+l",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.formatUnit",
+        "key": "ctrl+shift+' u",
+        "mac": "cmd+shift+' u",
         "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]

@@ -7,6 +7,7 @@ import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
 import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
 import { registerMathSplitter } from './core/mathSplitter';
+import { registerUnitExpander } from './core/unitExpander';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -25,6 +26,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Math Auto-Splitter] 수식 자동 분할 기능 등록
     registerMathSplitter(context);
+
+    // [Unit Expander] siunitx 단위 확장 기능 등록
+    registerUnitExpander(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
