@@ -13,6 +13,7 @@ import { registerSmartQuotes } from './core/smartQuotes';
 import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection } from './core/labelDetection';
+import { registerPackageDetection } from './core/packageDetection';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -46,6 +47,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Label Detection] 미사용 라벨 감지 및 삭제 기능 등록
     registerLabelDetection(context);
+
+    // [Package Detection] 미사용 패키지 자동 주석 처리 기능 등록
+    registerPackageDetection(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);

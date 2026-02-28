@@ -86,6 +86,11 @@
           "type": "boolean",
           "default": true,
           "description": "LaTeX 스마트 따옴표 기능을 활성화합니다. \" 키를 누르면 상황에 맞게 `` 또는 ''로 변환됩니다."
+        },
+        "tex-machina.packageAutoCleanup.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "미사용 패키지 자동 주석 처리 기능을 활성화합니다. 한 번도 사용되지 않은 특정 패키지는 자동으로 % [unused] 주석이 달리고, 사용 시 다시 해제됩니다."
         }
       }
     },
