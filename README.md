@@ -8,7 +8,6 @@
     > `\frac{\sinh (x) \log (x) }{e^{x}}  = - e^{- x} \log{\left(x \right)} \sinh{\left(x \right)} + e^{- x} \log{\left(x \right)} \cosh{\left(x \right)} + \frac{e^{- x} \sinh{\left(x \right)}}{x} = \frac{\left(x e^{- x} \log{\left(x \right)} + \sinh{\left(x \right)}\right) e^{- x}}{x}`
 <img width="910" height="61" alt="Screenshot 2026-03-01 at 2 09 59 AM" src="https://github.com/user-attachments/assets/00814eac-f38c-4820-90c3-33f412053b68" />
 (최종 결과는 `calc > simplify` 명령어를 입력한 결과입니다.)
-  2. 
 - **Matrix Tools (`matrix >`)**: Generate various matrix environments (pmatrix, bmatrix, etc.) with automatic "smart dots" and analysis (determinant, inverse, RREF).
 - **Advanced Plotting (`plot >`)**: 
   - **2D**: Generate PGFPlots data and LaTeX code.
