@@ -1,0 +1,10 @@
+sympy
+numpy
+matplotlib
+requests
+scipy
+latex2sympy2
+mpmath
+antlr4-python3-runtime==4.11.1
+rich
+questionary

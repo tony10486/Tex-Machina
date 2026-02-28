@@ -1,15 +1,32 @@
 {
   "name": "tex-machina",
-  "displayName": "tex-machina",
-  "description": "",
-  "version": "0.0.1",
+  "publisher": "Tony29028",
+  "displayName": "TeX-Machina",
+  "description": "Interactive LaTeX assistant with symbolic computation, 3D plotting, and bibliography management.",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/honey/tex-machina"
+  },
+  "license": "MIT",
+  "keywords": [
+    "latex",
+    "math",
+    "sympy",
+    "plotting",
+    "bibtex",
+    "oeis"
+  ],
   "engines": {
     "vscode": "^1.109.0"
   },
   "categories": [
+    "Programming Languages",
+    "Visualization",
     "Other"
   ],
   "activationEvents": [
+    "onLanguage:latex",
     "onView:tex-machina.preview"
   ],
   "main": "./dist/extension.js",

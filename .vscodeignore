@@ -12,3 +12,11 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+tmp/**
+tmp2/**
+scraper.log
+math_formulas.json
+test_formulas.json
+to-do_list.md
+python_backend/__pycache__/**
+python_backend/requirements.txt (already in README, but maybe keep it in package?)
