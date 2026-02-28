@@ -99,6 +99,10 @@
       {
         "command": "tex-machina.formatUnit",
         "title": "LaTeX: Format Unit (siunitx)"
+      },
+      {
+        "command": "tex-machina.insertTable",
+        "title": "LaTeX: Insert Table"
       }
     ],
     "viewsContainers": {

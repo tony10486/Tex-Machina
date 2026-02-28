@@ -8,6 +8,7 @@ import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
 import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
+import { generateLatexTable, TableOptions } from './core/tableGenerator';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -637,6 +638,21 @@ export function activate(context: vscode.ExtensionContext) {
         await performWidthAnalysis(editor.document);
     });
     context.subscriptions.push(analyzeWidthCommand);
+
+    // 9. LaTeX 표 삽입 커맨드 등록
+    let insertTableCommand = vscode.commands.registerCommand('tex-machina.insertTable', async (options: TableOptions) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage("활성화된 에디터가 없습니다.");
+            return;
+        }
+
+        const tableLatex = generateLatexTable(options);
+        await editor.edit(editBuilder => {
+            editBuilder.insert(editor.selection.active, tableLatex);
+        });
+    });
+    context.subscriptions.push(insertTableCommand);
 }
 
 export function deactivate() {
