@@ -125,6 +125,10 @@
       {
         "command": "tex-machina.addDot",
         "title": "LaTeX: Add Dot Diacritic (\\dot{})"
+      },
+      {
+        "command": "tex-machina.deleteUnusedLabels",
+        "title": "LaTeX: Delete Unused Labels"
       }
     ],
     "viewsContainers": {
