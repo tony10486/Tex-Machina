@@ -121,7 +121,7 @@
       {
         "command": "tex-machina.escapeAutoBracing",
         "key": "escape",
-        "when": "editorTextFocus && editorLangId == 'latex'"
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !editorHasSelection && !inSnippetMode"
       }
     ]
   },
