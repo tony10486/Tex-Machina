@@ -55,6 +55,31 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const response = JSON.parse(line);
 
+                // [oeis] 수열 검색 결과 처리
+                if (response.status === 'oeis_results') {
+                    const selected = await vscode.window.showQuickPick(response.results as vscode.QuickPickItem[], {
+                        placeHolder: `'${response.query}' 검색 결과 (15개까지 표시)`
+                    });
+                    if (selected) {
+                        const s = selected as any;
+                        const options = [
+                            { label: "ID만 삽입", detail: s.id, value: s.id },
+                            { label: "수열 데이터 삽입", detail: s.data, value: s.data },
+                            { label: "ID와 이름 삽입", detail: `${s.id}: ${s.full_name}`, value: `${s.id}: ${s.full_name}` }
+                        ];
+                        const insertType = await vscode.window.showQuickPick(options, {
+                            placeHolder: "어떤 형식으로 삽입할까요?"
+                        }) as any;
+
+                        if (insertType && currentEditor) {
+                            await currentEditor.edit(editBuilder => {
+                                editBuilder.insert(currentEditor!.selection.active, insertType.value);
+                            });
+                        }
+                    }
+                    continue;
+                }
+
                 // [cite] 인용 검색 결과 처리
                 if (response.status === 'search_results') {
                     const selected = await vscode.window.showQuickPick(response.results, {
@@ -228,7 +253,8 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "calc >", description: "수학 연산 명령어 (미분, 적분, 단순화 등)" },
                 { label: "matrix >", description: "행렬 생성 및 분석" },
                 { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" },
-                { label: "cite >", description: "논문 인용 (arXiv ID, DOI, 또는 제목)" }
+                { label: "cite >", description: "논문 인용 (arXiv ID, DOI, 또는 제목)" },
+                { label: "oeis >", description: "OEIS 수열 검색" }
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
@@ -242,13 +268,19 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "calc > dimcheck", description: "차원 및 단위 검사 (예: / set=v:L/T)" },
                 { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
             ],
+            oeis: [
+                ...(currentOriginalText ? [{ label: `oeis > ${currentOriginalText}`, description: "선택한 영역으로 수열 검색" }] : []) as vscode.QuickPickItem[],
+                { label: "oeis > 1,1,2,3,5,8", description: "피보나치 수열 검색" },
+                { label: "oeis > 2,3,5,7,11", description: "소수 수열 검색" },
+                { label: "oeis > A000045", description: "수열 번호(ID)로 검색" }
+            ],
             matrix: [
                 { label: "matrix > p >", description: "소괄호 (pmatrix) - ( )" },
                 { label: "matrix > b >", description: "대괄호 (bmatrix) - [ ] (기본값)" },
                 { label: "matrix > v >", description: "수직바 (vmatrix) - | | (행렬식)" },
 				{ label: "matrix > V >", description: "이중 수직바 (Vmatrix) - || ||" },
 		        { label: "matrix > B >", description: "중괄호 (Bmatrix) - { }" },
-                { label: "matrix > transform > [각도]", description: "회전변환 행렬 생성 (예: transform > \pi/2)" },
+                { label: "matrix > transform > [각도]", description: "회전변환 행렬 생성 (예: transform > \\pi/2)" },
                 { label: "matrix > [데이터]", description: "데이터 바로 입력 (예: matrix > 1,2/3,4)" },
                 { label: "matrix > ... / analyze", description: "행렬 분석 (행렬식, 역행렬, RREF 결과 표시)" },
                 { label: "matrix > ... / aug=", description: "첨가 행렬 (예: / aug=2 -> 2열 뒤에 수직선 추가)" }
@@ -275,6 +307,8 @@ export function activate(context: vscode.ExtensionContext) {
         quickPick.onDidChangeValue(value => {
             if (value.startsWith("calc >")) {
                 quickPick.items = commandLib.calc;
+            } else if (value.startsWith("oeis >")) {
+                quickPick.items = commandLib.oeis;
             } else if (value.startsWith("matrix >")) {
                 quickPick.items = commandLib.matrix;
             } else if (value.startsWith("plot >")) {
@@ -410,11 +444,11 @@ export function activate(context: vscode.ExtensionContext) {
         
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
-            if (options.x) userInput += ` / x=${options.x}`;
-            if (options.y) userInput += ` / y=${options.y}`;
-            if (options.z) userInput += ` / z=${options.z}`;
-            if (options.scheme) userInput += ` / scheme=${options.scheme}`;
-            if (options.color) userInput += ` / color=${options.color}`;
+            if (options.x) {userInput += ` / x=${options.x}`;}
+            if (options.y) {userInput += ` / y=${options.y}`;}
+            if (options.z) {userInput += ` / z=${options.z}`;}
+            if (options.scheme) {userInput += ` / scheme=${options.scheme}`;}
+            if (options.color) {userInput += ` / color=${options.color}`;}
             
             if (options.scheme === 'preset' && options.preset) {
                 userInput += ` / preset=${options.preset}`;
@@ -422,10 +456,10 @@ export function activate(context: vscode.ExtensionContext) {
                 userInput += ` / stops=${options.stops}`;
             }
 
-            if (options.label) userInput += ` / label=${options.label}`;
-            if (options.bg) userInput += ` / bg=${options.bg}`;
-            if (options.complex) userInput += ` / complex=${options.complex}`;
-            if (options.axis) userInput += ` / axis=${options.axis}`;
+            if (options.label) {userInput += ` / label=${options.label}`;}
+            if (options.bg) {userInput += ` / bg=${options.bg}`;}
+            if (options.complex) {userInput += ` / complex=${options.complex}`;}
+            if (options.axis) {userInput += ` / axis=${options.axis}`;}
         }
 
         const parsed = parseUserCommand(userInput, exprLatex);
@@ -467,10 +501,10 @@ export function activate(context: vscode.ExtensionContext) {
         // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
-            if (options.x) userInput += ` / x=${options.x}`;
-            if (options.y) userInput += ` / y=${options.y}`;
-            if (options.z) userInput += ` / z=${options.z}`;
-            if (options.scheme) userInput += ` / scheme=${options.scheme}`;
+            if (options.x) {userInput += ` / x=${options.x}`;}
+            if (options.y) {userInput += ` / y=${options.y}`;}
+            if (options.z) {userInput += ` / z=${options.z}`;}
+            if (options.scheme) {userInput += ` / scheme=${options.scheme}`;}
             
             // 스키마에 따라 필요한 옵션만 추가
             if (options.scheme === 'uniform') {
@@ -484,12 +518,12 @@ export function activate(context: vscode.ExtensionContext) {
                 userInput += ` / color=${color}`;
             }
 
-            if (options.label) userInput += ` / label=${options.label}`;
-            if (options.bg) userInput += ` / bg=${options.bg}`;
-            if (options.complex) userInput += ` / complex=${options.complex}`;
-            if (options.axis) userInput += ` / axis=${options.axis}`;
-            if (options.export) userInput += ` / export=${options.export}`;
-            else userInput += ` / export`;
+            if (options.label) {userInput += ` / label=${options.label}`;}
+            if (options.bg) {userInput += ` / bg=${options.bg}`;}
+            if (options.complex) {userInput += ` / complex=${options.complex}`;}
+            if (options.axis) {userInput += ` / axis=${options.axis}`;}
+            if (options.export) {userInput += ` / export=${options.export}`;}
+            else {userInput += ` / export`;}
         } else {
             userInput += ` / color=${color} / export`;
         }
@@ -513,7 +547,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 7. 웹뷰 캡처 이미지 저장 커맨드 (내부용)
     let internalSaveCommand = vscode.commands.registerCommand('tex-machina.internalSaveWebviewImage', async (buffer: Buffer, format: string, expr: string) => {
-        if (!currentEditor) return;
+        if (!currentEditor) {return;}
         
         const targetDir = path.dirname(currentEditor.document.uri.fsPath);
         const imagesDir = path.join(targetDir, 'images');
