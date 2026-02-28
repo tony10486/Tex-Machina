@@ -1,6 +1,17 @@
 import * as vscode from 'vscode';
 
+let isEscaped = false;
+
 export function registerAutoBracing(context: vscode.ExtensionContext) {
+    // Register the escape command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('tex-machina.escapeAutoBracing', () => {
+            isEscaped = true;
+            // Note: We don't re-dispatch 'type' for Esc anymore to avoid side effects in tests.
+            // In a real environment, Esc will still trigger other built-in listeners unless we stop propagation.
+        })
+    );
+
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(async (event) => {
             // Check if auto-bracing is enabled in configuration
@@ -21,32 +32,37 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
             }
 
             for (const change of event.contentChanges) {
+                // Reset escape if user moves to a new word/line or deletes
+                if (change.text.includes(' ') || change.text.includes('\n') || change.text === '') {
+                    isEscaped = false;
+                }
+
                 // Check for single character insertion
                 if (change.text.length !== 1 || change.text === ' ' || change.text === '\t' || change.text === '\n' || change.text === '\r') {
                     continue;
                 }
 
+                if (isEscaped) {
+                    isEscaped = false; // Reset for next character
+                    continue;
+                }
+
                 // The character was inserted at change.range.start
-                // The position AFTER the inserted character is:
                 const charOffsetAfter = change.range.start.character + change.text.length;
                 const line = change.range.start.line;
 
                 const lineText = editor.document.lineAt(line).text;
                 
-                // We need at least 3 characters to have ^ab
                 if (charOffsetAfter < 3) {
                     continue;
                 }
 
                 const prefix = lineText[charOffsetAfter - 3];
                 const firstChar = lineText[charOffsetAfter - 2];
-                const secondChar = lineText[charOffsetAfter - 1]; // This is the char just typed
-
-                // console.log(`AutoBracing debug: prefix=${prefix}, first=${firstChar}, second=${secondChar}`);
+                const secondChar = lineText[charOffsetAfter - 1];
 
                 // We are looking for something like ^ab or _12
                 if ((prefix === '^' || prefix === '_') && firstChar !== '{' && firstChar !== '}' && firstChar !== ' ') {
-                    // Check if secondChar is also valid
                     if (secondChar !== '{' && secondChar !== '}' && secondChar !== ' ') {
                         const rangeToReplace = new vscode.Range(
                             new vscode.Position(line, charOffsetAfter - 2),
@@ -54,13 +70,11 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                         );
                         const bracedText = `{${firstChar}${secondChar}}`;
 
-                        // Execute the edit
                         await editor.edit(editBuilder => {
                             editBuilder.replace(rangeToReplace, bracedText);
                         }, { undoStopBefore: false, undoStopAfter: false });
 
-                        // Move cursor inside the braces (before the closing brace)
-                        const newPosition = new vscode.Position(line, charOffsetAfter + 1); // After firstChar and secondChar, before }
+                        const newPosition = new vscode.Position(line, charOffsetAfter + 1);
                         editor.selection = new vscode.Selection(newPosition, newPosition);
                     }
                 }

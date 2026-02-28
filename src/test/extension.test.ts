@@ -93,4 +93,28 @@ suite('Extension Test Suite', () => {
         // Cleanup: close the editor
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
+
+    test('Auto-bracing: Should escape when Esc is pressed', async () => {
+        // Create a new LaTeX document
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^a' });
+        const editor = await vscode.window.showTextDocument(document);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Simulate pressing Esc
+        await vscode.commands.executeCommand('tex-machina.escapeAutoBracing');
+
+        // Simulate typing 'b' at the end of 'x^a'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), 'b');
+        });
+
+        // Wait a bit and check if it did NOT brace
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        assert.strictEqual(document.lineAt(0).text, 'x^ab', "Text should NOT be auto-braced after Esc");
+        
+        // Cleanup: close the editor
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
 });

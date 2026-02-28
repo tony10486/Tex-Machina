@@ -87,6 +87,10 @@
       {
         "command": "tex-machina.analyzeWidth",
         "title": "LaTeX: Analyze Formula Width"
+      },
+      {
+        "command": "tex-machina.escapeAutoBracing",
+        "title": "LaTeX: Escape Auto-bracing"
       }
     ],
     "viewsContainers": {
@@ -113,6 +117,11 @@
         "key": "ctrl+shift+;",
         "mac": "cmd+shift+;",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "tex-machina.escapeAutoBracing",
+        "key": "escape",
+        "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
   },
