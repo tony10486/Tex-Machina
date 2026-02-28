@@ -257,23 +257,46 @@ def op_limit(expr, args):
     return sp.limit(expr, var, target, dir=direction)
 
 def preprocess_latex_ode(latex_str):
-    r"""\\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하여 파싱을 돕습니다."""
-    # \\frac{d^2y}{dx^2} -> y''
-    latex_str = re.sub(r'\\frac\{d\^(\d+)y\}\{dx\^\1\}', lambda m: 'y' + "'" * int(m.group(1)), latex_str)
-    # \\frac{dy}{dx} -> y'
-    latex_str = re.sub(r'\\frac\{dy\}\{dx\}', "y'", latex_str)
+    r"""\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하고, \prime 등 LaTeX 특수 기호를 정리합니다."""
+    # 1. \prime, \doubleprime 등 처리
+    latex_str = latex_str.replace(r'^{\prime\prime}', "''").replace(r'^{\prime}', "'")
+    latex_str = latex_str.replace(r'\prime\prime', "''").replace(r'\prime', "'")
+    
+    # 2. \frac{d^2y}{dx^2} -> y''
+    latex_str = re.sub(r'\\frac\{d\^(\d+)([a-zA-Z])\}\{d([a-zA-Z])\^\1\}', lambda m: m.group(2) + "'" * int(m.group(1)), latex_str)
+    # 3. \frac{dy}{dx} -> y'
+    latex_str = re.sub(r'\\frac\{d([a-zA-Z])\}\{d([a-zA-Z])\}', r"\1'", latex_str)
     return latex_str
 
 def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     """파싱된 SymPy 수식을 ODE 풀이가 가능한 형태로 변환합니다."""
-    # 독립 변수 감지 (기본값 x, t 등 표현식에 있는 것 우선)
+    # 0. e를 sp.E로 변환 (상수로 처리하여 독립 변수 오판 방지)
+    if sp.Symbol('e') in expr.free_symbols:
+        expr = expr.subs(sp.Symbol('e'), sp.E)
+
+    # 독립 변수 감지
     if indep_var_name is None:
-        # expr의 모든 자유 변수 중 dep_var_name이 아닌 것 중 하나 선택
-        other_symbols = [s for s in expr.free_symbols if not s.name.startswith(dep_var_name)]
-        if other_symbols:
-            x = other_symbols[0]
+        # expr에 이미 Function(dep_var_name)(...)이 있는지 확인
+        # f.func.name이 없을 수 있으므로 getattr 사용 (주로 UndefinedFunction인 경우에만 name이 있음)
+        existing_funcs = [f for f in expr.atoms(sp.Function) if getattr(f.func, 'name', None) == dep_var_name]
+        if existing_funcs:
+            # 첫 번째 발견된 함수의 인자를 독립 변수로 사용
+            args = existing_funcs[0].args
+            x = args[0] if args else sp.Symbol('x')
         else:
-            x = sp.Symbol('x')
+            # expr의 모든 자유 변수 중 dep_var_name이 아닌 것 추출
+            other_symbols = [s for s in expr.free_symbols if not s.name.startswith(dep_var_name)]
+            # e, pi, I 등 상수 제외
+            other_symbols = [s for s in other_symbols if s.name not in ['e', 'pi', 'I', 'i', 'j']]
+            
+            # x, t, s, r 우선순위
+            preferred = [s for s in other_symbols if s.name in ['x', 't', 's', 'r']]
+            if preferred:
+                x = preferred[0]
+            elif other_symbols:
+                x = sorted(other_symbols, key=lambda s: s.name)[0]
+            else:
+                x = sp.Symbol('x')
     else:
         x = sp.Symbol(indep_var_name)
         
@@ -334,27 +357,31 @@ def fix_system_ode(exprs, dep_var_names, indep_var_name='t'):
 
 def op_ode(expr, args):
     """상미분방정식(단일/연립) 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
-    # 1. 시스템 여부 확인 (쉼표나 세미콜론으로 구분된 경우)
-    # 현재 expr은 parse_latex 결과이므로, raw selection을 다시 확인하거나
-    # parse_latex가 단일 Eq만 반환한다면 호출부에서 분리해서 넘겨줘야 함.
-    # 여기서는 편의상 단일 expr 내의 free_symbols를 보고 판단
-    
-    # 기본 종속 변수 후보군
-    potential_dep_vars = ['y', 'x', 'z', 'u', 'v']
-    found_vars = set()
-    for sym in expr.free_symbols:
-        base_name = sym.name.rstrip("'")
-        if base_name in potential_dep_vars:
-            found_vars.add(base_name)
+    # 1. 종속 변수 감지: 프라임(')이 붙은 변수 우선, 그 외 y, u, v, w 등
+    symbols_with_primes = [sym for sym in expr.free_symbols if sym.name.endswith("'")]
+    if symbols_with_primes:
+        found_vars = {sym.name.rstrip("'") for sym in symbols_with_primes}
+    else:
+        # expr.atoms(sp.Function) 도 확인 (UndefinedFunction만 추출)
+        existing_funcs = [getattr(f.func, 'name', None) for f in expr.atoms(sp.Function) 
+                          if isinstance(f.func, sp.core.function.UndefinedFunction)]
+        found_vars = {name for name in existing_funcs if name}
+        
+        if not found_vars:
+            potential_dep_vars = ['y', 'u', 'v', 'w', 'z']
+            found_vars = {sym.name for sym in expr.free_symbols if sym.name in potential_dep_vars}
+            
+    if not found_vars:
+        found_vars = {'y'}
             
     # 연립 방정식 처리 (여러 변수가 발견된 경우)
     if len(found_vars) > 1:
         fixed_exprs, funcs, t = fix_system_ode([expr], list(found_vars))
-        # 만약 입력이 단일 Eq(x' - y, 0) 형태라면 하나만 풀림
         return sp.dsolve(fixed_exprs, funcs)
 
     # 단일 방정식 처리
-    fixed_expr, y, x = fix_ode_expression(expr)
+    dep_var = list(found_vars)[0]
+    fixed_expr, y, x = fix_ode_expression(expr, dep_var_name=dep_var)
     
     ics = {}
     if args:
@@ -403,13 +430,23 @@ def op_error_prop(expr, args, parallels):
 
 def fix_pde_expression(expr, dep_var_name='u'):
     """u(x, t) 등 다변수 함수가 포함된 PDE 표현식을 보정합니다."""
+    # 0. e를 sp.E로 변환
+    if sp.Symbol('e') in expr.free_symbols:
+        expr = expr.subs(sp.Symbol('e'), sp.E)
+
     # 자유 변수 중 종속 변수(u)를 제외한 것들을 독립 변수로 간주
     symbols = list(expr.free_symbols)
     indep_vars = [s for s in symbols if s.name != dep_var_name]
     
+    # e, pi, I 등 상수 제외
+    indep_vars = [s for s in indep_vars if s.name not in ['e', 'pi', 'I', 'i', 'j']]
+    
     if not indep_vars:
         # 독립 변수가 감지되지 않으면 기본값 x, y 설정
         indep_vars = [sp.Symbol('x'), sp.Symbol('y')]
+    else:
+        # 일관성을 위해 정렬
+        indep_vars = sorted(indep_vars, key=lambda s: s.name)
         
     u = sp.Function(dep_var_name)(*indep_vars)
     
@@ -743,7 +780,6 @@ def execute_calc(parsed_json_str):
             return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
 
         if action == "ode":
-            # ... (기존 ODE 로직)
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
             ode_args = sub_cmds.copy()
@@ -754,32 +790,37 @@ def execute_calc(parsed_json_str):
                     ode_args.append(p_strip)
                 else:
                     preprocessed = preprocess_latex_ode(p_strip)
-                    # [Pre-process for Gamma and other functions]
-                    # \Gamma{\left(z \right)} -> \Gamma(z)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\((.*?)\\right\)\}', r'\\\1(\2)', preprocessed)
                     preprocessed = preprocessed.replace(r'\left(', '(').replace(r'\right)', ')')
                     exprs.append(parse_latex(preprocessed))
             
-            # 수집된 모든 자유 변수 확인
+            if not exprs:
+                return json.dumps({"status": "error", "message": "No ODE expression found"})
+
+            # 수집된 모든 자유 변수 및 함수 확인
             all_symbols = set()
+            all_funcs = set()
             for e in exprs:
                 all_symbols.update(e.free_symbols)
+                # UndefinedFunction(사용자 정의 함수)만 종속 변수 후보로 추출
+                all_funcs.update([getattr(f.func, 'name', None) for f in e.atoms(sp.Function) 
+                                  if isinstance(f.func, sp.core.function.UndefinedFunction)])
+            all_funcs = {name for name in all_funcs if name}
                 
-            potential_dep_vars = ['y', 'x', 'z', 'u', 'v']
-            found_vars = set()
-            for sym in all_symbols:
-                base_name = sym.name.rstrip("'")
-                if base_name in potential_dep_vars:
-                    found_vars.add(base_name)
-                    
-            if len(found_vars) > 1 or len(exprs) > 1:
+            # 종속 변수 감지: 프라임 붙은 변수 + y, u, v, w, z
+            potential_dep_vars = {'y', 'u', 'v', 'w', 'z'}
+            found_vars = {sym.name.rstrip("'") for sym in all_symbols if sym.name.endswith("'")}
+            found_vars.update(all_funcs)
+            # 만약 위에서 아무것도 발견되지 않았다면 기본 후보군에서 검색
+            if not found_vars:
+                found_vars.update({sym.name for sym in all_symbols if sym.name in potential_dep_vars})
+            
+            if len(exprs) > 1 or len(found_vars) > 1:
                 # 연립 미분방정식 처리
+                if not found_vars: found_vars = {'y'}
                 fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars))
-                
-                # 방정식 개수와 변수 개수 맞추기 (부족하면 0=0 추가하여 dsolve 에러 방지)
                 while len(fixed_exprs) < len(funcs):
                     fixed_exprs.append(sp.Eq(0, 0))
-                
                 result = sp.dsolve(fixed_exprs, funcs)
             else:
                 # 단일 미분방정식 처리
