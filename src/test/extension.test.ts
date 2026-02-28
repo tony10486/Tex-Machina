@@ -119,31 +119,40 @@ suite('Extension Test Suite', () => {
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
-    test('Math Splitter: Basic splitting', () => {
-        const input = "$a = b + c + d$";
-        // \begin{align}\n    a &= b \\\\\n    &+ c \\\\\n    &+ d\n\end{align}
-        const expected = "\\begin{align}\n    a &= b \\\\\n    &+ c \\\\\n    &+ d\n\\end{align}";
+    test('Math Splitter: Basic splitting at equal signs', () => {
+        const input = "$a = b + c + d = e$";
+        // Should only split at '='
+        const expected = "\\begin{align}\n    a &= b + c + d \\\\\n    &= e\n\\end{align}";
         const result = splitMathString(input);
         assert.strictEqual(result, expected);
     });
 
-    test('Math Splitter: Respect nesting', () => {
-        const input = "$$f(x) = \\int_{0}^{1} (x+y) dx + C$$";
-        const expected = "\\begin{align}\n    f(x) &= \\int_{0}^{1} (x+y) dx \\\\\n    &+ C\n\\end{align}";
+    test('Math Splitter: Respect nesting with equal signs', () => {
+        const input = "$$f(x) = \\sum_{i=0}^{n} a_i x^i = 0$$";
+        const expected = "\\begin{align}\n    f(x) &= \\sum_{i=0}^{n} a_i x^i \\\\\n    &= 0\n\\end{align}";
         const result = splitMathString(input);
         assert.strictEqual(result, expected);
     });
 
     test('Math Splitter: No operators at top level', () => {
-        const input = "$a$";
+        const input = "$a + b$";
         const result = splitMathString(input);
-        assert.strictEqual(result, input);
+        assert.strictEqual(result, input); // No '=' means no split
     });
 
     test('Math Splitter: Handle display math \\[ \\]', () => {
-        const input = "\\[x = y + z\\]";
-        const expected = "\\begin{align}\n    x &= y \\\\\n    &+ z\n\\end{align}";
+        const input = "\\[x = y = z\\]";
+        const expected = "\\begin{align}\n    x &= y \\\\\n    &= z\n\\end{align}";
         const result = splitMathString(input);
         assert.strictEqual(result, expected);
+    });
+
+    test('Math Splitter: Handle raw text without delimiters', () => {
+        const input = "y''' + y'' + y' + 12 = 0 =";
+        const result = splitMathString(input);
+        // Should only split at the first '='
+        assert.ok(result.startsWith("\\begin{align}"));
+        assert.ok(result.includes("y''' + y'' + y' + 12 &= 0 ="));
+        assert.ok(result.endsWith("\\end{align}"));
     });
 });

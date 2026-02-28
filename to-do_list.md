@@ -58,7 +58,5 @@
 
 ## 고쳐야 할 버그
 - math_formulas.json의 수식 부분이 정상적인 latex 포맷이 아님을 발견
-- Webview에 보이는 수식의 렌더링이 좀 이상함. 행렬의 대괄호가 내부 내용의 크기에 맞춰 길어지지 않고 기본 크기 그대로임.
-- 2d plot 시 웹뷰에 Unknown environment 'tikzpicture'라는 오류가 뜸 
 - requirement.txt를 따로 제공 
 - 단진자 미방을 풀지 못하는가?

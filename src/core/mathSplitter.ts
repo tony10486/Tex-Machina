@@ -71,45 +71,50 @@ function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): { r
  * The core logic for splitting math strings.
  */
 export function splitMathString(text: string): string {
-    // 1. Remove delimiters
-    let inner = text;
+    // 1. Determine inner content and if it was wrapped
+    let inner = text.trim();
+    let wasWrapped = false;
     
-    if (text.startsWith('$$') && text.endsWith('$$')) {
-        inner = text.substring(2, text.length - 2);
-    } else if (text.startsWith('$') && text.endsWith('$')) {
-        inner = text.substring(1, text.length - 1);
-    } else if (text.startsWith('\\\[') && text.endsWith('\\\]')) {
-        inner = text.substring(2, text.length - 2);
-    } else if (text.startsWith('\\[') && text.endsWith('\\]')) {
-        // Handle case where it might be already literal backslashes
-        inner = text.substring(2, text.length - 2);
-    } else {
-        return text;
+    if (inner.startsWith('$$') && inner.endsWith('$$')) {
+        inner = inner.substring(2, inner.length - 2).trim();
+        wasWrapped = true;
+    } else if (inner.startsWith('\\[') && inner.endsWith('\\]')) {
+        inner = inner.substring(2, inner.length - 2).trim();
+        wasWrapped = true;
+    } else if (inner.startsWith('\\\[') && inner.endsWith('\\\]')) {
+        // Handle escaped case if it comes in as \\\[ ... \\\] (3 chars)
+        inner = inner.substring(3, inner.length - 3).trim();
+        wasWrapped = true;
+    } else if (inner.startsWith('$') && inner.endsWith('$')) {
+        inner = inner.substring(1, inner.length - 1).trim();
+        wasWrapped = true;
     }
 
-    inner = inner.trim();
-
     // 2. Find outermost = and +
+    // We ignore operators at the very end of the string (like 'y = 0 =')
     const operators: { pos: number, char: string }[] = [];
     let depth = 0;
     
     for (let i = 0; i < inner.length; i++) {
         const char = inner[i];
         
-        // Handle braces/brackets/parens
         if (char === '{' || char === '(' || char === '[') {
             depth++;
         } else if (char === '}' || char === ')' || char === ']') {
             depth--;
         } else if (inner.substring(i).startsWith('\\left')) {
             depth++;
-            i += 5; // Skip '\left'
+            i += 5;
         } else if (inner.substring(i).startsWith('\\right')) {
             depth--;
-            i += 6; // Skip '\right'
+            i += 6;
         } else if (depth === 0) {
-            if (char === '=' || char === '+') {
-                operators.push({ pos: i, char });
+            if (char === '=') {
+                // Only add if it's not the last character (ignoring trailing whitespace)
+                const remaining = inner.substring(i + 1).trim();
+                if (remaining.length > 0) {
+                    operators.push({ pos: i, char });
+                }
             }
         }
     }
