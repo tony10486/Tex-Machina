@@ -10,6 +10,7 @@ import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
 import { registerMarkdownLatex } from './core/markdownLatex';
 import { registerSmartQuotes } from './core/smartQuotes';
+import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 
 let pythonProcess: ChildProcess | null = null;
@@ -38,6 +39,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Smart Quotes] LaTeX 스마트 따옴표 기능 등록
     registerSmartQuotes(context);
+
+    // [Diacritics] 다이어크리틱 입력 기능 등록
+    registerDiacritics(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);

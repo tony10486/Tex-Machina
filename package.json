@@ -113,6 +113,18 @@
       {
         "command": "tex-machina.insertTable",
         "title": "LaTeX: Insert Table"
+      },
+      {
+        "command": "tex-machina.addHat",
+        "title": "LaTeX: Add Hat Diacritic (\\hat{})"
+      },
+      {
+        "command": "tex-machina.addTilde",
+        "title": "LaTeX: Add Tilde Diacritic (\\tilde{})"
+      },
+      {
+        "command": "tex-machina.addDot",
+        "title": "LaTeX: Add Dot Diacritic (\\dot{})"
       }
     ],
     "viewsContainers": {
@@ -155,6 +167,24 @@
         "command": "tex-machina.formatUnit",
         "key": "ctrl+shift+' u",
         "mac": "cmd+shift+' u",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addHat",
+        "key": "alt+shift+6",
+        "mac": "alt+shift+6",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addTilde",
+        "key": "alt+shift+`",
+        "mac": "alt+shift+`",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addDot",
+        "key": "alt+.",
+        "mac": "alt+.",
         "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
