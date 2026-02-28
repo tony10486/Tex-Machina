@@ -81,6 +81,11 @@
           "type": "boolean",
           "default": true,
           "description": "마크다운 스타일 자동 변환 기능을 활성화합니다. **텍스트** + 스페이스는 \\textbf{텍스트}로, - + 스페이스는 itemize 환경으로 변환됩니다."
+        },
+        "tex-machina.smartQuotes.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "LaTeX 스마트 따옴표 기능을 활성화합니다. \" 키를 누르면 상황에 맞게 `` 또는 ''로 변환됩니다."
         }
       }
     },

@@ -442,4 +442,77 @@ suite('Extension Test Suite', () => {
         assert.ok(document.lineAt(0).text.includes('\\sout{strike}'));
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
+
+    test('Smart Quotes: " at start of line should become ``', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 0), '"');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text === '``') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, '``', 'Should become opening quotes');
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Smart Quotes: " after text should become \'\'', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'Hello' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 5), '"');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (document.lineAt(0).text === "Hello''") {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, "Hello''", 'Should become closing quotes');
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Smart Quotes: " inside verbatim should stay "', async () => {
+        const content = '\\begin{verbatim}\n\n\\end{verbatim}';
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: content });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(1, 0), '"');
+        });
+
+        // Wait a bit to ensure it DOES NOT change
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        assert.strictEqual(document.lineAt(1).text, '"', 'Should stay as double quote');
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Smart Quotes: \\" should stay \\"', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), '"');
+        });
+
+        // Wait a bit to ensure it DOES NOT change
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        assert.strictEqual(document.lineAt(0).text, '\\"', 'Should stay as \\"');
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
 });

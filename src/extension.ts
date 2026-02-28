@@ -9,6 +9,7 @@ import { registerAutoBracing } from './core/autoBracing';
 import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
 import { registerMarkdownLatex } from './core/markdownLatex';
+import { registerSmartQuotes } from './core/smartQuotes';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 
 let pythonProcess: ChildProcess | null = null;
@@ -34,6 +35,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Markdown Latex] 마크다운 스타일 자동 변환 등록
     registerMarkdownLatex(context);
+
+    // [Smart Quotes] LaTeX 스마트 따옴표 기능 등록
+    registerSmartQuotes(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
