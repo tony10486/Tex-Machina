@@ -44,15 +44,16 @@ export function registerMathSplitter(context: vscode.ExtensionContext) {
 }
 
 /**
- * Finds the math environment ($...$, $$...$$, \[...\]) at the given position.
+ * Finds the math environment ($...$, $$...$$, \[...\], \begin{align}...\end{align}, etc.) at the given position.
  */
-function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
+export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
     const text = document.getText();
     const offset = document.offsetAt(pos);
 
-    // Regex for various math environments (careful with backslashes in regex string)
-    // $$...$$, $...$, \[...\]
-    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\])/g;
+    // 확장된 수식 환경 정규표현식:
+    // 1. $$...$$ 또는 $...$ 또는 \[...\]
+    // 2. \begin{env}... \end{env} (equation, align, gather, multline, flalign, alignat 및 * 포함)
+    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\]|\\begin\{(equation|align|gather|multline|flalign|alignat)\*?\}[\s\S]*?\\end\{\2\*?\})/g;
     let match;
     while ((match = mathRegex.exec(text)) !== null) {
         const start = match.index;

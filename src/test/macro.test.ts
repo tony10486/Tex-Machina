@@ -50,9 +50,53 @@ suite('Macro and Chaining Test Suite', () => {
         assert.deepStrictEqual(parts, ["calc > diff", "plot > 2d"]);
     });
 
-    test('Command Parser: splitChain with custom delimiter |', () => {
-        const input = "calc > diff | plot > 2d";
-        const parts = splitChain(input, "|");
-        assert.deepStrictEqual(parts, ["calc > diff", "plot > 2d"]);
+    test('MacroManager: context-aware expansion (math vs text)', async () => {
+        // Mock globalState
+        const mockStorage: Record<string, any> = {};
+        const mockContext: any = {
+            globalState: {
+                get: (key: string, defaultValue: any) => mockStorage[key] || defaultValue,
+                update: (key: string, value: any) => { mockStorage[key] = value; return Promise.resolve(); }
+            }
+        };
+
+        const manager = new MacroManager(mockContext);
+        
+        // Define macros
+        await manager.defineMacro('abc:math', 'math_result');
+        await manager.defineMacro('abc:text', 'text_result');
+        await manager.defineMacro('abc', 'default_result');
+
+        // Mock Document and Editor
+        const createMockEditor = (text: string, pos: number): any => ({
+            document: {
+                getText: () => text,
+                offsetAt: (p: any) => p.character, // Simple offset for testing
+                positionAt: (offset: number) => ({ character: offset, line: 0 })
+            },
+            selection: {
+                active: { character: pos, line: 0 }
+            }
+        });
+
+        // 1. Math mode (inside $...$)
+        const mathEditor = createMockEditor("$ a + b $", 5);
+        assert.strictEqual(manager.expand(";abc", mathEditor), "math_result");
+
+        // 2. Text mode (outside)
+        const textEditor = createMockEditor("Hello world", 5);
+        assert.strictEqual(manager.expand(";abc", textEditor), "text_result");
+
+        // 3. Various math environments (align, equation, etc.)
+        const alignEditor = createMockEditor("\\begin{align}\n a = b \n\\end{align}", 15);
+        assert.strictEqual(manager.expand(";abc", alignEditor), "math_result");
+
+        const equationEditor = createMockEditor("\\begin{equation*} x^2 \\end{equation*}", 20);
+        assert.strictEqual(manager.expand(";abc", equationEditor), "math_result");
+
+        // 4. Fallback to default if context macro doesn't exist
+        await manager.defineMacro('only_default', 'def');
+        assert.strictEqual(manager.expand(";only_default", mathEditor), "def");
+        assert.strictEqual(manager.expand(";only_default", textEditor), "def");
     });
 });

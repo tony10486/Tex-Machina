@@ -514,7 +514,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!userInput) {return;}
 
             // [추가] 매크로 확장 (;이름)
-            userInput = macroManager.expand(userInput);
+            userInput = macroManager.expand(userInput, editor);
 
             // [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);
