@@ -14,6 +14,7 @@ import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection } from './core/labelDetection';
 import { registerPackageDetection } from './core/packageDetection';
+import { registerNodeNavigation } from './core/nodeNavigation';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -26,6 +27,9 @@ let pdfTargetDir: string = "";
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
+
+    // [Node Navigation] 수식 계층별 이동 기능 등록
+    registerNodeNavigation(context);
 
     // [Smart Auto-bracing] 첨자 자동 괄호 기능 등록
     registerAutoBracing(context);

@@ -134,6 +134,18 @@
       {
         "command": "tex-machina.deleteUnusedLabels",
         "title": "LaTeX: Delete Unused Labels"
+      },
+      {
+        "command": "tex-machina.toggleMathNav",
+        "title": "LaTeX: Toggle Formula Node Navigation"
+      },
+      {
+        "command": "tex-machina.mathNavRight",
+        "title": "LaTeX: Math Node Navigation Right"
+      },
+      {
+        "command": "tex-machina.mathNavLeft",
+        "title": "LaTeX: Math Node Navigation Left"
       }
     ],
     "viewsContainers": {
@@ -194,6 +206,24 @@
         "command": "tex-machina.addDot",
         "key": "alt+.",
         "mac": "alt+.",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleMathNav",
+        "key": "ctrl+shift+' l",
+        "mac": "cmd+shift+' l",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.mathNavRight",
+        "key": "alt+right",
+        "mac": "alt+right",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.mathNavLeft",
+        "key": "alt+left",
+        "mac": "alt+left",
         "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
