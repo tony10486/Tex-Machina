@@ -8,12 +8,19 @@ let isMathNavActive = false;
  * instead of words.
  */
 export function registerNodeNavigation(context: vscode.ExtensionContext) {
+    const config = vscode.workspace.getConfiguration('tex-machina');
+    isMathNavActive = config.get<boolean>('mathNav.enabled', false);
+    vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
+
     // Toggle Command: cmd+shift+' l
     let toggleCommand = vscode.commands.registerCommand('tex-machina.toggleMathNav', () => {
         isMathNavActive = !isMathNavActive;
         console.log(`[MathNav] Toggled: ${isMathNavActive}`);
         vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
         
+        // Update configuration to persist the change
+        vscode.workspace.getConfiguration('tex-machina').update('mathNav.enabled', isMathNavActive, vscode.ConfigurationTarget.Global);
+
         if (isMathNavActive) {
             vscode.window.showInformationMessage("Math Navigation Mode: ON");
         } else {
@@ -31,6 +38,15 @@ export function registerNodeNavigation(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(toggleCommand, navRight, navLeft);
+
+    // Listen for configuration changes
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('tex-machina.mathNav.enabled')) {
+            const config = vscode.workspace.getConfiguration('tex-machina');
+            isMathNavActive = config.get<boolean>('mathNav.enabled', false);
+            vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
+        }
+    }));
 }
 
 function navigate(direction: 'left' | 'right') {
