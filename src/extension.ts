@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import { parseUserCommand } from './core/commandParser';
+import { parseUserCommand, splitChain } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
 import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
@@ -15,6 +15,7 @@ import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection } from './core/labelDetection';
 import { registerPackageDetection } from './core/packageDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
+import { MacroManager } from './core/macroManager';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -24,9 +25,106 @@ let currentMainCommand: string = "";
 let currentParallels: string[] = [];
 let isExportingPdf: boolean = false;
 let pdfTargetDir: string = "";
+let macroManager: MacroManager;
+let responseResolver: ((response: any) => void) | null = null;
+
+/**
+ * 파이썬 프로세스에 명령을 보내고 응답을 기다립니다 (Promise).
+ */
+function sendToPythonAndWait(payload: any): Promise<any> {
+    return new Promise((resolve) => {
+        if (!pythonProcess?.stdin) {
+            resolve({ status: 'error', message: 'Python process is not running' });
+            return;
+        }
+        responseResolver = resolve;
+        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+    });
+}
+
+async function executeChain(chain: string[], initialSelection: string, editor: vscode.TextEditor, selection: vscode.Selection) {
+    let currentInput = initialSelection;
+    let lastResponse: any = null;
+
+    // 설정 가져오기 (각 명령마다 동일한 설정 사용)
+    const config = vscode.workspace.getConfiguration('tex-machina');
+    const laplaceConfig = {
+        source: config.get('laplace.sourceVariable', 't'),
+        target: config.get('laplace.targetVariable', 's')
+    };
+    const angleUnit = config.get('angleUnit', 'deg');
+    const datDensity = config.get('plot.datDensity', 500);
+    const yMultiplier = config.get('plot.yMultiplier', 5.0);
+    const lineColor = config.get('plot.lineColor', 'blue');
+
+    for (let i = 0; i < chain.length; i++) {
+        const cmdStr = chain[i];
+        const parsed = parseUserCommand(cmdStr, currentInput);
+        
+        // 전역 상태 업데이트 (웹뷰 연동용)
+        currentMainCommand = parsed.mainCommand;
+        currentParallels = parsed.parallelOptions;
+
+        const payload = {
+            ...parsed,
+            config: {
+                laplace: laplaceConfig,
+                angleUnit: angleUnit,
+                datDensity: datDensity,
+                yMultiplier: yMultiplier,
+                lineColor: lineColor,
+                workspaceDir: path.dirname(editor.document.uri.fsPath)
+            }
+        };
+
+        const response = await sendToPythonAndWait(payload);
+        lastResponse = response;
+
+        if (response.status === 'success') {
+            // [OEIS/CITE 등 인터랙티브 명령어는 체인에서 지원하지 않음]
+            if (response.status === 'oeis_results' || response.status === 'search_results') {
+                vscode.window.showWarningMessage(`체인 내에서 인터랙티브 명령어(${parsed.mainCommand})는 지원되지 않습니다.`);
+                break;
+            }
+            // 다음 명령어의 입력으로 현재 결과를 사용
+            currentInput = response.latex;
+        } else {
+            vscode.window.showErrorMessage(`체인 중단 (${cmdStr}): ${response.message}`);
+            return;
+        }
+    }
+
+    // 최종 결과 에디터 삽입 (마지막 명령의 응답을 기준으로)
+    if (lastResponse && lastResponse.status === 'success') {
+        const resultLatex = lastResponse.latex;
+        let outputText = "";
+
+        if (currentMainCommand === "matrix") {
+            outputText = resultLatex;
+        } else if (currentMainCommand === "plot") {
+            if (lastResponse.latex.includes("tikzpicture")) {
+                outputText = resultLatex;
+            } else {
+                outputText = initialSelection; // 3D Plot 등은 텍스트 유지
+            }
+        } else if (currentParallels.includes("newline")) {
+            outputText = `${initialSelection}\n\n\\[\n${resultLatex}\n\\]`;
+        } else {
+            outputText = `${initialSelection} = ${resultLatex}`;
+        }
+
+        if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && lastResponse.latex.includes("tikzpicture"))) {
+            await editor.edit(editBuilder => {
+                editBuilder.replace(selection, outputText);
+            });
+        }
+    }
+}
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
+
+    macroManager = new MacroManager(context);
 
     // [Node Navigation] 수식 계층별 이동 기능 등록
     registerNodeNavigation(context);
@@ -92,6 +190,17 @@ export function activate(context: vscode.ExtensionContext) {
             console.log(`Python Output: ${line}`);
             try {
                 const response = JSON.parse(line);
+
+                // [Chain Logic] 만약 Promise 대기 중이라면 resolve 호출
+                if (responseResolver) {
+                    const resolve = responseResolver;
+                    responseResolver = null;
+                    resolve(response);
+                    // 체인 중간에는 에디터 업데이트를 건너뛰는 것이 좋지만,
+                    // 웹뷰는 업데이트하고 싶을 수 있으므로 아래 로직을 계속 실행할 수도 있습니다.
+                    // 단, 에디터 삽입 로직은 executeChain에서 처리할 예정이므로
+                    // 여기서는 responseResolver가 있으면 에디터 수정을 막는 플래그를 고려할 수 있습니다.
+                }
 
                 // [oeis] 수열 검색 결과 처리
                 if (response.status === 'oeis_results') {
@@ -404,9 +513,30 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (!userInput) {return;}
 
+            // [추가] 매크로 확장 (;이름)
+            userInput = macroManager.expand(userInput);
+
+            // [추가] 매크로 정의 (> define:...)
+            const macroDef = macroManager.parseDefinition(userInput);
+            if (macroDef) {
+                await macroManager.defineMacro(macroDef.name, macroDef.chain);
+                return;
+            }
+
             // 특수 커맨드 (분석) 처리
             if (userInput === "analyze > width") {
                 vscode.commands.executeCommand('tex-machina.analyzeWidth');
+                return;
+            }
+
+            // [추가] 명령어 체이닝 처리
+            const cliConfig = vscode.workspace.getConfiguration('tex-machina');
+            const delimiter = cliConfig.get<string>('cli.chainDelimiter', '&&');
+            const chain = splitChain(userInput, delimiter);
+            if (chain.length > 1) {
+                if (currentEditor && currentSelection) {
+                    await executeChain(chain, currentOriginalText, currentEditor, currentSelection);
+                }
                 return;
             }
 

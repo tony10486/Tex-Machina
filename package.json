@@ -101,6 +101,17 @@
           "type": "boolean",
           "default": true,
           "description": "수식 점프 시 슬롯(괄호) 내 내용이 있다면 자동으로 선택(Selection)합니다."
+        },
+        "tex-machina.cli.chainDelimiter": {
+          "type": "string",
+          "enum": [
+            "&&",
+            "//",
+            "|",
+            "&"
+          ],
+          "default": "&&",
+          "description": "명령어 체이닝을 위한 구분자를 설정합니다. (기본값: &&)"
         }
       }
     },
