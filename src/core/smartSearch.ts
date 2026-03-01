@@ -96,10 +96,10 @@ export async function performSmartSearchInject(editor: vscode.TextEditor, queryS
             if (query.injection.includes('=')) {
                 if (options !== undefined) {
                     // 기존 옵션에 추가
-                    newText = `\\\\${query.targetCmd}${optSpace}[${options}, ${query.injection}]${argPart}`;
+                    newText = `\\${query.targetCmd}${optSpace}[${options}, ${query.injection}]${argPart}`;
                 } else {
                     // 새 옵션 생성
-                    newText = `\\\\${query.targetCmd}[${query.injection}]${argPart}`;
+                    newText = `\\${query.targetCmd}[${query.injection}]${argPart}`;
                 }
             } else {
                 // 단순 주입 (끝에 추가)
