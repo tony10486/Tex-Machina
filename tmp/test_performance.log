@@ -1,0 +1,107 @@
+
+> tex-machina@0.1.2 pretest
+> npm run compile-tests && npm run compile && npm run lint
+
+
+> tex-machina@0.1.2 compile-tests
+> tsc -p . --outDir out
+
+
+> tex-machina@0.1.2 compile
+> npm run check-types && npm run lint && node esbuild.js
+
+
+> tex-machina@0.1.2 check-types
+> tsc --noEmit
+
+
+> tex-machina@0.1.2 lint
+> eslint src
+
+(node:14975) ExperimentalWarning: CommonJS module /Users/honey/Documents/tex-machina/node_modules/debug/src/node.js is loading ES Module /Users/honey/Documents/tex-machina/node_modules/supports-color/index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[watch] build started
+[watch] build finished
+
+> tex-machina@0.1.2 lint
+> eslint src
+
+(node:14999) ExperimentalWarning: CommonJS module /Users/honey/Documents/tex-machina/node_modules/debug/src/node.js is loading ES Module /Users/honey/Documents/tex-machina/node_modules/supports-color/index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> tex-machina@0.1.2 test
+> vscode-test
+
+(node:15011) ExperimentalWarning: CommonJS module /Users/honey/Documents/tex-machina/node_modules/debug/src/node.js is loading ES Module /Users/honey/Documents/tex-machina/node_modules/supports-color/index.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+- Resolving version...
+✔ Validated version: 1.109.5
+✔ Found existing install in /Users/honey/Documents/tex-machina/.vscode-test/vscode-darwin-arm64-1.109.5
+[90m[main 2026-03-01T11:05:16.553Z][0m update#setState disabled
+[90m[main 2026-03-01T11:05:16.555Z][0m update#ctor - updates are disabled by the environment
+Started local extension host with pid 15050.
+MCP Registry configured: https://api.mcp.github.com
+Loading development extension at /Users/honey/Documents/tex-machina
+Settings Sync: Account status changed from uninitialized to unavailable
+
+  Webview UI Test Suite
+    ✔ Webview HTML should contain Table UI elements
+    ✔ Webview should forward insertTable message to VS Code command
+  Table Generator Test Suite
+    ✔ Generate basic table (3x3, no borders, no header)
+    ✔ Generate table with borders and header (2x2)
+    ✔ Alignment check (right)
+  Package Detection Test Suite
+TeX-Machina 활성화 완료!
+    ✔ Should comment out unused package (188ms)
+    ✔ Should uncomment used package (135ms)
+    ✔ Should handle optional arguments (31ms)
+  Formula Node Navigation Test Suite
+    ✔ getJumpPoints for simple fraction should jump to slots (1ms)
+    ✔ getJumpPoints for complex math block
+    ✔ getJumpPoints for operators
+    ✔ getJumpPoints for user reported string
+  Label Detection Test Suite
+    ✔ findReferences should find all references
+    ✔ findReferences should handle various commands
+    ✔ findLabels should find all labels (2ms)
+  Extension Test Suite
+    ✔ Command Parser: Basic diff command
+    ✔ Command Parser: Command with parallel options
+    ✔ Command Parser: Multiple subcommands
+    ✔ Auto-bracing: ^ab should become ^{ab} (246ms)
+    ✔ Auto-bracing: Should not brace when disabled (698ms)
+    ✔ Auto-bracing: Should escape when Esc is pressed (658ms)
+    ✔ Math Splitter: Basic splitting at equal signs
+    ✔ Math Splitter: Respect nesting with equal signs
+    ✔ Math Splitter: No operators at top level
+    ✔ Math Splitter: Handle display math \[ \]
+    ✔ Math Splitter: Handle raw text without delimiters
+    ✔ Unit Expander: Basic expansion
+    ✔ Unit Expander: Complex expansion
+    ✔ Unit Expander: Command execution (60ms)
+    ✔ Command Parser: Tricky edge cases
+    ✔ Math Splitter: Extremely complex nesting
+    ✔ Unit Expander: Very complex units
+    ✔ Auto-bracing: Multiple nesting and fast typing simulation (368ms)
+    ✔ Auto-bracing: Nested subscripts x_a_b (1205ms)
+    ✔ Markdown: **bold** space should become \textbf{bold}  (263ms)
+    ✔ Markdown: - space at start should become itemize environment (253ms)
+    ✔ Markdown: #Section# space should become \section{Section} (249ms)
+    ✔ Markdown: ##Subsection## space should become \subsection{Subsection} (250ms)
+    ✔ Markdown: > Text space should become gather environment (259ms)
+    ✔ Markdown: *italic* space should become \textit{italic} (250ms)
+    ✔ Markdown: ~~strike~~ space should become \sout{strike} (253ms)
+    ✔ Smart Quotes: " at start of line should become `` (253ms)
+    ✔ Smart Quotes: " after text should become '' (258ms)
+    ✔ Smart Quotes: " inside verbatim should stay " (659ms)
+    ✔ Smart Quotes: \" should stay \" (673ms)
+    ✔ Diacritics: addHat should wrap character (161ms)
+    ✔ Diacritics: addTilde should wrap selection (154ms)
+    ✔ Diacritics: addDot should handle empty space (153ms)
+  48 passing (8s)
+[90m[main 2026-03-01T11:05:25.925Z][0m Extension host with pid 15050 exited with code: 0, signal: unknown.
+Exit code:   0
