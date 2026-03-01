@@ -1,0 +1,39 @@
+\documentclass{article}
+\usepackage{graphicx}
+
+\begin{document}
+
+\section{Introduction}
+This is a test file for Smart Search & Inject.
+
+% 1. 단순 삽입 테스트: \section 뒤에 % TODO 주석 추가하기
+\section{Background}
+
+% 2. 기본 \includegraphics (옵션 없음)
+\includegraphics{cat.png}
+
+% 3. figure 환경 내부의 \includegraphics (옵션 있음, alt 없음)
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5	extwidth]{dog.png}
+    \caption{A dog}
+\end{figure}
+
+% 4. 중첩된 figure 환경 테스트
+\begin{figure}
+    \begin{figure}
+        \includegraphics{nested_bird.png}
+    \end{figure}
+    \includegraphics[scale=1.2]{top_bird.png}
+    \caption{Birds}
+\end{figure}
+
+% 5. 제외 속성 테스트: 이미 alt가 있는 경우 (수정되면 안 됨)
+\begin{figure}
+    \includegraphics[alt={already here}]{fish.png}
+\end{figure}
+
+% 6. figure 외부의 이미지 (수정되면 안 됨 - figure > 쿼리 사용 시)
+\includegraphics{outside_figure.png}
+
+\end{document}

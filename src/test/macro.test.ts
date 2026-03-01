@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
 import { splitChain } from '../core/commandParser';
 import { MacroManager } from '../core/macroManager';
 
@@ -70,12 +71,21 @@ suite('Macro and Chaining Test Suite', () => {
         // Mock Document and Editor
         const createMockEditor = (text: string, pos: number): any => ({
             document: {
-                getText: () => text,
+                getText: (range?: vscode.Range) => {
+                    if (range) {
+                        return text.substring(range.start.character, range.end.character);
+                    }
+                    return text;
+                },
                 offsetAt: (p: any) => p.character, // Simple offset for testing
-                positionAt: (offset: number) => ({ character: offset, line: 0 })
+                positionAt: (offset: number) => ({ character: offset, line: 0 }),
+                lineAt: (line: number) => ({
+                    text: text.split('\n')[line] || ""
+                })
             },
             selection: {
-                active: { character: pos, line: 0 }
+                active: { character: pos, line: 0 },
+                translate: (deltaLine: number) => ({ character: pos, line: deltaLine }) // simplistic
             }
         });
 

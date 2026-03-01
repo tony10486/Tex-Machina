@@ -39,11 +39,39 @@ export class MacroManager {
 
             // 컨텍스트 인지형 확장 시도
             if (editor) {
+                let contextName = '';
+
+                // 1. Math 모드 우선순위
                 const isMath = !!findMathAtPos(editor.document, editor.selection.active);
-                const contextName = `${name}:${isMath ? 'math' : 'text'}`;
+                if (isMath) {
+                    contextName = `${name}:math`;
+                    if (macros[contextName]) { return macros[contextName]; }
+                }
+
+                // 2. 사용자 정의 컨텍스트 (정규표현식 감지)
+                const config = vscode.workspace.getConfiguration('tex-machina');
+                const customContexts = config.get<any[]>('macros.customContexts', []);
                 
-                if (macros[contextName]) {
-                    return macros[contextName];
+                for (const ctx of customContexts) {
+                    const regex = new RegExp(ctx.regex);
+                    const lineText = editor.document.lineAt(editor.selection.active.line).text;
+                    const checkText = (ctx.scope === 'around') 
+                        ? editor.document.getText(new vscode.Range(
+                            editor.selection.active.translate(-2), 
+                            editor.selection.active.translate(2)
+                          ))
+                        : lineText;
+
+                    if (regex.test(checkText)) {
+                        contextName = `${name}:${ctx.name}`;
+                        if (macros[contextName]) { return macros[contextName]; }
+                    }
+                }
+
+                // 3. 마지막으로 Text 모드 시도
+                if (!isMath) {
+                    contextName = `${name}:text`;
+                    if (macros[contextName]) { return macros[contextName]; }
                 }
             }
 

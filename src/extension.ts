@@ -16,6 +16,7 @@ import { registerLabelDetection } from './core/labelDetection';
 import { registerPackageDetection } from './core/packageDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { MacroManager } from './core/macroManager';
+import { performSmartSearchInject } from './core/smartSearch';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -516,6 +517,18 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (!userInput) {return;}
 
+            // ✨ [추가] 스마트 검색 및 주입 (Smart Search & Inject)
+            // 'env > \cmd:not([attr])').inject('text') 형태인지 확인
+            if (userInput.includes(').inject(')) {
+                try {
+                    const count = await performSmartSearchInject(editor, userInput);
+                    vscode.window.showInformationMessage(`${count}개의 항목이 수정되었습니다.`);
+                } catch (err: any) {
+                    vscode.window.showErrorMessage(`스마트 검색 실패: ${err.message}`);
+                }
+                return;
+            }
+
             // [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);
             if (macroDef) {
@@ -807,6 +820,41 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
     context.subscriptions.push(insertTableCommand);
+
+    // ✨ [직관적 UI 추가] 상용 컨텍스트 숏컷 추가 커맨드
+    let addContextShortcutCommand = vscode.commands.registerCommand('tex-machina.addContextShortcut', async () => {
+        const presets = [
+            { label: "코드 블록 (verbatim)", detail: "verbatim 환경 내부를 감지합니다.", name: "code", regex: "\\\\begin{verbatim}[\\s\\S]*?\\\\end{verbatim}", scope: "around" },
+            { label: "문서 서문 (preamble)", detail: "\\documentclass 가 있는 줄을 감지합니다.", name: "preamble", regex: "^\\\\documentclass", scope: "line" },
+            { label: "수식 번호 (tag)", detail: "\\tag{...} 가 있는 줄을 감지합니다.", name: "tag", regex: "\\\\tag\\{.*?\\}", scope: "line" },
+            { label: "커스텀 환경 (myEnv)", detail: "\\begin{myEnv} 환경 내부를 감지합니다.", name: "myEnv", regex: "\\\\begin{myEnv}[\\s\\S]*?\\\\end{myEnv}", scope: "around" }
+        ];
+
+        const selected = await vscode.window.showQuickPick(presets, {
+            placeHolder: "추가할 매크로 컨텍스트를 선택하세요."
+        });
+
+        if (selected) {
+            const config = vscode.workspace.getConfiguration('tex-machina');
+            const currentContexts = config.get<any[]>('macros.customContexts', []);
+            
+            // 중복 체크
+            if (currentContexts.some(c => c.name === selected.name)) {
+                vscode.window.showWarningMessage(`이미 '${selected.name}' 컨텍스트가 등록되어 있습니다.`);
+                return;
+            }
+
+            const newContext = {
+                name: selected.name,
+                regex: selected.regex,
+                scope: selected.scope
+            };
+
+            await config.update('macros.customContexts', [...currentContexts, newContext], vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`'${selected.name}' 컨텍스트가 설정에 추가되었습니다. 이제 ';매크로:${selected.name}' 를 사용할 수 있습니다.`);
+        }
+    });
+    context.subscriptions.push(addContextShortcutCommand);
 }
 
 export function deactivate() {

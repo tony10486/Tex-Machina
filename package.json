@@ -112,10 +112,61 @@
           ],
           "default": "&&",
           "description": "명령어 체이닝을 위한 구분자를 설정합니다. (기본값: &&)"
+        },
+        "tex-machina.macros.customContexts": {
+          "type": "array",
+          "title": "사용자 정의 매크로 컨텍스트",
+          "markdownDescription": "### 🛠 매크로 컨텍스트 설정 가이드\n커서가 특정 환경(주석, 코드 등)에 있을 때만 작동하는 매크로를 정의합니다.\n- **사용법**: 매크로 정의 시 `이름:컨텍스트` 형태로 등록 (예: `;abc:comment`)\n- **편의 기능**: [자주 쓰이는 컨텍스트 세트 추가하기](command:tex-machina.addContextShortcut)",
+          "items": {
+            "type": "object",
+            "title": "컨텍스트 항목",
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "컨텍스트 이름",
+                "description": "매크로 호출 시 사용할 이름 (예: comment)",
+                "pattern": "^[a-zA-Z0-9_-]+$",
+                "errorMessage": "영문, 숫자, -, _ 만 사용 가능합니다."
+              },
+              "regex": {
+                "type": "string",
+                "title": "감지용 정규표현식",
+                "description": "해당 영역을 판별할 Regex (예: ^\\s*%.*)"
+              },
+              "scope": {
+                "type": "string",
+                "title": "검사 범위",
+                "enum": [
+                  "line",
+                  "around"
+                ],
+                "default": "line",
+                "enumDescriptions": [
+                  "현재 줄만 검사 (성능 위주)",
+                  "전후 2줄 포함 총 5줄 검사 (멀티라인 환경용)"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "regex"
+            ]
+          },
+          "default": [
+            {
+              "name": "comment",
+              "regex": "^\\s*%.*",
+              "scope": "line"
+            }
+          ]
         }
       }
     },
     "commands": [
+      {
+        "command": "tex-machina.addContextShortcut",
+        "title": "LaTeX: Add Common Macro Contexts"
+      },
       {
         "command": "tex-machina.openCLI",
         "title": "Open TeX-Machina CLI"
