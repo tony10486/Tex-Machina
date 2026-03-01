@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 let isMathNavActive = false;
+let isSelectContentEnabled = true;
 
 /**
  * Formula Node Navigation:
@@ -10,6 +11,7 @@ let isMathNavActive = false;
 export function registerNodeNavigation(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('tex-machina');
     isMathNavActive = config.get<boolean>('mathNav.enabled', false);
+    isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
     vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
 
     // Toggle Command: cmd+shift+' l
@@ -45,6 +47,10 @@ export function registerNodeNavigation(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('tex-machina');
             isMathNavActive = config.get<boolean>('mathNav.enabled', false);
             vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
+        }
+        if (e.affectsConfiguration('tex-machina.mathNav.selectContent.enabled')) {
+            const config = vscode.workspace.getConfiguration('tex-machina');
+            isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
         }
     }));
 }
@@ -99,8 +105,46 @@ function navigate(direction: 'left' | 'right') {
     }
 
     const targetPos = document.positionAt(document.offsetAt(mathBlock.range.start) + targetOffset);
-    editor.selection = new vscode.Selection(targetPos, targetPos);
+    
+    // Check if we should select content (if it's after an opening brace)
+    let selection: vscode.Selection | undefined;
+    if (isSelectContentEnabled) {
+        const charBefore = targetOffset > 0 ? mathBlock.text[targetOffset - 1] : '';
+        if (charBefore === '{' || charBefore === '[' || charBefore === '(') {
+            const endOffset = findMatchingBracket(mathBlock.text, targetOffset - 1);
+            if (endOffset !== -1 && endOffset > targetOffset) {
+                const endPos = document.positionAt(document.offsetAt(mathBlock.range.start) + endOffset);
+                selection = new vscode.Selection(targetPos, endPos);
+            }
+        }
+    }
+
+    if (selection) {
+        editor.selection = selection;
+    } else {
+        editor.selection = new vscode.Selection(targetPos, targetPos);
+    }
     editor.revealRange(new vscode.Range(targetPos, targetPos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+}
+
+/**
+ * Finds the matching closing bracket for an opening bracket at the given index.
+ */
+function findMatchingBracket(text: string, startIdx: number): number {
+    const open = text[startIdx];
+    const close = open === '{' ? '}' : (open === '[' ? ']' : ')');
+    let depth = 1;
+    for (let i = startIdx + 1; i < text.length; i++) {
+        if (text[i] === open) {
+            depth++;
+        } else if (text[i] === close) {
+            depth--;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }
 
 /**
