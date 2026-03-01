@@ -5,11 +5,11 @@ suite('Formula Node Navigation Test Suite', () => {
     test('getJumpPoints for simple fraction should jump to slots', () => {
         const text = '\\frac{a}{b}';
         // \ 0, f 1, r 2, a 3, c 4, { 5, a 6, } 7, { 8, b 9, } 10
-        // Slots: inside first { (6), end of first { (7), inside second { (9), end of second { (10)
+        // Slots: inside first { (6), inside second { (9)
         // Also 0 and end 11
         const points = getJumpPoints(text);
-        // [0, 6, 7, 9, 10, 11]
-        assert.deepStrictEqual(points, [0, 6, 7, 9, 10, 11]);
+        // [0, 6, 9, 11]
+        assert.deepStrictEqual(points, [0, 6, 9, 11]);
     });
 
     test('getJumpPoints for complex math block', () => {

@@ -120,7 +120,11 @@ function navigate(direction: 'left' | 'right') {
     }
 
     if (selection) {
-        editor.selection = selection;
+        if (direction === 'left') {
+            editor.selection = new vscode.Selection(selection.active, selection.anchor);
+        } else {
+            editor.selection = selection;
+        }
     } else {
         editor.selection = new vscode.Selection(targetPos, targetPos);
     }
@@ -199,9 +203,6 @@ export function getJumpPoints(text: string): number[] {
         if (m === '{' || m === '[' || m === '(') {
             // Slot: Inside the opening bracket
             points.add(pos + 1);
-        } else if (m === '}' || m === ']' || m === ')') {
-            // Slot: End of the content before closing bracket
-            points.add(pos);
         } else if (m === '^' || m === '_') {
             // If the script is followed by a bracket, let the bracket handle the jump point (inside the slot)
             let nextChar = pos + 1 < text.length ? text[pos + 1] : '';
