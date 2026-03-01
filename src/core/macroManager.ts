@@ -43,11 +43,11 @@ export class MacroManager {
 
     /**
      * 매크로 정의 구문인지 확인하고 파싱합니다.
-     * @param input 입력 문자열 (예: > define:calc > diff && plot > 2d>:diffplot)
+     * @param input 입력 문자열 (예: define:calc > diff && plot > 2d>:diffplot)
      */
     parseDefinition(input: string): { chain: string; name: string } | null {
-        // > define:명령어체인>:이름
-        const match = input.match(/^>\s*define:(.+)>:(.+)$/);
+        // define:명령어체인>:이름 (앞의 > 는 선택사항)
+        const match = input.match(/^>?\s*define:(.+)>:(.+)$/);
         if (match) {
             return {
                 chain: match[1].trim(),
