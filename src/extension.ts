@@ -501,7 +501,10 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             }
 
-            // 만약 끝이 '>'로 끝나면 (그룹 선택), 입력창에 채워주고 계속 진행
+            // ✨ [순서 변경] 매크로 확장을 UI 결정(닫기 여부) 전에 수행
+            userInput = macroManager.expand(userInput, editor);
+
+            // 만약 끝이 '>'로 끝나면 (그룹 선택 또는 매크로 확장 결과), 입력창에 채워주고 계속 진행
             if (userInput.trim().endsWith(">")) {
                 quickPick.value = userInput.trim() + " ";
                 // 다음 단계 필터링을 위해 선택 상태 초기화
@@ -512,9 +515,6 @@ export function activate(context: vscode.ExtensionContext) {
             quickPick.hide();
 
             if (!userInput) {return;}
-
-            // [추가] 매크로 확장 (;이름)
-            userInput = macroManager.expand(userInput, editor);
 
             // [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);
