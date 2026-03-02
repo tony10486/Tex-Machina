@@ -261,16 +261,20 @@ class QueryParser:
         start_char = start_node[1][-1] # Last char for _{ or [
         end_char = ']' if start_char == '[' else '}'
         
-        depth = 1
+        depth = 0
         content = []
-        # We don't consume the start here because it's usually part of a token like '_{'
         while self.pos < len(self.tokens):
             t = self.consume()
-            if t[1] == start_char: depth += 1
+            if t[1].endswith(start_char): depth += 1
             elif t[1] == end_char: depth -= 1
             
             if depth == 0: break
             content.append(t[1])
+            
+        # If the first token was something like '_{', we might want to strip it from content 
+        # but usually we want what's inside.
+        if content and content[0] == start_node[1]:
+            content = content[1:]
         return "".join(content)
 
     def parse_natural_condition(self):
@@ -279,7 +283,8 @@ class QueryParser:
         mutation_ops = ('>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', '->', ')^', '}', 'order', 'to', 'at'): break
+            if not t or t[1] in ('&', '&&', ',', '->', ')^', '}', 'order', 'to', 'at', '{'): break
+            if t[0] == 'REGISTER_OP': break
             if t[1] in mutation_ops: break
             if t[0] == 'KEYWORD' and t[1] not in ('and', 'or', 'not'): break
             expr.append(self.consume()[1])

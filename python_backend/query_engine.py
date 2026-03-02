@@ -101,16 +101,26 @@ class QueryExecutor:
             if val == '@img': return r'\\includegraphics(?:\[.*?\])?\{.*?\}'
             if val == '@fig': return r'\\begin\{figure\}.*?\\end\{figure\}'
         
+        if target.get('type') == 'group':
+            # This is a bit complex, but for simple cases like {Gemini CLI}
+            # we can try to reconstruct the text
+            body = target.get('body', {})
+            if body.get('type') == 'query':
+                # Just a very simple heuristic for now
+                return r'\{.*?\}'
+        
         if target.get('type') == 'path':
-            # Handle simple paths like 'figure > \includegraphics'
             elements = target.get('elements', [])
-            # This is a very simplified version
             parts = []
             for el in elements:
-                if el.get('type') == 'identifier':
-                    parts.append(re.escape(el.get('value')))
-                elif el.get('type') == 'path_op' and el.get('value') == '>':
-                    parts.append(r'.*?')
+                res = self.path_to_regex(el)
+                if res:
+                    parts.append(res)
+                elif el.get('type') == 'path_op':
+                    op = el.get('value')
+                    if op == '>': parts.append(r'.*?')
+                    elif op == '...': parts.append(r'.*?')
+                    elif op == '~': parts.append(r'.*?')
             return "".join(parts)
 
         return None
@@ -122,6 +132,15 @@ class QueryExecutor:
                 return action.get('value')
             if action.get('type') == 'identifier':
                 return action.get('value')
+            if action.get('type') == 'number':
+                return action.get('value')
+            if action.get('type') == 'tag':
+                return action.get('value')
+            if action.get('type') == 'raw':
+                return action.get('value')
+            if action.get('type') == 'action_complex':
+                parts = action.get('parts', [])
+                return "".join(self.action_to_string(p) for p in parts)
         return str(action)
 
 def execute_query_on_text(text, query_str):
