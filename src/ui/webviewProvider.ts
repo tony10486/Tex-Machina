@@ -3,8 +3,13 @@ import * as vscode from 'vscode';
 export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'tex-machina.preview';
     private _view?: vscode.WebviewView;
+    private _isLabelDiscoveryExpanded: boolean = false;
 
     constructor(private readonly _extensionUri: vscode.Uri) {}
+
+    public isLabelDiscoveryExpanded(): boolean {
+        return this._isLabelDiscoveryExpanded;
+    }
 
     public resolveWebviewView(webviewView: vscode.WebviewView) {
         this._view = webviewView;
@@ -33,6 +38,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
             } else if (data.command === 'discoverLabels') {
                 vscode.commands.executeCommand('tex-machina.discoverLabels');
+            } else if (data.command === 'toggleLabelDiscovery') {
+                this._isLabelDiscoveryExpanded = data.expanded;
+                if (this._isLabelDiscoveryExpanded) {
+                    vscode.commands.executeCommand('tex-machina.discoverLabels');
+                }
             }
         });
 
@@ -231,7 +241,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <div id="out">TeX-Machina</div>
             <div id="container"></div>
             <div id="ui">
-                <details id="details-labels">
+                <details id="details-labels" ontoggle="vscode.postMessage({ command: 'toggleLabelDiscovery', expanded: this.open })">
                     <summary>Label Discovery</summary>
                     <div id="label-discovery" style="padding: 10px;">
                         <button style="width: 100%; margin-bottom: 10px;" onclick="discoverLabels()">Discover Labels</button>
@@ -858,7 +868,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 window.addEventListener('message', e => {
                     const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges } = e.data;
                     if (type === 'labels') {
-                        document.getElementById('details-labels').open = true;
                         initLabelGraph({ nodes, edges });
                     } else if (type === 'update') {
                         let content = expr_latex || latex || "TeX-Machina";

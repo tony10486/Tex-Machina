@@ -253,6 +253,11 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.discoverLabels', async () => {
+        // [수정] 라벨 시각화가 접혀 있으면 분석을 실행하지 않음
+        if (!provider.isLabelDiscoveryExpanded()) {
+            return;
+        }
+
         const editor = vscode.window.activeTextEditor;
         if (!editor || !editor.document.fileName.endsWith('.tex')) {
             return;

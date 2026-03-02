@@ -180,4 +180,59 @@ suite('Webview UI Test Suite', () => {
             done(new Error("Message handler not registered"));
         }
     });
+
+    test('Webview should handle toggleLabelDiscovery message and update state', (done) => {
+        const extensionUri = vscode.Uri.file('.');
+        const provider = new TeXMachinaWebviewProvider(extensionUri);
+        
+        let messageHandler: ((data: any) => void) | undefined;
+        const mockWebview: any = {
+            options: {},
+            cspSource: 'vscode-resource:',
+            asWebviewUri: (uri: vscode.Uri) => uri,
+            onDidReceiveMessage: (handler: (data: any) => void) => {
+                messageHandler = handler;
+                return { dispose: () => {} };
+            },
+            html: ''
+        };
+
+        const mockView: any = {
+            webview: mockWebview,
+            onDidChangeVisibility: () => ({ dispose: () => {} }),
+            onDidDispose: () => ({ dispose: () => {} })
+        };
+
+        provider.resolveWebviewView(mockView);
+
+        assert.strictEqual(provider.isLabelDiscoveryExpanded(), false, "Initially should be collapsed");
+
+        const originalExecuteCommand = vscode.commands.executeCommand;
+        let commandCalled = false;
+        (vscode.commands as any).executeCommand = (command: string, ...args: any[]) => {
+            if (command === 'tex-machina.discoverLabels') {
+                commandCalled = true;
+            }
+            return Promise.resolve();
+        };
+
+        if (messageHandler) {
+            // Expand
+            messageHandler({ command: 'toggleLabelDiscovery', expanded: true });
+            assert.strictEqual(provider.isLabelDiscoveryExpanded(), true, "Should be expanded after message");
+            assert.strictEqual(commandCalled, true, "Should trigger discoverLabels when expanded");
+
+            commandCalled = false;
+            // Collapse
+            messageHandler({ command: 'toggleLabelDiscovery', expanded: false });
+            assert.strictEqual(provider.isLabelDiscoveryExpanded(), false, "Should be collapsed after message");
+            assert.strictEqual(commandCalled, false, "Should NOT trigger discoverLabels when collapsed");
+
+            (vscode.commands as any).executeCommand = originalExecuteCommand;
+            done();
+        } else {
+            (vscode.commands as any).executeCommand = originalExecuteCommand;
+            done(new Error("Message handler not registered"));
+        }
+    });
 });
