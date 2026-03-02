@@ -6,7 +6,7 @@ from collections import Counter
 class LabelEngine:
     def __init__(self):
         # Patterns
-        self.re_label = re.compile(r'\\label\{([^}]+)\}')
+        self.re_label = re.compile(r'\\label\{([^}]+)\}(?:%?\s*\(from:([^)]+)\))?')
         self.re_ref = re.compile(r'\\ref\{([^}]+)\}')
         self.re_section = re.compile(r'\\(section|subsection|subsubsection)\*?\{([^}]+)\}')
         self.re_begin_env = re.compile(r'\\begin\{(equation|align|gather|split|multline|figure|table)\*?\}')
@@ -67,8 +67,12 @@ class LabelEngine:
                             current_env_label = labels_in_current_env[-1]
 
                 # 3. Label Extraction
-                labels = self.re_label.findall(line)
-                for lbl in labels:
+                # findall 대신 finditer를 사용하여 캡처 그룹(from:...)을 추출
+                label_matches = list(self.re_label.finditer(line))
+                for match in label_matches:
+                    lbl = match.group(1)
+                    from_lbl = match.group(2)
+                    
                     node_type = "generic"
                     if lbl.startswith("eq:"): node_type = "equation"
                     elif lbl.startswith("fig:"): node_type = "figure"
@@ -82,6 +86,10 @@ class LabelEngine:
                         "content": line.strip()
                     }
                     
+                    # 명시적 (from:...) 관계 처리
+                    if from_lbl:
+                        edges.append({"from": from_lbl, "to": lbl, "type": "explicit"})
+
                     if in_env:
                         labels_in_current_env.append(lbl)
                     else:

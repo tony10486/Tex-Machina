@@ -12,7 +12,7 @@ import { registerMarkdownLatex } from './core/markdownLatex';
 import { registerSmartQuotes } from './core/smartQuotes';
 import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
-import { registerLabelDetection } from './core/labelDetection';
+import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerPackageDetection } from './core/packageDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { MacroManager } from './core/macroManager';
@@ -148,6 +148,72 @@ export function activate(context: vscode.ExtensionContext) {
     // [Diacritics] 다이어크리틱 입력 기능 등록
     registerDiacritics(context);
 
+    // [Label Dependency] 라벨 종속 관계 추가 커맨드
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const range = new vscode.Range(
+            new vscode.Position(args.line, args.startChar),
+            new vscode.Position(args.line, args.endChar)
+        );
+
+        await editor.edit(editBuilder => {
+            // 라벨 끝(}) 바로 뒤에 삽입
+            editBuilder.insert(range.end, `%(from:${args.sourceLabel})`);
+        });
+        
+        // 실시간 반영을 위해 즉시 분석 실행
+        vscode.commands.executeCommand('tex-machina.discoverLabels');
+    }));
+
+    // [Label Hover] 라벨 위에 마우스를 올렸을 때 관계 설정을 돕는 호버 제공
+    context.subscriptions.push(vscode.languages.registerHoverProvider('latex', {
+        provideHover(document, position, token) {
+            const line = document.lineAt(position.line).text;
+            const labelRegex = /\\label\{([^}]+)\}/g;
+            let match;
+            
+            while ((match = labelRegex.exec(line)) !== null) {
+                const labelName = match[1];
+                const startPos = new vscode.Position(position.line, match.index);
+                const endPos = new vscode.Position(position.line, match.index + match[0].length);
+                const range = new vscode.Range(startPos, endPos);
+
+                if (range.contains(position)) {
+                    const allLabels = findLabels(document.getText(), document);
+                    const otherLabels = allLabels.filter(l => l.label !== labelName);
+                    
+                    const hoverContent = new vscode.MarkdownString('', true); // true: supportThemeIcons
+                    hoverContent.isTrusted = true;
+                    hoverContent.supportHtml = true;
+                    
+                    hoverContent.appendMarkdown(`### 🏷️ Label: **${labelName}**\n\n`);
+                    hoverContent.appendMarkdown(`이 라벨의 **출발점(Source)**을 지정하세요:\n\n`);
+                    
+                    if (otherLabels.length === 0) {
+                        hoverContent.appendMarkdown(`*현재 문서에 다른 라벨이 없습니다.*`);
+                    } else {
+                        otherLabels.forEach(l => {
+                            // 복잡한 Range 객체 대신 기본 자료형만 전달
+                            const commandArgs = {
+                                line: position.line,
+                                startChar: match!.index,
+                                endChar: match!.index + match![0].length,
+                                sourceLabel: l.label
+                            };
+                            const commandUri = vscode.Uri.parse(`command:tex-machina.addLabelDependency?${encodeURIComponent(JSON.stringify(commandArgs))}`);
+                            hoverContent.appendMarkdown(`- [Connect from **${l.label}**](${commandUri} "Click to add dependency")\n`);
+                        });
+                    }
+                    
+                    return new vscode.Hover(hoverContent, range);
+                }
+            }
+            return null;
+        }
+    }));
+
     // [Label Detection] 미사용 라벨 감지 및 삭제 기능 등록
     registerLabelDetection(context);
 
@@ -189,7 +255,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.discoverLabels', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor || !editor.document.fileName.endsWith('.tex')) {
-            vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다.");
             return;
         }
 
@@ -207,6 +272,26 @@ export function activate(context: vscode.ExtensionContext) {
             pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
         }
     }));
+
+    // [추가] 실시간 라벨 업데이트를 위한 디바운싱 로직
+    let labelUpdateTimeout: NodeJS.Timeout | undefined;
+    vscode.workspace.onDidChangeTextDocument(event => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && event.document === editor.document && event.document.fileName.endsWith('.tex')) {
+            if (labelUpdateTimeout) {
+                clearTimeout(labelUpdateTimeout);
+            }
+            labelUpdateTimeout = setTimeout(() => {
+                vscode.commands.executeCommand('tex-machina.discoverLabels');
+            }, 1000); // 1초 동안 입력이 없으면 업데이트
+        }
+    }, null, context.subscriptions);
+
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (editor && editor.document.fileName.endsWith('.tex')) {
+            vscode.commands.executeCommand('tex-machina.discoverLabels');
+        }
+    }, null, context.subscriptions);
 
     // 2. Python 데몬 백그라운드 실행
 	const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
