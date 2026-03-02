@@ -54,6 +54,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 if (this._lastMacros) {
                     this.updateMacros(this._lastMacros);
                 }
+                if (this._lastNodes.length > 0) {
+                    this.updateLabels(this._lastNodes, this._lastEdges);
+                }
             }
         });
     }
@@ -66,6 +69,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     private _lastWarning: string = "";
     private _lastPreviewImg: string = "";
     private _lastMacros: Record<string, string> = {};
+    private _lastNodes: any[] = [];
+    private _lastEdges: any[] = [];
 
     public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string, expr_latex?: string) {
         this._lastLatex = latex;
@@ -92,7 +97,28 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     public updateLabels(nodes: any[], edges: any[]) {
-        this._view?.webview.postMessage({ type: 'labels', nodes, edges });
+        this._lastNodes = nodes;
+        this._lastEdges = edges;
+        const settings = this._getLabelSettings();
+        this._view?.webview.postMessage({ type: 'labels', nodes, edges, settings });
+    }
+
+    private _getLabelSettings() {
+        const config = vscode.workspace.getConfiguration('tex-machina.labelVisualization');
+        const phys = config.get<any>('physics');
+        const node = config.get<any>('node');
+        
+        return {
+            enabled: phys?.enabled !== false,
+            solver: phys?.solver || 'forceAtlas2Based',
+            gravitationalConstant: phys?.gravitationalConstant ?? -80,
+            springLength: node?.spacing ?? 80, // spacing을 springLength로 매핑
+            springConstant: phys?.springConstant ?? 0.04,
+            avoidOverlap: phys?.avoidOverlap ?? 1,
+            stabilizationIterations: phys?.stabilizationIterations ?? 150,
+            baseSize: node?.baseSize ?? 12,
+            stabilizationFinish: phys?.stabilizationFinish ?? 'none'
+        };
     }
 
     private _getHtml(webview: vscode.Webview) {
@@ -167,24 +193,33 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 .dot { width: 6px; height: 6px; border-radius: 50%; }
                 
                 #inspector {
-                    position: absolute; display: none; z-index: 200;
+                    position: absolute; display: block; z-index: 200;
                     background: var(--vscode-sideBar-background); border: 1px solid var(--vscode-sideBarSectionHeader-border);
-                    box-shadow: 0 -5px 15px rgba(0,0,0,0.2);
-                    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-                    overflow-y: auto; bottom: 0; left: 0; width: 100%; max-height: 70%;
-                    border-radius: 12px 12px 0 0; padding: 20px;
+                    box-shadow: 0 -5px 25px rgba(0,0,0,0.3);
+                    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+                    overflow-y: auto; bottom: 0; left: 0; width: 100%; max-height: 75%;
+                    border-radius: 16px 16px 0 0; padding: 20px;
+                    transform: translateY(100%);
+                    opacity: 0;
+                    pointer-events: none;
                 }
-                #close-inspector { position: absolute; top: 10px; right: 15px; cursor: pointer; font-size: 18px; opacity: 0.5; }
+                #inspector.active {
+                    transform: translateY(0);
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+                #close-inspector { position: absolute; top: 12px; right: 18px; cursor: pointer; font-size: 20px; opacity: 0.5; }
                 #close-inspector:hover { opacity: 1; }
-                .ins-title { font-size: 9px; font-weight: 800; color: var(--vscode-textLink-foreground); margin-bottom: 4px; letter-spacing: 0.1em; }
-                .ins-label { font-weight: 800; font-size: 18px; margin-bottom: 4px; color: var(--vscode-foreground); word-break: break-all; }
-                .ins-meta { font-size: 11px; opacity: 0.6; margin-bottom: 15px; }
+                .ins-title { font-size: 10px; font-weight: 800; color: var(--vscode-textLink-foreground); margin-bottom: 6px; letter-spacing: 0.15em; }
+                .ins-label { font-weight: 800; font-size: 20px; margin-bottom: 6px; color: var(--vscode-foreground); word-break: break-all; line-height: 1.2; }
+                .ins-meta { font-size: 12px; opacity: 0.6; margin-bottom: 18px; font-family: var(--vscode-editor-font-family); }
                 .math-preview {
                     background: var(--vscode-editor-background); border: 1px solid var(--vscode-sideBarSectionHeader-border);
-                    padding: 15px; margin: 15px 0; border-radius: 6px; 
-                    font-size: 16px; min-height: 60px;
+                    padding: 20px; margin: 15px 0; border-radius: 8px; 
+                    font-size: 18px; min-height: 80px;
                     display: flex; align-items: center; justify-content: center;
                     overflow-x: auto;
+                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
                 }
 
                 /* Collapsible Sections (VS Code Style) */
@@ -253,12 +288,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 <div class="legend-item"><span class="dot" style="background:#caffbf"></span> Fig</div>
                             </div>
                             <div id="inspector">
-                                <span id="close-inspector" onclick="document.getElementById('inspector').style.display='none'">×</span>
+                                <span id="close-inspector" onclick="document.getElementById('inspector').classList.remove('active')">×</span>
                                 <div class="ins-title">INSPECTOR</div>
                                 <div id="ins-label" class="ins-label">Label</div>
                                 <div id="ins-meta" class="ins-meta"></div>
                                 <div class="math-preview" id="ins-math-target"></div>
-                                <button onclick="document.getElementById('inspector').style.display='none'">Close</button>
+                                <button onclick="document.getElementById('inspector').classList.remove('active')">Close</button>
                             </div>
                         </div>
                     </div>
@@ -446,6 +481,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 const vscode = acquireVsCodeApi();
                 let last = "";
                 let labelNetwork;
+                let visNodes = new vis.DataSet([]);
+                let visEdges = new vis.DataSet([]);
 
                 function discoverLabels() {
                     vscode.postMessage({ command: 'discoverLabels' });
@@ -807,11 +844,21 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 function initLabelGraph(data) {
+                    const nodes = data.nodes;
+                    const edges = data.edges;
+                    const settings = data.settings || {};
+                    
                     const colors = { section: '#ffadad', equation: '#a2d2ff', figure: '#caffbf' };
-                    const visNodes = new vis.DataSet(data.nodes.map(n => {
+                    const state = vscode.getState() || {};
+                    const savedPositions = state.labelPositions || {};
+
+                    const baseSize = settings.baseSize || 12;
+
+                    const newNodes = nodes.map(n => {
                         const color = colors[n.type] || '#ffd6a5';
                         const refCount = n.refCount || 0;
-                        const size = 5 + (Math.log(refCount + 1) * 4);
+                        const size = baseSize + (Math.log(refCount + 1) * 4);
+                        const pos = savedPositions[n.id] || {};
                         return {
                             id: n.id,
                             label: n.label.length > 12 ? n.label.substring(0, 10) + '...' : n.label,
@@ -823,52 +870,163 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 highlight: { background: color, border: '#1a1a1a' }
                             },
                             font: { color: 'var(--vscode-foreground)', size: 9, vadjust: size + 4 },
-                            metadata: n
+                            metadata: n,
+                            x: pos.x,
+                            y: pos.y
                         };
+                    });
+
+                    const newEdges = edges.map(e => ({
+                        ...e,
+                        arrows: { to: { enabled: true, scaleFactor: 0.45 } },
+                        color: { 
+                            color: 'rgba(203, 213, 225, 0.45)', 
+                            highlight: '#4f46e5',
+                            hover: 'rgba(79, 70, 229, 0.8)'
+                        },
+                        width: 1.2,
+                        smooth: false
                     }));
 
-                    const visEdges = new vis.DataSet(data.edges.map(e => ({
-                        ...e,
-                        arrows: { to: { enabled: true, scaleFactor: 0.4 } },
-                        color: { color: '#cbd5e1', highlight: '#4f46e5' },
-                        width: 1,
-                        smooth: { enabled: false }
-                    })));
+                    // Incremental Update
+                    const currentIds = visNodes.getIds();
+                    const nextIds = newNodes.map(n => n.id);
+                    const toRemove = currentIds.filter(id => !nextIds.includes(id));
+                    
+                    visNodes.remove(toRemove);
+                    visNodes.update(newNodes);
 
-                    const container = document.getElementById('viz');
-                    const options = {
-                        physics: {
+                    const currentEdgeIds = visEdges.getIds();
+                    const nextEdgeIds = newEdges.map(e => e.id);
+                    const edgesToRemove = currentEdgeIds.filter(id => !nextEdgeIds.includes(id));
+
+                    visEdges.remove(edgesToRemove);
+                    visEdges.update(newEdges);
+
+                    const solver = settings.solver || 'forceAtlas2Based';
+                    const springLength = settings.springLength || 100;
+
+                    const physicsOptions = {
+                        enabled: settings.enabled !== false,
+                        solver: solver,
+                        timestep: 0.4,
+                        stabilization: { 
                             enabled: true,
-                            solver: 'forceAtlas2Based',
-                            forceAtlas2Based: { gravitationalConstant: -80, springLength: 80, avoidOverlap: 1 },
-                            stabilization: { iterations: 150 }
+                            iterations: settings.stabilizationIterations || 200,
+                            updateInterval: 10,
+                            onlyDynamicEdges: false,
+                            fit: true
                         },
-                        interaction: { hover: true }
+                        adaptiveTimestep: true
                     };
+                    
+                    // 각 솔버에 맞는 상세 옵션 설정
+                    if (solver === 'forceAtlas2Based') {
+                        physicsOptions.forceAtlas2Based = {
+                            gravitationalConstant: settings.gravitationalConstant || -100,
+                            springLength: springLength,
+                            springConstant: settings.springConstant || 0.04,
+                            avoidOverlap: settings.avoidOverlap || 1,
+                            damping: 0.4
+                        };
+                    } else if (solver === 'barnesHut') {
+                        physicsOptions.barnesHut = {
+                            gravitationalConstant: (settings.gravitationalConstant * 25) || -2500,
+                            centralGravity: 0.3,
+                            springLength: springLength,
+                            springConstant: settings.springConstant || 0.04,
+                            avoidOverlap: settings.avoidOverlap || 1,
+                            damping: 0.3
+                        };
+                    }
 
-                    if (labelNetwork) labelNetwork.destroy();
-                    labelNetwork = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
+                    if (!labelNetwork) {
+                        const container = document.getElementById('viz');
+                        const options = {
+                            physics: physicsOptions,
+                            interaction: { 
+                                hover: true,
+                                tooltipDelay: 200,
+                                hideEdgesOnDrag: false
+                            }
+                        };
+                        labelNetwork = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
 
-                    labelNetwork.on("click", (p) => {
-                        const ins = document.getElementById('inspector');
-                        if (p.nodes.length > 0) {
-                            const node = visNodes.get(p.nodes[0]).metadata;
-                            document.getElementById('ins-label').innerText = node.label;
-                            document.getElementById('ins-meta').innerText = \`LINE \${node.line} | \${node.refCount || 0} REFS\`;
-                            const target = document.getElementById('ins-math-target');
-                            target.innerHTML = \`\\\\[ \${node.content} \\\\]\`;
-                            ins.style.display = 'block';
-                            if (window.MathJax) MathJax.typesetPromise([target]);
-                        } else {
-                            ins.style.display = 'none';
-                        }
-                    });
+                        let lastFitTime = 0;
+                        labelNetwork.on("render", () => {
+                            const now = Date.now();
+                            if (now - lastFitTime < 1500) return; 
+
+                            const nodeIds = visNodes.getIds();
+                            if (nodeIds.length === 0) return;
+
+                            const positions = labelNetwork.getPositions();
+                            const canvas = container.querySelector('canvas');
+                            if (!canvas) return;
+                            
+                            const width = canvas.clientWidth;
+                            const height = canvas.clientHeight;
+
+                            let needsFit = false;
+                            for (const id of nodeIds) {
+                                const pos = positions[id];
+                                if (!pos) continue;
+                                const domPos = labelNetwork.canvasToDOM(pos);
+                                // 벽 너머로 넘어가면 (여유 공간 20px)
+                                if (domPos.x < 20 || domPos.x > width - 20 || domPos.y < 20 || domPos.y > height - 20) {
+                                    needsFit = true;
+                                    break;
+                                }
+                            }
+
+                            if (needsFit) {
+                                lastFitTime = now;
+                                labelNetwork.fit({ animation: { duration: 1000, easingFunction: 'easeInOutQuad' } });
+                            }
+                        });
+
+                        labelNetwork.on("stabilizationIterationsDone", () => {
+                            const positions = labelNetwork.getPositions();
+                            const currentState = vscode.getState() || {};
+                            vscode.setState({ ...currentState, labelPositions: positions });
+                            
+                            if (settings.stabilizationFinish === 'fit') {
+                                labelNetwork.fit({ animation: { duration: 1200, easingFunction: 'easeInOutQuad' } });
+                            } else if (settings.stabilizationFinish === 'disablePhysics') {
+                                labelNetwork.setOptions({ physics: { enabled: false } });
+                            }
+                        });
+
+                        labelNetwork.on("dragEnd", () => {
+                            const positions = labelNetwork.getPositions();
+                            const currentState = vscode.getState() || {};
+                            vscode.setState({ ...currentState, labelPositions: positions });
+                        });
+
+                        labelNetwork.on("click", (p) => {
+                            const ins = document.getElementById('inspector');
+                            if (p.nodes.length > 0) {
+                                const node = visNodes.get(p.nodes[0]).metadata;
+                                document.getElementById('ins-label').innerText = node.label;
+                                document.getElementById('ins-meta').innerText = \`LINE \${node.line} | \${node.refCount || 0} REFS\`;
+                                const target = document.getElementById('ins-math-target');
+                                target.innerHTML = \`\\\\[ \${node.content} \\\\]\`;
+                                ins.classList.add('active');
+                                if (window.MathJax) MathJax.typesetPromise([target]);
+                            } else {
+                                ins.classList.remove('active');
+                            }
+                        });
+                    } else {
+                        // 이미 네트워크가 존재하면 물리 옵션만 업데이트
+                        labelNetwork.setOptions({ physics: physicsOptions });
+                    }
                 }
 
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges } = e.data;
+                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges, settings } = e.data;
                     if (type === 'labels') {
-                        initLabelGraph({ nodes, edges });
+                        initLabelGraph({ nodes, edges, settings });
                     } else if (type === 'update') {
                         let content = expr_latex || latex || "TeX-Machina";
                         if (!expr_latex && latex && latex !== "TeX-Machina" && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture')) {

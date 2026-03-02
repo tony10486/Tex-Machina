@@ -2,8 +2,8 @@
   "name": "tex-machina",
   "publisher": "Tony29028",
   "displayName": "TeX-Machina",
-  "description": "Interactive LaTeX assistant with symbolic computation, 3D plotting, and bibliography management.",
-  "version": "0.1.4",
+  "description": "Interactive LaTeX assistant with symbolic computation, plotting, and bibliography management.",
+  "version": "0.1.5",
   "repository": {
     "type": "git",
     "url": "https://github.com/tony10486/Tex-Machina"
@@ -26,8 +26,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:latex",
-    "onView:tex-machina.preview"
+    "onLanguage:latex"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -159,6 +158,74 @@
               "scope": "line"
             }
           ]
+        },
+        "tex-machina.labelVisualization.physics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "라벨 시각화에서 물리 엔진 애니메이션을 활성화합니다."
+        },
+        "tex-machina.labelVisualization.physics.solver": {
+          "type": "string",
+          "enum": [
+            "barnesHut",
+            "forceAtlas2Based",
+            "repulsion",
+            "hierarchicalRepulsion"
+          ],
+          "default": "forceAtlas2Based",
+          "description": "물리 엔진 솔버를 선택합니다."
+        },
+        "tex-machina.labelVisualization.physics.gravitationalConstant": {
+          "type": "number",
+          "default": -80,
+          "description": "중력 상수 (값이 작을수록 노드 간의 척력이 강해집니다)."
+        },
+        "tex-machina.labelVisualization.physics.springLength": {
+          "type": "number",
+          "default": 80,
+          "description": "스프링의 기본 길이."
+        },
+        "tex-machina.labelVisualization.physics.springConstant": {
+          "type": "number",
+          "default": 0.04,
+          "description": "스프링 상수 (값이 클수록 스프링이 팽팽해집니다)."
+        },
+        "tex-machina.labelVisualization.physics.avoidOverlap": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "노드 겹침 방지 강도 (0~1)."
+        },
+        "tex-machina.labelVisualization.physics.stabilizationIterations": {
+          "type": "integer",
+          "default": 150,
+          "description": "초기 안정화 반복 횟수."
+        },
+        "tex-machina.labelVisualization.node.baseSize": {
+          "type": "number",
+          "default": 12,
+          "description": "노드의 기본 크기."
+        },
+        "tex-machina.labelVisualization.node.spacing": {
+          "type": "number",
+          "default": 80,
+          "description": "노드 간의 간격 (스프링 길이)."
+        },
+        "tex-machina.labelVisualization.physics.stabilizationFinish": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fit",
+            "disablePhysics"
+          ],
+          "default": "none",
+          "enumDescriptions": [
+            "아무것도 하지 않음",
+            "화면에 맞게 크기 조절 (Fit View)",
+            "물리 엔진 비활성화"
+          ],
+          "description": "애니메이션(안정화) 종료 후 처리 방식."
         }
       }
     },
@@ -190,6 +257,10 @@
       {
         "command": "tex-machina.insertTable",
         "title": "LaTeX: Insert Table"
+      },
+      {
+        "command": "tex-machina.insertScanPrevention",
+        "title": "LaTeX: Insert Scan Prevention Pattern"
       },
       {
         "command": "tex-machina.addHat",

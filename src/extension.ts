@@ -15,6 +15,7 @@ import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerPackageDetection } from './core/packageDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
+import { registerScanPrevention } from './core/scanPrevention';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 
@@ -28,6 +29,9 @@ let isExportingPdf: boolean = false;
 let pdfTargetDir: string = "";
 let macroManager: MacroManager;
 let responseResolver: ((response: any) => void) | null = null;
+
+let lastLabelNodes: any[] = [];
+let lastLabelEdges: any[] = [];
 
 /**
  * 파이썬 프로세스에 명령을 보내고 응답을 기다립니다 (Promise).
@@ -220,6 +224,9 @@ export function activate(context: vscode.ExtensionContext) {
     // [Package Detection] 미사용 패키지 자동 주석 처리 기능 등록
     registerPackageDetection(context);
 
+    // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
+    registerScanPrevention(context);
+
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
     context.subscriptions.push(
@@ -294,6 +301,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor && editor.document.fileName.endsWith('.tex')) {
+            lastLabelNodes = [];
+            lastLabelEdges = [];
             vscode.commands.executeCommand('tex-machina.discoverLabels');
         }
     }, null, context.subscriptions);
@@ -404,7 +413,16 @@ export function activate(context: vscode.ExtensionContext) {
 
                     // [labels] 라벨 분석 성공 처리
                     if (response.mainCommand === 'labels' && response.nodes) {
-                        provider.updateLabels(response.nodes, response.edges);
+                        const nodesJson = JSON.stringify(response.nodes);
+                        const edgesJson = JSON.stringify(response.edges);
+                        const lastNodesJson = JSON.stringify(lastLabelNodes);
+                        const lastEdgesJson = JSON.stringify(lastLabelEdges);
+
+                        if (nodesJson !== lastNodesJson || edgesJson !== lastEdgesJson) {
+                            lastLabelNodes = response.nodes;
+                            lastLabelEdges = response.edges;
+                            provider.updateLabels(response.nodes, response.edges);
+                        }
                         continue;
                     }
 
@@ -1050,6 +1068,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
     context.subscriptions.push(addContextShortcutCommand);
+
+    // Listen for physics configuration changes to update webview
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('tex-machina.labelVisualization.physics')) {
+            vscode.commands.executeCommand('tex-machina.discoverLabels');
+        }
+    }));
 }
 
 export function deactivate() {
