@@ -72,7 +72,7 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
 
                 if (foundPrefix !== -1) {
                     const content = lineText.substring(foundPrefix + 1, charOffsetAfter);
-                    const isDelimiter = (c: string) => c === '{' || c === '}' || c === ' ' || c === '^' || c === '_';
+                    const isDelimiter = (c: string) => c === '{' || c === '}' || c === ' ' || c === '^' || c === '_' || c === ',' || c === ')' || c === ']' || c === '$';
                     
                     if (content.length >= 2 && !Array.from(content).some(isDelimiter)) {
                         const rangeToReplace = new vscode.Range(

@@ -282,6 +282,42 @@ suite('Extension Test Suite', () => {
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
+    test('Auto-bracing: v_1, should NOT become v_{1,}', async () => {
+        const doc1 = await vscode.workspace.openTextDocument({ language: 'latex', content: 'v_1' });
+        const ed1 = await vscode.window.showTextDocument(doc1);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await ed1.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), ',');
+        });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.strictEqual(doc1.lineAt(0).text, 'v_1,', "v_1, should NOT be auto-braced");
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Auto-bracing: v^n$ should NOT become v^{n$}', async () => {
+        const doc2 = await vscode.workspace.openTextDocument({ language: 'latex', content: 'v^n' });
+        const ed2 = await vscode.window.showTextDocument(doc2);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await ed2.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), '$');
+        });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.strictEqual(doc2.lineAt(0).text, 'v^n$', "v^n$ should NOT be auto-braced");
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Auto-bracing: v_1) should NOT become v_{1)}', async () => {
+        const doc3 = await vscode.workspace.openTextDocument({ language: 'latex', content: 'v_1' });
+        const ed3 = await vscode.window.showTextDocument(doc3);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await ed3.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), ')');
+        });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.strictEqual(doc3.lineAt(0).text, 'v_1)', "v_1) should NOT be auto-braced");
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
     test('Markdown: **bold** space should become \\textbf{bold} ', async () => {
         const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '**bold**' });
         const editor = await vscode.window.showTextDocument(document);
