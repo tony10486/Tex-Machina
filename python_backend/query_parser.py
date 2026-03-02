@@ -26,7 +26,7 @@ class QueryLexer:
             ('OPTION', r'-[a-z]+(?::[#@\w]+)?'),
             ('COMMAND', r'\b(?:find|exchange|move|duplicate|delete|insert|extract)(?::\[[^\]]+\])?'),
             ('ORDER_BY', r'order\s+by'),
-            ('KEYWORD', r'\b(?:where|without|has|and|or|to|in)\b'),
+            ('KEYWORD', r'\b(?:where|without|has|and|or|to|in|at|not)\b'),
             ('TAG', r'[#@][a-zA-Z0-9_]+(?:\[[^\]]+\])?(?:\{[^\}]+\})?(?::[#@][a-zA-Z0-9_]+)?'),
             ('NUMBER', r'\d+\.\d+|\d+'),
             # Tightened identifier: no dots, pipes, or stars unless escaped or part of command
@@ -93,11 +93,14 @@ class QueryParser:
 
     def parse_query(self):
         if self.peek() and self.peek()[0] == 'PREFIX': self.consume()
-        if self.peek() and self.peek()[0] == 'LOOP_START': return self.parse_loop()
         
         statements = []
         while self.pos < len(self.tokens):
-            statements.append(self.parse_statement())
+            if self.peek() and self.peek()[0] == 'LOOP_START':
+                statements.append(self.parse_loop())
+            else:
+                statements.append(self.parse_statement())
+                
             sep = self.peek()
             if sep and sep[1] in ('&', '&&', ','):
                 statements[-1]['next_sep'] = self.consume()[1]
@@ -141,10 +144,14 @@ class QueryParser:
             elif t[1] == '[': # Inline condition
                 stmt.setdefault('conditions', []).append({"type": "inline", "value": self.parse_bracket_content()})
             else:
-                # Extra targets/parameters
+                # Extra targets, operators, or literals
                 extra = self.parse_path()
-                if extra: stmt.setdefault('extra_targets', []).append(extra)
-                else: self.pos += 1 # Avoid infinite loop
+                if extra: 
+                    stmt.setdefault('extra_targets', []).append(extra)
+                elif t[0] in ('OPERATOR', 'NUMBER', 'IDENTIFIER', 'TAG', 'KEYWORD'):
+                    stmt.setdefault('extra_targets', []).append({"type": "raw", "value": self.consume()[1]})
+                else:
+                    self.pos += 1 # Safety break
                 
         return stmt
 
@@ -202,7 +209,7 @@ class QueryParser:
         if t[0] == 'SUBQUERY_START':
             self.consume()
             inner = self.parse_query()
-            self.consume('OPERATOR', ')^')
+            self.consume('SUBQUERY_END')
             return {"type": "subquery", "query": inner}
         
         if t[1] == '{':
@@ -241,7 +248,7 @@ class QueryParser:
             atom = self.parse_atom()
             if atom:
                 parts.append(atom)
-            elif t[0] in ('OPERATOR', 'IDENTIFIER'):
+            elif t[0] in ('OPERATOR', 'IDENTIFIER', 'KEYWORD', 'NUMBER', 'TAG'):
                 parts.append({"type": "raw", "value": self.consume()[1]})
             else:
                 break
@@ -269,10 +276,12 @@ class QueryParser:
     def parse_natural_condition(self):
         keyword = self.consume()[1]
         expr = []
+        mutation_ops = ('>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', '->', ')^', '}'): break
-            if t[0] == 'KEYWORD' and t[1] not in ('and', 'or'): break
+            if not t or t[1] in ('&', '&&', ',', '->', ')^', '}', 'order', 'to', 'at'): break
+            if t[1] in mutation_ops: break
+            if t[0] == 'KEYWORD' and t[1] not in ('and', 'or', 'not'): break
             expr.append(self.consume()[1])
         return {"type": "natural", "keyword": keyword, "value": " ".join(expr)}
 
@@ -281,7 +290,7 @@ class QueryParser:
         criteria = []
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[0] in ('OPERATOR', 'KEYWORD') or t[1] in ('&', '&&', ','): break
+            if not t or t[1] in ('&', '&&', ',', ')^', '}'): break
             criteria.append(self.consume()[1])
         return {"criteria": " ".join(criteria)}
 
