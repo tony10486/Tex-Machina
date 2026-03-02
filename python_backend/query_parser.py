@@ -28,6 +28,7 @@ class QueryLexer:
             ('ORDER_BY', r'order\s+by'),
             ('KEYWORD', r'\b(?:where|without|has|and|or|to|in)\b'),
             ('TAG', r'[#@][a-zA-Z0-9_]+(?:\[[^\]]+\])?(?:\{[^\}]+\})?(?::[#@][a-zA-Z0-9_]+)?'),
+            ('NUMBER', r'\d+\.\d+|\d+'),
             # Tightened identifier: no dots, pipes, or stars unless escaped or part of command
             ('IDENTIFIER', r'\\[a-zA-Z0-9*]+|[a-zA-Z0-9_]+'),
             ('OPERATOR', self.ops_pattern),
@@ -127,9 +128,10 @@ class QueryParser:
             t = self.peek()
             if not t or t[1] in ('&', '&&', ',', ')^', '}'): break
             
-            if t[1] in ('>>', '+>', '<+', '>+<', '><', '<>', '**', '</>', '<=>', '^^', 'vv'):
+            if t[1] in ('>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv'):
                 stmt['operator'] = self.consume()[1]
                 stmt['action'] = self.parse_action_block()
+
             elif t[0] == 'REGISTER_OP':
                 stmt['register_store'] = self.consume()[1].replace('->', '').strip()
             elif t[0] == 'ORDER_BY':
@@ -162,6 +164,11 @@ class QueryParser:
             # Atoms
             atom = self.parse_atom()
             if atom:
+                # Suffixes like ? for optional
+                next_t = self.peek()
+                if next_t and next_t[1] == '?':
+                    atom['optional'] = True
+                    self.consume()
                 parts.append(atom)
             else:
                 break
@@ -184,9 +191,10 @@ class QueryParser:
                 atom['content'] = self.parse_bracket_content()
             return atom
         
-        # Tags, Strings, Identifiers
+        # Tags, Strings, Identifiers, Numbers
         if t[0] == 'TAG': return {"type": "tag", "value": self.consume()[1]}
         if t[0] == 'STRING': return {"type": "string", "value": self.consume()[1][1:-1]}
+        if t[0] == 'NUMBER': return {"type": "number", "value": self.consume()[1]}
         if t[0] == 'IDENTIFIER': return {"type": "identifier", "value": self.consume()[1]}
         if t[0] == 'REGISTER_REF': return {"type": "register", "value": self.consume()[1]}
         
