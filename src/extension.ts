@@ -251,6 +251,19 @@ export function activate(context: vscode.ExtensionContext) {
 
                 if (response.status === 'success') {
                     
+                    // [query] 쿼리 성공 처리 (전체 문서 업데이트)
+                    if (response.mainCommand === '?' && response.fullText && currentEditor) {
+                        const firstLine = currentEditor.document.lineAt(0);
+                        const lastLine = currentEditor.document.lineAt(currentEditor.document.lineCount - 1);
+                        const fullRange = new vscode.Range(firstLine.range.start, lastLine.range.end);
+                        
+                        await currentEditor.edit(editBuilder => {
+                            editBuilder.replace(fullRange, response.fullText);
+                        });
+                        vscode.window.showInformationMessage("쿼리가 수행되어 문서가 업데이트되었습니다.");
+                        continue;
+                    }
+
                     // [cite] 인용 성공 처리
                     if (response.bibtex && response.cite_key) {
                         const editor = vscode.window.activeTextEditor;
@@ -529,10 +542,30 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // [추가] 매크로 정의 (> define:...)
+            // ✨ [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);
             if (macroDef) {
                 await macroManager.defineMacro(macroDef.name, macroDef.chain);
+                return;
+            }
+
+            // [추가] 쿼리 기능 처리 (? ...)
+            if (userInput.trim().startsWith('?')) {
+                const config = vscode.workspace.getConfiguration('tex-machina');
+                const payload = {
+                    mainCommand: "?",
+                    subCommands: [userInput.trim()],
+                    parallelOptions: [],
+                    rawSelection: currentOriginalText,
+                    fullText: editor.document.getText(),
+                    config: {
+                        workspaceDir: path.dirname(editor.document.uri.fsPath)
+                    }
+                };
+                if (pythonProcess?.stdin) {
+                    pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+                }
+                quickPick.hide();
                 return;
             }
 

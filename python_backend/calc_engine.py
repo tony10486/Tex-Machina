@@ -712,6 +712,7 @@ from dimcheck_engine import handle_dimcheck
 from plot_engine import handle_plot
 from cite_engine import handle_cite
 from oeis_engine import handle_oeis
+from query_engine import execute_query_on_text
 
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
@@ -862,6 +863,20 @@ def execute_calc(parsed_json_str):
         selection = req.get('rawSelection', '').strip()
         selection = strip_latex_delimiters(selection)
         
+        # [NEW] 쿼리 기능 처리
+        if main_cmd == "?":
+            full_text = req.get('fullText', '')
+            query_str = sub_cmds[0] if sub_cmds else selection
+            res = execute_query_on_text(full_text, query_str)
+            if res['status'] == 'success':
+                return json.dumps({
+                    "status": "success",
+                    "mainCommand": "?",
+                    "fullText": res['text'],
+                    "latex": "" 
+                })
+            return json.dumps(res)
+
         # 1. 수식 전처리 및 액션 결정
         if main_cmd == "calc" and sub_cmds:
             action = sub_cmds.pop(0)
