@@ -19,9 +19,11 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 PGF_SUPPORTED_FUNCS = (
-    sp.sin, sp.cos, sp.tan, sp.asin, sp.acos, sp.atan,
+    sp.sin, sp.cos, sp.tan, sp.asin, sp.acos, sp.atan, sp.atan2,
     sp.sinh, sp.cosh, sp.tanh,
-    sp.exp, sp.log, sp.Abs, sp.floor, sp.ceiling, sp.sqrt
+    sp.sec, sp.csc, sp.cot, sp.asec, sp.acsc, sp.acot,
+    sp.exp, sp.log, sp.Abs, sp.floor, sp.ceiling, sp.sqrt,
+    sp.Min, sp.Max, sp.sign
 )
 
 def _safe_latex_parse(raw_latex: str) -> sp.Expr:
@@ -52,15 +54,29 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
 
 def sympy_to_pgfplots_str(expr: sp.Expr) -> str:
     """SymPy 수식을 PGFPlots가 이해할 수 있는 대수적 문자열로 변환합니다."""
-    # Abs(x) -> abs(x) 변환을 위해 expr 단계에서 처리 시도 (단순 문자열 치환보다 안전)
-    # 하지만 SymPy 객체 구조를 유지하며 문자열로 바꾼 후 보정하는 것이 PGFPlots 문법에 더 가까움
+    # SymPy 객체 문자열을 PGFPlots 수식 문법으로 변환
     expr_str = str(expr)
+    
+    # 1. 거듭제곱 및 상수 변환
     expr_str = expr_str.replace('**', '^')
-    expr_str = expr_str.replace('E', 'e')
-    # SymPy의 log(x)는 PGFPlots에서 ln(x)로 변환
-    expr_str = expr_str.replace('log(', 'ln(')
-    # Abs(x) -> abs(x)
-    expr_str = expr_str.replace('Abs(', 'abs(')
+    
+    # 2. 함수 이름 및 특수 기호 매핑 (Word boundary 고려)
+    replacements = {
+        r'\bAbs\(': 'abs(',
+        r'\bceiling\(': 'ceil(',
+        r'\bfloor\(': 'floor(',
+        r'\blog\(': 'ln(',
+        r'\bMin\(': 'min(',
+        r'\bMax\(': 'max(',
+        r'\bSign\(': 'sign(',
+        r'\bcsc\(': 'cosec(',
+        r'\bE\b': 'e',
+        r'\bpi\b': 'pi'
+    }
+    
+    for pattern, repl in replacements.items():
+        expr_str = re.sub(pattern, repl, expr_str)
+        
     return expr_str
 
 def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, float]) -> List[float]:
@@ -131,12 +147,27 @@ def is_pgfplots_compatible(expr: sp.Expr) -> bool:
     """PGFPlots 네이티브 엔진이 지원하는 함수인지 검사합니다."""
     # 모든 함수 원자(atoms)를 추출하여 화이트리스트와 비교
     funcs = expr.atoms(sp.Function)
+    
+    # 함수 이름(소문자) 기반 화이트리스트 (더 견고함)
+    SUPPORTED_NAMES = {
+        'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2',
+        'sinh', 'cosh', 'tanh',
+        'sec', 'csc', 'cosec', 'cot', 'asec', 'acsc', 'acot',
+        'exp', 'log', 'ln', 'abs', 'floor', 'ceiling', 'ceil', 'sqrt',
+        'min', 'max', 'sign'
+    }
+    
     for f in funcs:
-        # f의 타입이 화이트리스트에 있는지 직접 확인
+        # 1. f.func의 이름을 통한 체크
+        func_name = getattr(f.func, '__name__', str(f.func)).lower()
+        if func_name in SUPPORTED_NAMES:
+            continue
+            
+        # 2. 타입 직접 체크 (Fallback)
         if type(f) in PGF_SUPPORTED_FUNCS:
             continue
             
-        # isinstance로 한 번 더 확인 (상속 관계 대응)
+        # 3. isinstance로 한 번 더 확인 (상속 관계 대응)
         try:
             # PGF_SUPPORTED_FUNCS 중 타입(class)인 것들만 골라내어 isinstance 체크
             types_only = tuple(t for t in PGF_SUPPORTED_FUNCS if isinstance(t, type))
@@ -146,9 +177,6 @@ def is_pgfplots_compatible(expr: sp.Expr) -> bool:
             pass
             
         return False
-            
-    # sqrt는 Pow(x, 0.5)로 표현되므로 Function atoms에 잡히지 않음
-    # 하지만 Pow 자체는 PGFPlots가 지원하므로(^) 별도 체크 불필요
     return True
 
 def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
@@ -255,11 +283,20 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     needs_dat = False
     if not is_pgfplots_compatible(target_expr):
         needs_dat = True
-        warning_msg = "PGFPlots 비호환 함수가 감지되었습니다. 외부 데이터(.dat)를 사용합니다."
+        incompatible_funcs = [str(f.func) for f in target_expr.atoms(sp.Function) if not is_pgfplots_compatible(f)]
+        warning_msg = f"PGFPlots 비호환 함수({', '.join(incompatible_funcs)})가 감지되었습니다. 외부 데이터(.dat)를 사용합니다."
 
     # 샘플 수가 너무 많거나 명시적으로 데이터 파일 사용 요청 시 (Native 엔진의 한계 고려)
-    if dat_samples > 200 or any(p == "use_dat" for p in parallels):
+    # [Fix] PGFPlots 호환 가능한 경우 임계값을 상향 조정(200 -> 800)하여 
+    # 다항식 등 일반적인 수식이 .dat 파일 없이 Native 엔진으로 렌더링되도록 함.
+    limit = 800 if not needs_dat else 200
+    if dat_samples > limit:
         needs_dat = True
+        if warning_msg is None:
+            warning_msg = f"샘플 수({dat_samples})가 임계값({limit})을 초과하여 외부 데이터(.dat)를 사용합니다."
+    elif any(p == "use_dat" for p in parallels):
+        needs_dat = True
+        warning_msg = "사용자 요청(use_dat)으로 외부 데이터(.dat)를 사용합니다."
 
     if needs_dat:
         dat_content, preview_img = generate_numerical_data(expr, var, intervals, samples_per_interval, y_limit)
