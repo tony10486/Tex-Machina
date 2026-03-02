@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { TeXMachinaWebviewProvider } from '../ui/webviewProvider';
 
 suite('Webview UI Test Suite', () => {
-    test('Webview HTML should contain Table UI elements', () => {
+    test('Webview HTML should contain Table and Macro UI elements', () => {
         // Mock extension context
         const extensionUri = vscode.Uri.file('.');
         const provider = new TeXMachinaWebviewProvider(extensionUri);
@@ -15,18 +15,27 @@ suite('Webview UI Test Suite', () => {
             asWebviewUri: (uri: vscode.Uri) => uri,
             onDidReceiveMessage: () => ({ dispose: () => {} }),
             set html(val: string) { capturedHtml = val; },
-            get html() { return capturedHtml; }
+            get html() { return capturedHtml; },
+            postMessage: () => Promise.resolve(true)
         };
 
         const mockView: any = {
             webview: mockWebview,
             onDidChangeVisibility: () => ({ dispose: () => {} }),
-            onDidDispose: () => ({ dispose: () => {} })
+            onDidDispose: () => ({ dispose: () => {} }),
+            show: () => {}
         };
 
         provider.resolveWebviewView(mockView);
 
-        // UI 항목 존재 여부 검증 (사용자가 요청한 "무슨 항목이 있는지" 확인)
+        // Macro UI 항목 존재 여부 검증
+        assert.ok(capturedHtml.includes('id="details-m"'), "Macro section (details) should be present");
+        assert.ok(capturedHtml.includes('id="new-macro-name"'), "New macro name input should be present");
+        assert.ok(capturedHtml.includes('id="new-macro-chain"'), "New macro chain input should be present");
+        assert.ok(capturedHtml.includes('id="macro-list"'), "Macro list container should be present");
+        assert.ok(capturedHtml.includes('addMacro()'), "Add Macro function call should be present");
+
+        // Table UI 항목 존재 여부 검증
         assert.ok(capturedHtml.includes('id="details-t"'), "Table section (details) should be present");
         assert.ok(capturedHtml.includes('id="table-grid-container"'), "Table grid container should be present");
         assert.ok(capturedHtml.includes('id="tbl-rows"'), "Rows input should be present");
@@ -36,6 +45,86 @@ suite('Webview UI Test Suite', () => {
         
         // 초기화 로직 확인
         assert.ok(capturedHtml.includes('initGrid()'), "Grid initialization script should be present");
+    });
+
+    test('Webview should forward macro messages to VS Code commands', (done) => {
+        const extensionUri = vscode.Uri.file('.');
+        const provider = new TeXMachinaWebviewProvider(extensionUri);
+        
+        let messageHandler: ((data: any) => void) | undefined;
+        const mockWebview: any = {
+            options: {},
+            cspSource: 'vscode-resource:',
+            asWebviewUri: (uri: vscode.Uri) => uri,
+            onDidReceiveMessage: (handler: (data: any) => void) => {
+                messageHandler = handler;
+                return { dispose: () => {} };
+            },
+            html: '',
+            postMessage: () => Promise.resolve(true)
+        };
+
+        const mockView: any = {
+            webview: mockWebview,
+            onDidChangeVisibility: () => ({ dispose: () => {} }),
+            onDidDispose: () => ({ dispose: () => {} }),
+            show: () => {}
+        };
+
+        provider.resolveWebviewView(mockView);
+
+        const originalExecuteCommand = vscode.commands.executeCommand;
+        let callCount = 0;
+        (vscode.commands as any).executeCommand = (command: string, ...args: any[]) => {
+            if (command === 'tex-machina.defineMacro') {
+                try {
+                    assert.strictEqual(args[0], 'testMacro');
+                    assert.strictEqual(args[1], 'calc > simplify');
+                    callCount++;
+                    if (callCount === 3) {
+                        (vscode.commands as any).executeCommand = originalExecuteCommand;
+                        done();
+                    }
+                } catch (e) {
+                    (vscode.commands as any).executeCommand = originalExecuteCommand;
+                    done(e);
+                }
+            } else if (command === 'tex-machina.deleteMacro') {
+                try {
+                    assert.strictEqual(args[0], 'testMacro');
+                    callCount++;
+                    if (callCount === 3) {
+                        (vscode.commands as any).executeCommand = originalExecuteCommand;
+                        done();
+                    }
+                } catch (e) {
+                    (vscode.commands as any).executeCommand = originalExecuteCommand;
+                    done(e);
+                }
+            } else if (command === 'tex-machina.applyMacro') {
+                try {
+                    assert.strictEqual(args[0], 'testMacro');
+                    callCount++;
+                    if (callCount === 3) {
+                        (vscode.commands as any).executeCommand = originalExecuteCommand;
+                        done();
+                    }
+                } catch (e) {
+                    (vscode.commands as any).executeCommand = originalExecuteCommand;
+                    done(e);
+                }
+            }
+            return Promise.resolve();
+        };
+
+        if (messageHandler) {
+            messageHandler({ command: 'defineMacro', name: 'testMacro', chain: 'calc > simplify' });
+            messageHandler({ command: 'deleteMacro', name: 'testMacro' });
+            messageHandler({ command: 'applyMacro', name: 'testMacro' });
+        } else {
+            (vscode.commands as any).executeCommand = originalExecuteCommand;
+            done(new Error("Message handler not registered"));
+        }
     });
 
     test('Webview should forward insertTable message to VS Code command', (done) => {

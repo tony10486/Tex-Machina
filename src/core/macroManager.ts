@@ -26,6 +26,19 @@ export class MacroManager {
     }
 
     /**
+     * 매크로를 삭제합니다.
+     * @param name 매크로 이름
+     */
+    async deleteMacro(name: string): Promise<void> {
+        const macros = this.getMacros();
+        if (macros[name]) {
+            delete macros[name];
+            await this.context.globalState.update(MacroManager.STORAGE_KEY, macros);
+            vscode.window.showInformationMessage(`매크로 '${name}'이(가) 삭제되었습니다.`);
+        }
+    }
+
+    /**
      * 입력 문자열에서 매크로를 확장합니다.
      * @param input 사용자의 입력 (예: ;diffplot)
      * @param editor 현재 활성화된 에디터

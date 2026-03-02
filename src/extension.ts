@@ -160,6 +160,32 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerWebviewViewProvider(TeXMachinaWebviewProvider.viewType, provider)
     );
 
+    // 초기 매크로 동기화
+    provider.updateMacros(macroManager.getMacros());
+
+    // 매크로 관련 커맨드 등록
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.defineMacro', async (name: string, chain: string) => {
+        await macroManager.defineMacro(name, chain);
+        provider.updateMacros(macroManager.getMacros());
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.deleteMacro', async (name: string) => {
+        await macroManager.deleteMacro(name);
+        provider.updateMacros(macroManager.getMacros());
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.applyMacro', async (name: string) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { return; }
+        const expanded = macroManager.expand(`;${name}`, editor);
+        
+        // 확장된 커맨드가 원래 입력과 다르다면 (매크로가 존재한다면) 실행
+        if (expanded !== `;${name}`) {
+            const chain = splitChain(expanded, vscode.workspace.getConfiguration('tex-machina').get<string>('cli.chainDelimiter', '&&'));
+            await executeChain(chain, editor.document.getText(editor.selection), editor, editor.selection);
+        }
+    }));
+
     // 2. Python 데몬 백그라운드 실행
 	const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
     
@@ -546,6 +572,7 @@ export function activate(context: vscode.ExtensionContext) {
             const macroDef = macroManager.parseDefinition(userInput);
             if (macroDef) {
                 await macroManager.defineMacro(macroDef.name, macroDef.chain);
+                provider.updateMacros(macroManager.getMacros()); // 웹뷰 동기화 추가
                 return;
             }
 

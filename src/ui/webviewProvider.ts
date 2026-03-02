@@ -25,12 +25,23 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 vscode.commands.executeCommand('tex-machina.internalSaveWebviewImage', buffer, data.format, data.expr);
             } else if (data.command === 'insertTable') {
                 vscode.commands.executeCommand('tex-machina.insertTable', data.options);
+            } else if (data.command === 'defineMacro') {
+                vscode.commands.executeCommand('tex-machina.defineMacro', data.name, data.chain);
+            } else if (data.command === 'deleteMacro') {
+                vscode.commands.executeCommand('tex-machina.deleteMacro', data.name);
+            } else if (data.command === 'applyMacro') {
+                vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
             }
         });
 
         webviewView.onDidChangeVisibility(() => {
-            if (webviewView.visible && this._lastLatex) {
-                this.updatePreview(this._lastLatex, this._lastVars, this._lastAnalysis, this._lastX3dData, this._lastWarning, this._lastPreviewImg, this._lastExprLatex);
+            if (webviewView.visible) {
+                if (this._lastLatex) {
+                    this.updatePreview(this._lastLatex, this._lastVars, this._lastAnalysis, this._lastX3dData, this._lastWarning, this._lastPreviewImg, this._lastExprLatex);
+                }
+                if (this._lastMacros) {
+                    this.updateMacros(this._lastMacros);
+                }
             }
         });
     }
@@ -42,6 +53,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     private _lastX3dData: any = null;
     private _lastWarning: string = "";
     private _lastPreviewImg: string = "";
+    private _lastMacros: Record<string, string> = {};
 
     public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string, expr_latex?: string) {
         this._lastLatex = latex;
@@ -60,6 +72,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         if (this._view) {
             this._view.show?.(true);
         }
+    }
+
+    public updateMacros(macros: Record<string, string>) {
+        this._lastMacros = macros;
+        this._view?.webview.postMessage({ type: 'updateMacros', macros });
     }
 
     private _getHtml(webview: vscode.Webview) {
@@ -100,6 +117,24 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
                 input, select { background: #333; color: #eee; border: 1px solid #555; padding: 2px; }
                 .full { grid-column: 1 / span 2; }
+
+                /* Macro List Styles */
+                #macro-list { list-style: none; padding: 0; margin: 0; }
+                .macro-item { 
+                    display: flex; 
+                    flex-direction: column; 
+                    padding: 8px; 
+                    border-bottom: 1px solid #444;
+                    background: rgba(255, 255, 255, 0.03);
+                    margin-bottom: 4px;
+                }
+                .macro-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+                .macro-name { font-weight: bold; color: #007acc; cursor: pointer; }
+                .macro-chain { font-size: 0.85em; color: #aaa; word-break: break-all; }
+                .macro-actions { display: flex; gap: 4px; }
+                .macro-actions button { padding: 2px 4px; font-size: 10px; flex: none; width: auto; }
+                .macro-input-group { display: flex; gap: 4px; margin-bottom: 4px; }
+                .macro-input-group input { flex: 1; }
 
                 /* Collapsible Sections (VS Code Style) */
                 details {
@@ -154,7 +189,19 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <div id="out">TeX-Machina</div>
             <div id="container"></div>
             <div id="ui">
-                <details id="details-t" open>
+                <details id="details-m" open>
+                    <summary>Macro Manager</summary>
+                    <div id="m" style="padding: 10px;">
+                        <div class="macro-input-group">
+                            <input type="text" id="new-macro-name" placeholder="Name (e.g. diff)">
+                            <input type="text" id="new-macro-chain" placeholder="Chain (e.g. calc > diff)">
+                        </div>
+                        <button style="width: 100%; margin-bottom: 10px;" onclick="addMacro()">Add Macro</button>
+                        <div id="macro-list"></div>
+                    </div>
+                </details>
+
+                <details id="details-t">
                     <summary>Table Wizard</summary>
                     <div id="t" class="controls" style="display:grid;">
                         <div class="group full">
@@ -394,6 +441,30 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         command: 'insertTable',
                         options: { rows, cols, alignment, hasBorders, hasHeader }
                     });
+                }
+
+                // Macro Logic
+                function addMacro() {
+                    const name = document.getElementById('new-macro-name').value;
+                    const chain = document.getElementById('new-macro-chain').value;
+                    if (name && chain) {
+                        vscode.postMessage({ command: 'defineMacro', name, chain });
+                        document.getElementById('new-macro-name').value = '';
+                        document.getElementById('new-macro-chain').value = '';
+                    }
+                }
+
+                function deleteMacro(name) {
+                    vscode.postMessage({ command: 'deleteMacro', name });
+                }
+
+                function applyMacro(name) {
+                    vscode.postMessage({ command: 'applyMacro', name });
+                }
+
+                function editMacro(name, chain) {
+                    document.getElementById('new-macro-name').value = name;
+                    document.getElementById('new-macro-chain').value = chain;
                 }
 
                 function alignZ() {
@@ -655,7 +726,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     return r + " " + g + " " + b;
                 }
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex, preview_img, warning, expr_latex } = e.data;
+                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros } = e.data;
                     if (type === 'update') {
                         let content = expr_latex || latex || "TeX-Machina";
                         if (!expr_latex && latex && latex !== "TeX-Machina" && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture')) {
@@ -794,6 +865,24 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         }
                         
                         if(window.MathJax) MathJax.typesetPromise();
+                    } else if (type === 'updateMacros') {
+                        const list = document.getElementById('macro-list');
+                        list.innerHTML = '';
+                        for (const [name, chain] of Object.entries(macros)) {
+                            const item = document.createElement('div');
+                            item.className = 'macro-item';
+                            item.innerHTML = \`
+                                <div class="macro-header">
+                                    <span class="macro-name" onclick="applyMacro('\${name}')" title="Apply this macro to selection">;\${name}</span>
+                                    <div class="macro-actions">
+                                        <button class="secondary" onclick="editMacro('\${name}', '\${chain}')">Edit</button>
+                                        <button class="secondary" style="background: #a30000;" onclick="deleteMacro('\${name}')">Del</button>
+                                    </div>
+                                </div>
+                                <div class="macro-chain">\${chain}</div>
+                            \`;
+                            list.appendChild(item);
+                        }
                     }
                 });
             </script>
