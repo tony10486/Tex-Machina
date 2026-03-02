@@ -25,18 +25,51 @@ suite('Label Detection Test Suite', () => {
         assert.strictEqual(refs.size, 6);
     });
 
-    test('findLabels should find all labels', async () => {
-        // Create a mock document-like environment or use a real one if possible
-        // Actually, we can test the regex logic by extracting the regex to a separate function if needed,
-        // but for now let's use a real document in a workspace-based test if we can.
-        // For VSCode extension tests, we usually have access to the VSCode API.
+    test('findLabels should find all labels and their context', async () => {
+        const content = `
+\\begin{equation}
+    E = mc^2 \\label{eq:einstein}
+\\end{equation}
+
+Some text here.
+\\label{lbl:text}
+`;
         const doc = await vscode.workspace.openTextDocument({
-            content: '\\label{eq:1} some text \\label{fig:2}',
+            content: content,
             language: 'latex'
         });
         const labels = findLabels(doc.getText(), doc);
+        
         assert.strictEqual(labels.length, 2);
-        assert.strictEqual(labels[0].label, 'eq:1');
-        assert.strictEqual(labels[1].label, 'fig:2');
+        
+        assert.strictEqual(labels[0].label, 'eq:einstein');
+        assert.ok(labels[0].context.includes('\\begin{equation}'));
+        assert.ok(labels[0].context.includes('E = mc^2'));
+        assert.ok(labels[0].context.includes('\\end{equation}'));
+        
+        assert.strictEqual(labels[1].label, 'lbl:text');
+        // Fallback context should be the line
+        assert.strictEqual(labels[1].context.trim(), '\\label{lbl:text}');
+    });
+
+    test('findLabels should handle nested-like environments simply', async () => {
+        const content = `
+\\begin{theorem}
+    \\begin{equation}
+        1+1=2 \\label{eq:oneplusone}
+    \\end{equation}
+\\end{theorem}
+`;
+        const doc = await vscode.workspace.openTextDocument({
+            content: content,
+            language: 'latex'
+        });
+        const labels = findLabels(doc.getText(), doc);
+        
+        assert.strictEqual(labels.length, 1);
+        assert.strictEqual(labels[0].label, 'eq:oneplusone');
+        // It should pick the inner-most environment it finds before the label
+        assert.ok(labels[0].context.includes('\\begin{equation}'));
+        assert.ok(labels[0].context.includes('\\end{equation}'));
     });
 });
