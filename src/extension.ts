@@ -186,6 +186,28 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.discoverLabels', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || !editor.document.fileName.endsWith('.tex')) {
+            vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다.");
+            return;
+        }
+
+        const payload = {
+            mainCommand: "labels",
+            subCommands: [],
+            parallelOptions: [],
+            rawSelection: "",
+            config: {
+                filepath: editor.document.uri.fsPath
+            }
+        };
+
+        if (pythonProcess?.stdin) {
+            pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+        }
+    }));
+
     // 2. Python 데몬 백그라운드 실행
 	const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
     
@@ -287,6 +309,12 @@ export function activate(context: vscode.ExtensionContext) {
                             editBuilder.replace(fullRange, response.fullText);
                         });
                         vscode.window.showInformationMessage("쿼리가 수행되어 문서가 업데이트되었습니다.");
+                        continue;
+                    }
+
+                    // [labels] 라벨 분석 성공 처리
+                    if (response.mainCommand === 'labels' && response.nodes) {
+                        provider.updateLabels(response.nodes, response.edges);
                         continue;
                     }
 
@@ -447,7 +475,8 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "plot >", description: "수식 시각화 (2D, 3D, 복소 평면)" },
                 { label: "cite >", description: "논문 인용 (arXiv ID, DOI, 또는 제목)" },
                 { label: "oeis >", description: "OEIS 수열 검색" },
-                { label: "analyze >", description: "문서 및 수식 분석 (너비 등)" }
+                { label: "analyze >", description: "문서 및 수식 분석 (너비 등)" },
+                { label: "labels", description: "LaTeX 라벨 디펜던시 분석 및 시각화" }
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
@@ -599,6 +628,11 @@ export function activate(context: vscode.ExtensionContext) {
             // 특수 커맨드 (분석) 처리
             if (userInput === "analyze > width") {
                 vscode.commands.executeCommand('tex-machina.analyzeWidth');
+                return;
+            }
+
+            if (userInput === "labels") {
+                vscode.commands.executeCommand('tex-machina.discoverLabels');
                 return;
             }
 

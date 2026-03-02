@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tex-Machina | Solar Precision v3</title>
+    <title>Tex-Machina | Solar Precision v3 (Responsive)</title>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -14,12 +14,11 @@
             --panel: #fcfcfd;
             --border: #eeeeee;
             --accent: #4f46e5;
-            /* Refined Pastel Palette - Lower Saturation */
             --node-sec: #ffadad; 
-            --node-eq: #a2d2ff;  /* Muted Pastel Blue for better readability */
+            --node-eq: #a2d2ff;  
             --node-fig: #caffbf; 
             --node-gen: #ffd6a5; 
-            --edge: #64748b;     /* Darker, more visible edge color */
+            --edge: #64748b;     
             --font-main: 'Plus Jakarta Sans', sans-serif;
         }
 
@@ -33,92 +32,120 @@
         #layout { display: flex; flex-direction: column; width: 100%; height: 100vh; position: relative; }
 
         #header {
-            height: 64px; display: flex; align-items: center; padding: 0 40px;
+            height: 48px; display: flex; align-items: center; padding: 0 16px;
             background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border); z-index: 100;
         }
 
         #title { 
-            font-weight: 800; font-size: 13px; letter-spacing: 0.15em; 
+            font-weight: 800; font-size: 11px; letter-spacing: 0.1em; 
             text-transform: uppercase; color: var(--fg); opacity: 0.8;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         
         #viz-outer { 
             flex-grow: 1; position: relative; width: 100%; 
             background-image: radial-gradient(#f1f5f9 1.5px, transparent 1.5px); 
-            background-size: 30px 30px; 
+            background-size: 20px 20px; 
         }
         #viz { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
+        /* Inspector Styles */
         #inspector {
-            position: absolute; top: 0; right: 0; width: 420px; height: 100%;
-            background: var(--bg); border-left: 1px solid var(--border);
-            display: none; padding: 60px 40px; z-index: 200;
-            box-shadow: -20px 0 60px rgba(0,0,0,0.05);
-            animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            position: absolute; display: none; z-index: 200;
+            background: var(--bg); border-color: var(--border);
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow-y: auto;
         }
 
-        @keyframes slideInRight {
-            from { transform: translateX(100%); }
-            to { transform: translateX(0); }
+        /* Desktop Mode (Wide) */
+        @media (min-width: 601px) {
+            #inspector {
+                top: 0; right: 0; width: 350px; height: 100%;
+                border-left: 1px solid var(--border);
+                padding: 40px 30px;
+                animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            }
         }
+
+        /* Mobile/Sidebar Mode (Narrow) */
+        @media (max-width: 600px) {
+            #inspector {
+                bottom: 0; left: 0; width: 100%; max-height: 60%;
+                border-top: 1px solid var(--border);
+                border-radius: 20px 20px 0 0;
+                padding: 30px 20px;
+                animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .math-preview { padding: 20px !important; margin: 16px 0 !important; font-size: 16px !important; }
+            #ins-label { font-size: 20px !important; }
+        }
+
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
         .math-preview {
             background: #f8fafc; border: 1px solid var(--border);
-            padding: 40px; margin: 32px 0; border-radius: 12px; 
-            font-size: 20px; min-height: 100px;
+            padding: 30px; margin: 24px 0; border-radius: 8px; 
+            font-size: 18px; min-height: 80px;
             display: flex; align-items: center; justify-content: center;
+            overflow-x: auto;
         }
 
         .btn {
             background: white; border: 1px solid var(--border); color: var(--fg);
-            padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 11px;
-            font-weight: 700; margin-left: 10px; transition: all 0.2s;
-            text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px;
+            font-weight: 700; margin-left: 6px; transition: all 0.2s;
+            text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
         }
-        .btn:hover { 
-            border-color: var(--fg); 
-            background: var(--fg); 
-            color: white;
-        }
+        .btn:hover { border-color: var(--fg); background: var(--fg); color: white; }
+        .btn-primary { background: var(--fg); color: white; border: none; width: 100%; padding: 12px; margin: 0; }
 
         #legend {
-            position: absolute; bottom: 32px; left: 32px;
-            display: flex; gap: 24px; padding: 12px 24px;
-            background: white; border: 1px solid var(--border);
-            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.05);
-            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+            position: absolute; bottom: 16px; left: 16px;
+            display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 16px;
+            background: rgba(255,255,255,0.8); backdrop-filter: blur(4px);
+            border: 1px solid var(--border); border-radius: 6px;
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
         }
-        .legend-item { display: flex; align-items: center; gap: 8px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+        #close-btn {
+            position: absolute; top: 15px; right: 20px;
+            background: none; border: none; font-size: 20px; cursor: pointer; opacity: 0.3;
+        }
+        #close-btn:hover { opacity: 1; }
     </style>
 </head>
 <body>
     <div id="layout">
         <div id="header">
-            <div id="title">Tex-Machina / Solar Precision</div>
+            <div id="title">Tex-Machina</div>
             <div style="flex-grow: 1"></div>
-            <button class="btn" onclick="network.fit({animation:{duration:1000}})">Fit View</button>
-            <button class="btn" onclick="addDynamicNode()">Add Node</button>
+            <button class="btn" onclick="network.fit({animation:{duration:600}})">Fit</button>
+            <button class="btn" onclick="addDynamicNode()">+</button>
         </div>
         
         <div id="viz-outer">
             <div id="viz"></div>
             <div id="legend">
-                <div class="legend-item"><span class="dot" style="background:var(--node-sec)"></span> Section</div>
-                <div class="legend-item"><span class="dot" style="background:var(--node-eq)"></span> Equation</div>
-                <div class="legend-item"><span class="dot" style="background:var(--node-fig)"></span> Figure</div>
+                <div class="legend-item"><span class="dot" style="background:var(--node-sec)"></span> Sec</div>
+                <div class="legend-item"><span class="dot" style="background:var(--node-eq)"></span> Eq</div>
+                <div class="legend-item"><span class="dot" style="background:var(--node-fig)"></span> Fig</div>
             </div>
         </div>
 
         <div id="inspector">
-            <div style="font-size: 10px; font-weight: 800; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.2em;">NODE INSPECTOR</div>
-            <div id="ins-label" style="font-weight: 800; font-size: 28px; margin-bottom: 4px; color: var(--fg);">Label</div>
-            <div id="ins-meta" style="font-size: 12px; opacity: 0.4; margin-bottom: 40px;"></div>
+            <button id="close-btn" onclick="document.getElementById('inspector').style.display='none'">×</button>
+            <div style="font-size: 9px; font-weight: 800; color: var(--accent); margin-bottom: 4px; letter-spacing: 0.15em;">INSPECTOR</div>
+            <div id="ins-label" style="font-weight: 800; font-size: 22px; margin-bottom: 4px; color: var(--fg); word-break: break-all;">Label</div>
+            <div id="ins-meta" style="font-size: 11px; opacity: 0.5; margin-bottom: 20px;"></div>
             
             <div class="math-preview" id="math-target"></div>
             
-            <button class="btn" style="width: 100%; margin: 0; padding: 16px; background: var(--fg); color: white; border: none;" onclick="document.getElementById('inspector').style.display='none'">Close Inspector</button>
+            <button class="btn btn-primary" onclick="document.getElementById('inspector').style.display='none'">Close</button>
         </div>
     </div>
 
@@ -142,11 +169,11 @@
             const colors = { section: '#ffadad', equation: '#a2d2ff', figure: '#caffbf' };
             const color = colors[n.type] || '#ffd6a5';
             const refCount = n.refCount || n.refs || 0;
-            const size = 6 + (Math.log(refCount + 1) * 5);
+            const size = 5 + (Math.log(refCount + 1) * 4);
             
             return {
                 id: n.id,
-                label: n.label,
+                label: n.label.length > 15 ? n.label.substring(0, 12) + '...' : n.label,
                 shape: 'dot',
                 size: size,
                 color: { 
@@ -157,16 +184,15 @@
                 },
                 font: { 
                     color: '#334155',
-                    size: 11,
+                    size: 10,
                     face: 'Plus Jakarta Sans',
                     weight: '600',
-                    vadjust: size + 2, // Brought label closer to the node
-                    strokeWidth: 3, 
+                    vadjust: size + 4,
+                    strokeWidth: 2, 
                     strokeColor: '#ffffff' 
                 },
-                borderWidth: 1.5,
-                borderWidthSelected: 2.5,
-                shadow: { enabled: true, color: 'rgba(0,0,0,0.12)', size: 10, x: 0, y: 4 },
+                borderWidth: 1,
+                borderWidthSelected: 2,
                 metadata: n
             };
         }
@@ -175,49 +201,23 @@
             nodes = new vis.DataSet(initialNodes.map(formatNode));
             edges = new vis.DataSet(initialEdges.map(e => ({
                 ...e,
-                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-                color: { color: '#64748b', highlight: '#4f46e5', opacity: 1.0 },
-                width: 1.5,
-                smooth: {
-                    enabled: true,
-                    type: 'cubicBezier',
-                    forceDirection: 'none',
-                    roundness: 0.5
-                }
+                arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+                color: { color: '#cbd5e1', highlight: '#4f46e5' },
+                width: 1,
+                smooth: { enabled: false }
             })));
 
             const options = {
                 physics: {
                     enabled: true,
                     solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {
-                        gravitationalConstant: -150,
-                        centralGravity: 0.01,
-                        springLength: 200,
-                        springConstant: 0.08,
-                        avoidOverlap: 1
-                    },
-                    stabilization: { 
-                        enabled: true,
-                        iterations: 1000,
-                        updateInterval: 50
-                    }
+                    forceAtlas2Based: { gravitationalConstant: -100, springLength: 100, avoidOverlap: 1 },
+                    stabilization: { iterations: 200 }
                 },
                 edges: {
-                    smooth: {
-                        enabled: true,
-                        type: 'cubicBezier',
-                        roundness: 0.5
-                    },
-                    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-                    color: { color: '#64748b', highlight: '#4f46e5' },
-                    width: 1.5
+                    smooth: { enabled: false }
                 },
-                interaction: { 
-                    hover: true, 
-                    hoverConnectedEdges: true,
-                    tooltipDelay: 200 
-                }
+                interaction: { hover: true, tooltipDelay: 200 }
             };
 
             network = new vis.Network(document.getElementById('viz'), { nodes, edges }, options);
@@ -228,7 +228,7 @@
                     const node = nodes.get(p.nodes[0]).metadata;
                     const refCount = node.refCount || node.refs || 0;
                     document.getElementById('ins-label').innerText = node.label;
-                    document.getElementById('ins-meta').innerText = `LINE ${node.line} | ${refCount} REFERENCES`;
+                    document.getElementById('ins-meta').innerText = `LINE ${node.line} | ${refCount} REFS`;
                     const target = document.getElementById('math-target');
                     target.innerHTML = `\\[ ${node.content} \\]`;
                     ins.style.display = 'block';
@@ -242,11 +242,11 @@
         function addDynamicNode() {
             const id = 'sim' + Math.floor(Math.random()*100);
             const node = {
-                id: id, label: 'new:node_' + id, type: 'equation',
+                id: id, label: 'new:' + id, type: 'equation',
                 line: 100, refs: 5, content: 'E = h\\nu'
             };
             nodes.add(formatNode(node));
-            edges.add({ from: id, to: 's2', arrows: 'to' });
+            edges.add({ from: id, to: 's2' });
         }
 
         window.onload = init;

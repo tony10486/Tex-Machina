@@ -31,6 +31,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 vscode.commands.executeCommand('tex-machina.deleteMacro', data.name);
             } else if (data.command === 'applyMacro') {
                 vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
+            } else if (data.command === 'discoverLabels') {
+                vscode.commands.executeCommand('tex-machina.discoverLabels');
             }
         });
 
@@ -79,11 +81,16 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         this._view?.webview.postMessage({ type: 'updateMacros', macros });
     }
 
+    public updateLabels(nodes: any[], edges: any[]) {
+        this._view?.webview.postMessage({ type: 'labels', nodes, edges });
+    }
+
     private _getHtml(webview: vscode.Webview) {
         const mathjaxUri = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
         const x3domJs = "https://www.x3dom.org/download/1.8.3/x3dom.js";
         const x3domCss = "https://www.x3dom.org/download/1.8.3/x3dom.css";
-        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net https://www.x3dom.org; font-src https://cdn.jsdelivr.net https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
+        const visNetworkJs = "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js";
+        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org https://unpkg.com; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net https://www.x3dom.org; font-src https://cdn.jsdelivr.net https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
 
         return `<!DOCTYPE html>
         <html>
@@ -91,6 +98,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <meta http-equiv="Content-Security-Policy" content="${csp}">
             <link rel="stylesheet" href="${x3domCss}">
             <script src="${x3domJs}"></script>
+            <script src="${visNetworkJs}"></script>
             <script>
                 window.MathJax = {
                     tex: {
@@ -115,7 +123,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
                 .group { display: flex; flex-direction: column; }
                 label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
-                input, select { background: #333; color: #eee; border: 1px solid #555; padding: 2px; }
+                input, select { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); padding: 2px; }
                 .full { grid-column: 1 / span 2; }
 
                 /* Macro List Styles */
@@ -124,17 +132,50 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     display: flex; 
                     flex-direction: column; 
                     padding: 8px; 
-                    border-bottom: 1px solid #444;
+                    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
                     background: rgba(255, 255, 255, 0.03);
                     margin-bottom: 4px;
                 }
                 .macro-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-                .macro-name { font-weight: bold; color: #007acc; cursor: pointer; }
-                .macro-chain { font-size: 0.85em; color: #aaa; word-break: break-all; }
+                .macro-name { font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer; }
+                .macro-chain { font-size: 0.85em; color: var(--vscode-descriptionForeground); word-break: break-all; }
                 .macro-actions { display: flex; gap: 4px; }
                 .macro-actions button { padding: 2px 4px; font-size: 10px; flex: none; width: auto; }
                 .macro-input-group { display: flex; gap: 4px; margin-bottom: 4px; }
                 .macro-input-group input { flex: 1; }
+
+                /* Label Discovery Styles */
+                #viz-container { position: relative; width: 100%; height: 400px; background: var(--vscode-sideBar-background); border: 1px solid var(--vscode-sideBarSectionHeader-border); margin-top: 10px; overflow: hidden; }
+                #viz { width: 100%; height: 100%; }
+                #legend {
+                    position: absolute; bottom: 10px; left: 10px;
+                    display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 8px;
+                    background: var(--vscode-sideBar-background); border: 1px solid var(--vscode-sideBarSectionHeader-border); border-radius: 4px;
+                    font-size: 9px; font-weight: 700; text-transform: uppercase; pointer-events: none; opacity: 0.8;
+                }
+                .legend-item { display: flex; align-items: center; gap: 4px; }
+                .dot { width: 6px; height: 6px; border-radius: 50%; }
+                
+                #inspector {
+                    position: absolute; display: none; z-index: 200;
+                    background: var(--vscode-sideBar-background); border: 1px solid var(--vscode-sideBarSectionHeader-border);
+                    box-shadow: 0 -5px 15px rgba(0,0,0,0.2);
+                    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    overflow-y: auto; bottom: 0; left: 0; width: 100%; max-height: 70%;
+                    border-radius: 12px 12px 0 0; padding: 20px;
+                }
+                #close-inspector { position: absolute; top: 10px; right: 15px; cursor: pointer; font-size: 18px; opacity: 0.5; }
+                #close-inspector:hover { opacity: 1; }
+                .ins-title { font-size: 9px; font-weight: 800; color: var(--vscode-textLink-foreground); margin-bottom: 4px; letter-spacing: 0.1em; }
+                .ins-label { font-weight: 800; font-size: 18px; margin-bottom: 4px; color: var(--vscode-foreground); word-break: break-all; }
+                .ins-meta { font-size: 11px; opacity: 0.6; margin-bottom: 15px; }
+                .math-preview {
+                    background: var(--vscode-editor-background); border: 1px solid var(--vscode-sideBarSectionHeader-border);
+                    padding: 15px; margin: 15px 0; border-radius: 6px; 
+                    font-size: 16px; min-height: 60px;
+                    display: flex; align-items: center; justify-content: center;
+                    overflow-x: auto;
+                }
 
                 /* Collapsible Sections (VS Code Style) */
                 details {
@@ -179,9 +220,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 .btn-row { display: flex; gap: 4px; margin-top: 5px; }
-                button { background: #007acc; color: white; border: none; padding: 6px; cursor: pointer; flex: 1; }
-                button:hover { background: #0062a3; }
-                button.secondary { background: #555; }
+                button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 6px; cursor: pointer; flex: 1; }
+                button:hover { background: var(--vscode-button-hoverBackground); }
+                button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+                button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
                 input[type="range"] { width: 100%; margin: 4px 0; }
             </style>
         </head>
@@ -189,6 +231,29 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <div id="out">TeX-Machina</div>
             <div id="container"></div>
             <div id="ui">
+                <details id="details-labels">
+                    <summary>Label Discovery</summary>
+                    <div id="label-discovery" style="padding: 10px;">
+                        <button style="width: 100%; margin-bottom: 10px;" onclick="discoverLabels()">Discover Labels</button>
+                        <div id="viz-container">
+                            <div id="viz"></div>
+                            <div id="legend">
+                                <div class="legend-item"><span class="dot" style="background:#ffadad"></span> Sec</div>
+                                <div class="legend-item"><span class="dot" style="background:#a2d2ff"></span> Eq</div>
+                                <div class="legend-item"><span class="dot" style="background:#caffbf"></span> Fig</div>
+                            </div>
+                            <div id="inspector">
+                                <span id="close-inspector" onclick="document.getElementById('inspector').style.display='none'">×</span>
+                                <div class="ins-title">INSPECTOR</div>
+                                <div id="ins-label" class="ins-label">Label</div>
+                                <div id="ins-meta" class="ins-meta"></div>
+                                <div class="math-preview" id="ins-math-target"></div>
+                                <button onclick="document.getElementById('inspector').style.display='none'">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
                 <details id="details-m" open>
                     <summary>Macro Manager</summary>
                     <div id="m" style="padding: 10px;">
@@ -370,6 +435,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
             <script>
                 const vscode = acquireVsCodeApi();
                 let last = "";
+                let labelNetwork;
+
+                function discoverLabels() {
+                    vscode.postMessage({ command: 'discoverLabels' });
+                }
                 
                 function hqExport(){
                     vscode.postMessage({
@@ -725,9 +795,72 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     const b = parseInt(hex.slice(5, 7), 16) / 255;
                     return r + " " + g + " " + b;
                 }
+
+                function initLabelGraph(data) {
+                    const colors = { section: '#ffadad', equation: '#a2d2ff', figure: '#caffbf' };
+                    const visNodes = new vis.DataSet(data.nodes.map(n => {
+                        const color = colors[n.type] || '#ffd6a5';
+                        const refCount = n.refCount || 0;
+                        const size = 5 + (Math.log(refCount + 1) * 4);
+                        return {
+                            id: n.id,
+                            label: n.label.length > 12 ? n.label.substring(0, 10) + '...' : n.label,
+                            shape: 'dot',
+                            size: size,
+                            color: { 
+                                background: color, 
+                                border: 'rgba(255,255,255,0.8)', 
+                                highlight: { background: color, border: '#1a1a1a' }
+                            },
+                            font: { color: 'var(--vscode-foreground)', size: 9, vadjust: size + 4 },
+                            metadata: n
+                        };
+                    }));
+
+                    const visEdges = new vis.DataSet(data.edges.map(e => ({
+                        ...e,
+                        arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+                        color: { color: '#cbd5e1', highlight: '#4f46e5' },
+                        width: 1,
+                        smooth: { enabled: false }
+                    })));
+
+                    const container = document.getElementById('viz');
+                    const options = {
+                        physics: {
+                            enabled: true,
+                            solver: 'forceAtlas2Based',
+                            forceAtlas2Based: { gravitationalConstant: -80, springLength: 80, avoidOverlap: 1 },
+                            stabilization: { iterations: 150 }
+                        },
+                        interaction: { hover: true }
+                    };
+
+                    if (labelNetwork) labelNetwork.destroy();
+                    labelNetwork = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
+
+                    labelNetwork.on("click", (p) => {
+                        const ins = document.getElementById('inspector');
+                        if (p.nodes.length > 0) {
+                            const node = visNodes.get(p.nodes[0]).metadata;
+                            document.getElementById('ins-label').innerText = node.label;
+                            document.getElementById('ins-meta').innerText = \`LINE \${node.line} | \${node.refCount || 0} REFS\`;
+                            const target = document.getElementById('ins-math-target');
+                            target.innerHTML = \`\\\\[ \${node.content} \\\\]\`;
+                            ins.style.display = 'block';
+                            if (window.MathJax) MathJax.typesetPromise([target]);
+                        } else {
+                            ins.style.display = 'none';
+                        }
+                    });
+                }
+
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros } = e.data;
-                    if (type === 'update') {
+                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges } = e.data;
+                    if (type === 'labels') {
+                        document.getElementById('details-labels').open = true;
+                        initLabelGraph({ nodes, edges });
+                    } else if (type === 'update') {
                         let content = expr_latex || latex || "TeX-Machina";
                         if (!expr_latex && latex && latex !== "TeX-Machina" && !latex.includes('$') && !latex.includes('\\\\(') && !latex.includes('\\\\[') && !latex.includes('tikzpicture')) {
                             content = '$$' + latex + '$$';

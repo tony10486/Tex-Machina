@@ -713,6 +713,7 @@ from plot_engine import handle_plot
 from cite_engine import handle_cite
 from oeis_engine import handle_oeis
 from query_engine import execute_query_on_text
+from label_engine import LabelEngine
 
 # ==========================================
 # 2. 메인 계산 라우터 (Command Dictionary)
@@ -862,9 +863,16 @@ def execute_calc(parsed_json_str):
         config = req.get('config', {})
         selection = req.get('rawSelection', '').strip()
         selection = strip_latex_delimiters(selection)
-        
-        # [NEW] 쿼리 기능 처리
-        if main_cmd == "?":
+
+        # [NEW] 라벨 분석 기능 처리
+        if main_cmd == "labels":
+            filepath = config.get('filepath')
+            if not filepath:
+                return json.dumps({"status": "error", "message": "No file path provided for label discovery"})
+            engine = LabelEngine()
+            return json.dumps(engine.parse_file(filepath))
+
+        # [NEW] 쿼리 기능 처리        if main_cmd == "?":
             full_text = req.get('fullText', '')
             query_str = sub_cmds[0] if sub_cmds else selection
             res = execute_query_on_text(full_text, query_str)
