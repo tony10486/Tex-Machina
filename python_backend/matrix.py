@@ -283,6 +283,8 @@ def handle_matrix(sub_cmds, parallels, config=None):
 
         # 5. LaTeX 코드 조립
         env = bracket_map.get(b_type, 'bmatrix')
+        base_indent = config.get('indentation', '')
+        row_indent = base_indent + "    "
         
         if aug_col is not None and 0 < aug_col < cols:
             col_format = "c" * aug_col + "|" + "c" * (cols - aug_col)
@@ -291,13 +293,13 @@ def handle_matrix(sub_cmds, parallels, config=None):
             
             latex_str = f"\\left{left_b} \\begin{{array}}{{{col_format}}}\n"
             for r in matrix_data:
-                latex_str += " & ".join(r) + " \\\\\n"
-            latex_str += f"\\end{{array}} \\right{right_b}"
+                latex_str += row_indent + " & ".join(r) + " \\\\\n"
+            latex_str += base_indent + f"\\end{{array}} \\right{right_b}"
         else:
             latex_str = f"\\begin{{{env}}}\n"
             for r in matrix_data:
-                latex_str += " & ".join(r) + " \\\\\n"
-            latex_str += f"\\end{{{env}}}"
+                latex_str += row_indent + " & ".join(r) + " \\\\\n"
+            latex_str += base_indent + f"\\end{{{env}}}"
 
         # 6. 행렬 분석
         analysis_data = None

@@ -151,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
     // [Label Dependency] 라벨 종속 관계 추가 커맨드
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {return;}
 
         const range = new vscode.Range(
             new vscode.Position(args.line, args.startChar),
@@ -811,6 +811,16 @@ export function activate(context: vscode.ExtensionContext) {
             const yMultiplier = config.get('plot.yMultiplier', 5.0);
             const lineColor = config.get('plot.lineColor', 'blue');
 
+            // [추가] 현재 줄의 들여쓰기 감지
+            let currentIndentation = "";
+            if (editor) {
+                const lineText = editor.document.lineAt(editor.selection.active.line).text;
+                const match = lineText.match(/^(\s*)/);
+                if (match) {
+                    currentIndentation = match[1];
+                }
+            }
+
             const payload = {
                 ...parsed,
                 config: {
@@ -819,6 +829,7 @@ export function activate(context: vscode.ExtensionContext) {
                     datDensity: datDensity,
                     yMultiplier: yMultiplier,
                     lineColor: lineColor,
+                    indentation: currentIndentation,
                     workspaceDir: path.dirname(editor.document.uri.fsPath)
                 }
             };
