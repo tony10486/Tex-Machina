@@ -27,7 +27,19 @@ class QueryExecutor:
         return {"status": "success", "text": modified_text}
 
     def execute_statement(self, stmt, text):
-        command = stmt.get('command', 'find').lower()
+        raw_command = stmt.get('command', 'find')
+        command = raw_command.lower()
+        
+        # Extract line range if present (e.g., find:[8-33])
+        line_range = None
+        if ':' in command:
+            cmd_part, range_part = command.split(':', 1)
+            command = cmd_part
+            # Extract numbers from [8-33]
+            range_match = re.search(r'\[(\d+)-(\d+)\]', range_part)
+            if range_match:
+                line_range = (int(range_match.group(1)), int(range_match.group(2)))
+
         target = stmt.get('target')
         operator = stmt.get('operator')
         action = stmt.get('action')
@@ -44,25 +56,49 @@ class QueryExecutor:
                 if not target_regex:
                     return {"status": "error", "message": "Unsupported target path"}
                 
-                replacement = self.action_to_string(action)
-                new_text = re.sub(target_regex, replacement, text)
-                return {"status": "success", "text": new_text}
+                self.wildcard_count = 0
+                replacement = self.action_to_string(action, is_replacement=True)
+                
+                try:
+                    if line_range:
+                        return self.apply_to_range(text, target_regex, replacement, line_range)
+                    
+                    new_text = re.sub(target_regex, replacement, text)
+                    return {"status": "success", "text": new_text}
+                except re.error as e:
+                    return {"status": "error", "message": f"Regex error: {str(e)}"}
                 
         elif command == 'delete':
             target_regex = self.path_to_regex(target)
+            if line_range:
+                return self.apply_to_range(text, target_regex, '', line_range)
             new_text = re.sub(target_regex, '', text)
             return {"status": "success", "text": new_text}
             
         elif command == 'move':
             target_regex = self.path_to_regex(target)
-            match = re.search(target_regex, text)
+            
+            # For move, we search in the whole text or range
+            search_text = text
+            offset = 0
+            if line_range:
+                lines = text.splitlines(True)
+                start_line, end_line = line_range
+                search_text = "".join(lines[start_line-1:end_line])
+                offset = sum(len(l) for l in lines[:start_line-1])
+
+            match = re.search(target_regex, search_text)
             if not match:
                 return {"status": "error", "message": f"Target not found: {target}"}
             
             content = match.group(0)
-            text_removed = text[:match.start()] + text[match.end():]
+            # Remove from original text using absolute positions
+            abs_start = offset + match.start()
+            abs_end = offset + match.end()
+            text_removed = text[:abs_start] + text[abs_end:]
             
             # Simple line-based move if action or extra_targets is a number (line)
+            self.wildcard_count = 0
             action_str = self.action_to_string(action)
             extra_targets = stmt.get('extra_targets', [])
             if not action_str and extra_targets:
@@ -83,12 +119,39 @@ class QueryExecutor:
             
         return {"status": "error", "message": f"Command '{command}' not yet fully implemented in engine"}
 
+    def apply_to_range(self, text, regex, replacement, line_range):
+        lines = text.splitlines(True)
+        start_line, end_line = line_range
+        
+        # Adjust to 0-based indices
+        start_idx = max(0, start_line - 1)
+        end_idx = min(len(lines), end_line)
+        
+        before = "".join(lines[:start_idx])
+        target_content = "".join(lines[start_idx:end_idx])
+        after = "".join(lines[end_idx:])
+        
+        new_target_content = re.sub(regex, replacement, target_content)
+        return {"status": "success", "text": before + new_target_content + after}
+
     def path_to_regex(self, target):
         """Converts a query path AST to a regex pattern."""
         if not target: return None
         
         if target.get('type') == 'string':
-            return re.escape(target.get('value'))
+            val = target.get('value')
+            # Handle !* as literal * and * as capture group (.*?)
+            parts = re.split(r'(!\*|\*)', val)
+            res = ""
+            for i, part in enumerate(parts):
+                if i % 2 == 0:
+                    res += re.escape(part)
+                else:
+                    if part == '!*':
+                        res += r'\*'
+                    else: # part == '*'
+                        res += r'(.*?)'
+            return res
         
         if target.get('type') == 'identifier':
             val = target.get('value')
@@ -125,11 +188,14 @@ class QueryExecutor:
 
         return None
 
-    def action_to_string(self, action):
+    def action_to_string(self, action, is_replacement=False):
         if not action: return ""
         if isinstance(action, dict):
             if action.get('type') == 'string':
-                return action.get('value')
+                val = action.get('value')
+                if is_replacement:
+                    return self.prepare_replacement(val)
+                return val
             if action.get('type') == 'identifier':
                 return action.get('value')
             if action.get('type') == 'number':
@@ -137,11 +203,30 @@ class QueryExecutor:
             if action.get('type') == 'tag':
                 return action.get('value')
             if action.get('type') == 'raw':
-                return action.get('value')
+                val = action.get('value')
+                if is_replacement:
+                    return self.prepare_replacement(val)
+                return val
             if action.get('type') == 'action_complex':
                 parts = action.get('parts', [])
-                return "".join(self.action_to_string(p) for p in parts)
+                return "".join(self.action_to_string(p, is_replacement) for p in parts)
         return str(action)
+
+    def prepare_replacement(self, val):
+        # Replacement side: !* is literal *, * is \1, \2, ...
+        parts = re.split(r'(!\*|\*)', val)
+        new_parts = []
+        for i, part in enumerate(parts):
+            if i % 2 == 0:
+                # re.sub replacement needs \ to be escaped as \\
+                new_parts.append(part.replace('\\', '\\\\'))
+            else:
+                if part == '!*':
+                    new_parts.append('*')
+                else: # part == '*'
+                    self.wildcard_count += 1
+                    new_parts.append(f'\\{self.wildcard_count}')
+        return "".join(new_parts)
 
 def execute_query_on_text(text, query_str):
     parse_res = parse_tex_machina_query(query_str)

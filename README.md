@@ -2,22 +2,155 @@
 
 **TeX-Machina**는 VS code용 LaTeX 확장 프로그램입니다. LaTeX 문서를 작성하면서 필요한 기능과, 반복 작업의 간편화를 위해 제작되었습니다. 
 ## Features
+### 계산
+NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다. `calc` 명령어를 통해 사용할 수 있습니다.
 
-- **심볼릭 연산(Symbolic Calculation) `calc >`**: NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다. 정말 많은 기능을 지원하지만, 그 중에서 대표적인 몇 가지 기능의 예시를 보여드리자면...
-  1. 미분과 적분 : 원하는 수식의 미분과 적분을 수행합니다.
-    > `\frac{\sinh (x) \log (x) }{e^{x}}  = - e^{- x} \log{\left(x \right)} \sinh{\left(x \right)} + e^{- x} \log{\left(x \right)} \cosh{\left(x \right)} + \frac{e^{- x} \sinh{\left(x \right)}}{x} = \frac{\left(x e^{- x} \log{\left(x \right)} + \sinh{\left(x \right)}\right) e^{- x}}{x}`
-<img width="910" height="61" alt="Screenshot 2026-03-01 at 2 09 59 AM" src="https://github.com/user-attachments/assets/00814eac-f38c-4820-90c3-33f412053b68" />
+#### 지원하는 주요 연산 기능
+| 카테고리 | 명령어 | 설명 및 예시 |
+| :--- | :--- | :--- |
+| 대수 및 식 정리 | `simplify`, `eval` | 수식 단순화 및 수치 계산 |
+| | `factor`, `expand` | 인수분해 및 식 전개 |
+| | `together`, `apart` | 통분 및 부분분수 분해 |
+| | `trigsimp`, `expand_trig` | 삼각함수 식 정리 및 전개 |
+| 미적분 및 해석학 | `diff`, `int` | 미분 및 적분 (예: `diff > x`, `int > x,0,1`) |
+| | `limit`, `taylor` | 극한 및 테일러 급수 (예: `limit > x,0`, `taylor / 5`) |
+| | `asymp`, `laurent` | 점근 전개 및 로랑 급수 |
+| | `jacobian`, `hessian` | 야코비안 및 헤세 행렬 |
+| 선형대수학 | `rref`, `det`, `inv` | 기약 행사다리꼴, 행렬식, 역행렬 |
+| | `eigen`, `rank`, `trace` | 고유값, 랭크, 주대각합 |
+| | `transpose`, `nullspace` | 전치행렬 및 영공간(null space) |
+| 방정식 및 변환 | `solve`, `num_solve` | 방정식 풀이 및 수치적 해법/그래프 |
+| | `ode`, `pde` | 상미분방정식 및 편미분방정식 (예: `ode / ic=y(0):1`) |
+| | `laplace`, `ilaplace` | 라플라스 변환 및 역변환 |
+| | `fourier`, `ifourier` | 푸리에 변환 및 역변환 |
+| | `ztrans` | Z-변환 |
+| 복소수 및 기타 | `re`, `im`, `conjugate` | 실수부, 허수부, 켤레복소수 |
+| | `residue` | 유수(Residue) 계산 |
+| | `prime`, `factorint` | 소수 판별 및 소인수분해 |
+| | `logic` | 기호 논리 연산 |
+| | `dimcheck` | 차원 및 단위 검사 (예: `/ set=v:L/T`) |
+| | `error_prop` | 오차 전파 계산 |
+| | `tensor_expand` | 텐서의 확장 |
+
+#### 상세 예시 및 활용
+
+`calc` 기능은 문서 내의 LaTeX 수식을 드래그(선택)한 후 명령어를 입력하거나, 명령어 뒤에 직접 수식을 입력하여 사용할 수 있습니다.
+
+**1. 해석학: 미분, 적분 및 극한**
+- **미분/적분**: 복잡한 합성함수의 미분이나 치환/부분적분이 필요한 수식도 한 번에 계산합니다.
+  - 사용: `\frac{\sin(x)}{x}` 선택 -> `calc > diff > x` 입력
+  - 결과: `\frac{\cos(x)}{x} - \frac{\sin(x)}{x^2}`
+- **테일러 급수**: 특정 지점에서의 근사식을 생성합니다.
+  - 사용: `e^x` 선택 -> `calc > taylor / 5` 입력
+  - 결과: `1 + x + \frac{x^2}{2} + \frac{x^3}{6} + \frac{x^4}{24} + O(x^5)`
+
+**2. 선형대수학: 행렬의 변환 및 분석**
+- **자동 행렬곱**: `\begin{pmatrix} ... \end{pmatrix} \cdot \begin{pmatrix} ... \end{pmatrix}` 형태를 감지하여 결과 행렬을 생성합니다.
+- **RREF 및 행렬식**: 선형 시스템 풀이를 위한 기약 행사다리꼴 변환이나 역행렬 존재 여부 확인이 간편합니다.
+  - 사용: 3x3 행렬 선택 -> `calc > rref`
+  - 특징: 계산 과정에서 분수 형태(`\frac{a}{b}`)를 유지하여 정확한 대수적 결과를 제공합니다.
+
+**3. 방정식 풀이 및 미분방정식 (ODE/PDE)**
+- **기호 해 풀이**: 다항방정식뿐만 아니라 초월함수가 포함된 방정식의 해를 구합니다.
+  - 사용: `x^2 - 5x + 6 = 0` -> `calc > solve` -> 결과: `x=2, 3`
+- **미분방정식과 초기조건**: `ode` 명령어를 통해 초기값 문제(IVP)를 해결합니다.
+  - 사용: `y'' + y = 0` 선택 -> `calc > ode / ic=y(0):1,y'(0):0` 입력
+  - 결과: `y(x) = \cos(x)`
+
+**4. 물리 및 공학: 단위 검사 및 변환**
+- **단위/차원 검사 (`dimcheck`)**: 수식의 좌변과 우변의 물리적 차원이 일치하는지 검사합니다.
+  - 사용: `E = mc^3` 선택 -> `calc > dimcheck`
+  - 결과: `Dimension Error: L^2 M T^{-2} \neq L^3 M T^{-3}` (에러 위치와 차원 차이 표시)
+- **적분 변환**: 라플라스, 푸리에 변환을 통해 제어 공학이나 신호 처리 수식을 정리합니다.
+  - 사용: `\sin(at)` 선택 -> `calc > laplace`
+  - 결과: `\frac{a}{s^2 + a^2}`
+
+**5. 식 정리 및 간소화**
+- **`simplify`**: 결과가 너무 복잡할 때 SymPy의 강력한 알고리즘으로 식을 가장 짧은 형태로 정리합니다.
+- **`trigsimp`**: `\sin^2(x) + \cos^2(x)`와 같은 삼각함수 항을 `1`로 자동 변환합니다.
+- **`apart` (부분분수)**: 복잡한 유리함수를 적분하기 쉬운 형태로 쪼갭니다.
+  - 사용: `\frac{1}{x^2-1}` -> `calc > apart` -> 결과: `\frac{1}{2(x-1)} - \frac{1}{2(x+1)}`
 
 
-(최종 결과는 `calc > simplify` 명령어를 입력한 결과입니다.)
-- **Matrix Tools (`matrix >`)**: Generate various matrix environments (pmatrix, bmatrix, etc.) with automatic "smart dots" and analysis (determinant, inverse, RREF).
-- **Advanced Plotting (`plot >`)**: 
-  - **2D**: Generate PGFPlots data and LaTeX code.
-  - **3D**: Interactive 3D visualization using X3DOM and exportable PDF/PNG figures.
-  - **Complex**: Domain coloring for complex analysis.
-- **Sequence Search (`oeis >`)**: Search for number sequences in the OEIS database and insert them into your document.
-- **Smart Citations (`cite >`)**: Search papers by DOI, arXiv ID, or title, and automatically update your `.bib` files and insert `\cite` commands.
-- **Width Analysis**: Analyze LaTeX formula widths to ensure they fit within your document margins.
+### 행렬 생성 도구 (`matrix >`)
+복잡하고 귀찮은 행렬 입력 과정을 간단하게 해결할 수 있습니다.
+
+#### 1. 기본 환경 및 스타일 선택
+명령어 뒤에 한 글자 옵션을 붙여 괄호 스타일을 결정할 수 있습니다.
+- `matrix > p >` : 소괄호 (`pmatrix`, `( )`)
+- `matrix > b >` : 대괄호 (`bmatrix`, `[ ]`) - **기본값**
+- `matrix > v >` : 수직바 (`vmatrix`, `| |`) - 주로 행렬식(Determinant) 표현에 사용
+- `matrix > V >` : 이중 수직바 (`Vmatrix`, `|| ||`)
+- `matrix > B >` : 중괄호 (`Bmatrix`, `{ }`)
+
+#### 2. 데이터 입력 방식
+- 직접 입력 : 쉼표(`,`)로 열을, 슬래시(`/`) 또는 세미콜론(`;`)으로 행을 구분합니다.
+  - 예: `matrix > 1, 2 / 3, 4` -> $\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}$ 생성
+- **크기 지정 (Template)**: 데이터 없이 크기만 지정하면 해당 크기의 빈 행렬을 만듭니다.
+  - 예: `matrix > 3x3`
+- **회전 변환 행렬**: 특수 명령어 `transform`을 통해 회전 행렬을 즉시 생성합니다.
+  - 예: `matrix > transform > \theta` -> $\begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}$ 생성
+
+#### 3. 스마트 기능 및 옵션
+- **스마트 점 (`/ fill_dots`)**: 행렬 중간에 빈칸이 있거나 패턴이 필요한 경우, `fill_dots` 옵션을 사용하면 `\dots`, `\vdots`, `\ddots`를 적절히 배치하여 수학적 생략 기호를 자동으로 채워줍니다.
+  - 데이터 입력 중 빈 칸이 감지되면 자동으로 제안 팝업이 나타납니다.
+- **행렬 분석 (`/ analyze`)**: 행렬을 생성함과 동시에 웹뷰 패널에 해당 행렬의 **행렬식(det), 역행렬(inv), 기약 행사다리꼴(RREF)** 분석 결과를 즉시 보여줍니다.
+- **첨가 행렬 (`/ aug=n`)**: 특정 열 뒤에 수직선(`|`)을 추가하여 첨가 행렬(Augmented Matrix)을 만듭니다.
+  - 예: `matrix > 1,0,5 / 0,1,2 / aug=2` (2열 뒤에 구분선 추가)
+
+#### 4. 자동 들여쓰기 지원
+현재 문서의 들여쓰기 수준을 자동으로 감지하여, 생성된 `\begin{...} ... \end{...}` 코드가 문서의 흐름을 깨지 않고 깔끔하게 삽입됩니다.
+
+### 고급 시각화 (`plot >`)
+단순한 수식을 넘어, 논문에 바로 삽입 가능한 고품질의 그래프와 인터랙티브한 3D 시각화를 지원합니다.
+
+*   **2D 그래프 생성**: 수식을 입력하면 LaTeX의 `PGFPlots` 패키지용 데이터와 코드를 자동으로 생성합니다. 별도의 데이터 파일 없이도 문서 내에서 정교한 2D 플롯을 구현할 수 있습니다.
+*   **3D 시각화 (X3DOM)**: 복잡한 3D 곡면이나 함수를 VS Code 내부 웹뷰 패널에서 마우스로 돌려보며 확인하고, 이를 PDF나 PNG 형태의 그림 파일로 즉시 내보낼 수 있습니다.
+*   **복소해석학 도메인 컬러링 (Domain Coloring)**: 복소함수의 위상과 절댓값을 색상으로 표현하여 시각적으로 분석할 수 있는 기능을 제공합니다.
+
+> **사용 예시**
+> *   **2D**: `\sin(x) \cdot e^{-0.1x}` 선택 → `plot > 2d / range=-10,10` 입력
+>     *   결과: `\begin{tikzpicture} \begin{axis} ... \end{axis} \end{tikzpicture}` 형태의 코드가 삽입됩니다.
+> *   **3D**: `x^2 - y^2` 선택 → `plot > 3d` 입력
+>     *   결과: 웹뷰 패널에 말 안장 모양(Saddle point)의 3D 그래프가 나타나며 실시간으로 회전 및 확대가 가능합니다.
+> *   **복소함수**: `z^3 - 1` 선택 → `plot > complex` 입력
+>     *   결과: 영점(root)과 극점(pole)이 색상 변화로 뚜렷하게 구분되는 도메인 컬러링 맵이 생성됩니다.
+
+### 수열 검색 (`oeis >`)
+수학 연구나 문제 풀이 중 발견한 숫자 나열이 어떤 의미를 갖는지 궁금할 때, 세계 최대의 정수 수열 데이터베이스인 OEIS(Online Encyclopedia of Integer Sequences)를 즉시 검색합니다.
+
+*   **자동 완성 및 삽입**: 검색된 수열의 이름, 수식, 그리고 처음 몇 개의 항을 문서에 바로 삽입할 수 있습니다.
+*   **수식 매칭**: `1, 1, 2, 3, 5...`와 같이 숫자를 직접 입력하거나, 수열의 OEIS ID(예: `A000045`)를 통해 상세 정보를 불러옵니다.
+
+> **사용 예시**
+> *   **숫자로 검색**: `oeis > 1, 2, 4, 8, 16` 입력
+>     *   결과: `A000079: Powers of 2`라는 결과와 함께 관련 LaTeX 주석이나 수식이 제안됩니다.
+> *   **ID로 검색**: `oeis > A000668` (메르센 소수)
+>     *   결과: 해당 수열의 정의와 일반항이 팝업으로 표시되며 선택 시 문서에 삽입됩니다.
+
+### 스마트 인용 (`cite >`)
+논문 작성 시 가장 번거로운 참고문헌 관리와 `.bib` 파일 업데이트를 자동화합니다.
+
+*   **다양한 검색 식별자**: DOI, arXiv ID, 또는 논문 제목만으로도 온라인 데이터베이스에서 정확한 서지 정보를 가져옵니다.
+*   **자동 .bib 업데이트**: 검색된 논문 정보를 현재 프로젝트의 BibTeX 파일에 자동으로 추가하고, 문서에는 `\cite{...}` 명령어를 삽입합니다. 중복 확인 기능을 통해 동일한 논문이 여러 번 추가되는 것을 방지합니다.
+
+> **사용 예시**
+> *   **제목 검색**: `cite > Attention is all you need` 입력
+>     *   결과: 관련 논문 리스트가 나타나며, 선택 시 `Vaswani2017attention`과 같은 키가 생성되어 `\cite{Vaswani2017attention}`이 본문에 삽입되고 `.bib` 파일에 BibTeX 데이터가 추가됩니다.
+> *   **DOI 검색**: `cite > 10.1145/3065386` 입력
+>     *   결과: 해당 DOI의 논문 정보를 즉시 가져와 인용구를 생성합니다.
+
+### 수식 너비 분석 (`analyze > width`)
+LaTeX 문서 컴파일 후 발생하는 가장 흔한 오류인 "Overfull \hbox"(수식이 페이지 경계를 벗어남)를 방지하기 위한 도구입니다.
+
+*   **실시간 레이아웃 검사**: 현재 설정된 문서의 여백(`\textwidth`)과 비교하여, 작성 중인 수식이 가로로 너무 길지 않지 분석합니다.
+*   **수정 제안**: 너비를 초과하는 수식에 대해 `split`, `multline`, 또는 글자 크기 조절 등을 통해 가독성을 높일 수 있도록 경고 및 가이드를 제공합니다.
+
+> **사용 예시**
+> *   **전체 분석**: 명령줄에 `analyze > width` 입력
+>     *   결과: 문서 내의 모든 수식을 스캔하여 여백을 넘기는 수식의 라인 번호와 초과된 길이(pt)를 리스트로 보여줍니다.
+> *   **특정 수식 분석**: 긴 수식을 드래그 한 뒤 `analyze > width` 입력
+>     *   결과: "이 수식은 현재 여백보다 24.5pt 더 깁니다. \begin{split} 사용을 권장합니다."와 같은 피드백이 웹뷰 패널에 표시됩니다.
 - **마크다운 문법 지원** : 다음과 같이 마크다운 문법을 latex에서 바로 사용할 수 있습니다.
   - `#제목#` + 스페이스 → \section{제목}
   - `##제목##` + 스페이스 → \subsection{제목}

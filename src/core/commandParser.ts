@@ -61,8 +61,17 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     let isParallelSection = false;
     let isMainCmdParsed = false;
 
+    // Detect query to prevent '>' splitting conflict
+    const isQuery = input.trim().startsWith('?');
+    let startIdx = 0;
+    if (isQuery) {
+        mainCmd = "?";
+        isMainCmdParsed = true;
+        startIdx = input.indexOf('?') + 1;
+    }
+
     // 제안서 준수: O(N) 시간 복잡도의 단일 루프 [cite: 132]
-    for (let i = 0; i < input.length; i++) {
+    for (let i = startIdx; i < input.length; i++) {
         const char = input[i];
         if (isEscaped) { buffer += char; isEscaped = false; continue; }
         if (char === '\\') { isEscaped = true; continue; } // 이스케이프 처리 [cite: 128]
@@ -73,7 +82,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
             isParallelSection = true;
             continue;
         }
-        if (char === '>' && !isParallelSection) {
+        if (char === '>' && !isParallelSection && !isQuery) {
             pushToCmds();
             continue;
         }

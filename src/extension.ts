@@ -588,15 +588,49 @@ export function activate(context: vscode.ExtensionContext) {
             ],
             calc: [
                 { label: "calc > simplify", description: "수식 단순화" },
+                { label: "calc > factor", description: "인수분해" },
                 { label: "calc > solve", description: "방정식 풀이" },
                 { label: "calc > diff", description: "미분 (예: calc > diff > x)" },
                 { label: "calc > int", description: "적분 (예: calc > int > x,0,1)" },
                 { label: "calc > limit", description: "극한 (예: calc > limit > x,0)" },
                 { label: "calc > taylor", description: "테일러 급수 (예: calc > taylor / 5)" },
                 { label: "calc > ode", description: "미분방정식 (예: calc > ode / ic=y(0):1)" },
+                { label: "calc > pde", description: "편미분방정식" },
                 { label: "calc > laplace", description: "라플라스 변환" },
                 { label: "calc > dimcheck", description: "차원 및 단위 검사 (예: / set=v:L/T)" },
-                { label: "calc > num_solve", description: "수치적 해법 및 그래프" }
+                { label: "calc > num_solve", description: "수치적 해법 및 그래프" },
+                { label: "calc > rref", description: "기약 행사다리꼴로 변환" },
+                { label: "calc > det", description: "행렬식" },
+                { label: "calc > inv", description: "역행렬" },
+                { label: "calc > eigen", description: "고유값" },
+                { label: "calc > rank", description: "행렬의 rank" },
+                { label: "calc > trace", description: "주대각합" },
+                { label: "calc > transpose", description: "전치행렬" },
+                { label: "calc > nullspace", description: "행렬의 영공간(null space)" },
+                { label: "calc > jacobian", description: "야코비안" },
+                { label: "calc > hessian", description: "헤세 행렬" },
+                { label: "calc > limit", description: "극한" },
+                { label: "calc > taylor", description: "테일러 전개" },
+                { label: "calc > asymp", description: "점근 전개" },
+                { label: "calc > apart", description: "부분분수 분해" },
+                { label: "calc > together", description: "통분" },
+                { label: "calc > trigsimp", description: "삼각함수가 있는 식의 정리" },
+                { label: "calc > expand_trig", description: "삼각함수가 있는 식의 전개" },
+                { label: "calc > eval", description: "식의 수치를 계산" },
+                { label: "calc > ilaplace", description: "라플라스 역변환" },
+                { label: "calc > fourier", description: "푸리에 변환" },
+                { label: "calc > ifourier", description: "푸리에 역변환" },
+                { label: "calc > ztrans", description: "Z-변환" },
+                { label: "calc > residue", description: "유수 계산" },
+                { label: "calc > laurent", description: "로랑 급수" },
+                { label: "calc > conjugate", description: "켤레복소수" },
+                { label: "calc > re", description: "복소수의 실수부" },
+                { label: "calc > im", description: "복소수의 허수부" },
+                { label: "calc > prime", description: "소수의 판별" },
+                { label: "calc > factorint", description: "소인수분해" },
+                { label: "calc > logic", description: "기호 논리 연산" },
+                { label: "calc > error_prop", description: "오차 전파의 계산" },
+                { label: "calc > tensor_expand", description: "텐서의 확장" }
             ],
             oeis: [
                 ...(currentOriginalText ? [{ label: `oeis > ${currentOriginalText}`, description: "선택한 영역으로 수열 검색" }] : []) as vscode.QuickPickItem[],
@@ -715,12 +749,13 @@ export function activate(context: vscode.ExtensionContext) {
 
             // [추가] 쿼리 기능 처리 (? ...)
             if (userInput.trim().startsWith('?')) {
+                const queryContent = userInput.trim().substring(1).trim();
                 const config = vscode.workspace.getConfiguration('tex-machina');
                 const payload = {
                     mainCommand: "?",
-                    subCommands: [userInput.trim()],
+                    subCommands: [queryContent],
                     parallelOptions: [],
-                    rawSelection: currentOriginalText,
+                    rawSelection: currentOriginalText || "",
                     fullText: editor.document.getText(),
                     config: {
                         workspaceDir: path.dirname(editor.document.uri.fsPath)

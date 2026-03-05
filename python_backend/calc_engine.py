@@ -872,19 +872,20 @@ def execute_calc(parsed_json_str):
             engine = LabelEngine()
             return json.dumps(engine.parse_file(filepath))
 
-        # [NEW] 쿼리 기능 처리        if main_cmd == "?":
+        # [NEW] 쿼리 기능 처리
+        if main_cmd == "?":
             full_text = req.get('fullText', '')
+            # sub_cmds[0] should contain the query without '?'
             query_str = sub_cmds[0] if sub_cmds else selection
             res = execute_query_on_text(full_text, query_str)
-            if res['status'] == 'success':
+            if res.get('status') == 'success':
                 return json.dumps({
                     "status": "success",
                     "mainCommand": "?",
                     "fullText": res['text'],
-                    "latex": "" 
+                    "latex": ""
                 })
             return json.dumps(res)
-
         # 1. 수식 전처리 및 액션 결정
         if main_cmd == "calc" and sub_cmds:
             action = sub_cmds.pop(0)
