@@ -13,7 +13,6 @@ import { registerSmartQuotes } from './core/smartQuotes';
 import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
-import { registerPackageDetection } from './core/packageDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerScanPrevention } from './core/scanPrevention';
 import { MacroManager } from './core/macroManager';
@@ -220,9 +219,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Label Detection] 미사용 라벨 감지 및 삭제 기능 등록
     registerLabelDetection(context);
-
-    // [Package Detection] 미사용 패키지 자동 주석 처리 기능 등록
-    registerPackageDetection(context);
 
     // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
     registerScanPrevention(context);
