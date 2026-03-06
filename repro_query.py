@@ -1,6 +1,7 @@
 import json
 import sys
 import os
+import re
 
 # Add current directory to path to import local modules
 sys.path.append(os.getcwd())
@@ -14,13 +15,15 @@ def test_query(query_str, input_text):
         print(result['text'])
     else:
         print(f"Error: {result.get('message')}")
-        if 'trace' in result:
-            print(result['trace'])
 
-with open('tmp/test.tex', 'r') as f:
-    text = f.read()
+text = r"""\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\linewidth]{1-4.png}
+    \caption{공간곡선에서의 프레네 틀}
+    \label{1-4}
+\end{figure}"""
 
-# Query attempt 2: No spaces, handle optional arguments with *
-query2 = r"? find '\begin{figure}*\includegraphics*{*}*\end{figure}' >> '\begin{figure}*\includegraphics*{images/*}*\end{figure}'"
+# The simple query that failed before
+query = r'? @img{*} >> "images/*"'
 
-test_query(query2, text)
+test_query(query, text)
