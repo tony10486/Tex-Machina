@@ -63,7 +63,7 @@ class QueryExecutor:
                     if line_range:
                         return self.apply_to_range(text, target_regex, replacement, line_range)
                     
-                    new_text = re.sub(target_regex, replacement, text)
+                    new_text = re.sub(target_regex, replacement, text, flags=re.DOTALL)
                     return {"status": "success", "text": new_text}
                 except re.error as e:
                     return {"status": "error", "message": f"Regex error: {str(e)}"}
@@ -72,7 +72,7 @@ class QueryExecutor:
             target_regex = self.path_to_regex(target)
             if line_range:
                 return self.apply_to_range(text, target_regex, '', line_range)
-            new_text = re.sub(target_regex, '', text)
+            new_text = re.sub(target_regex, '', text, flags=re.DOTALL)
             return {"status": "success", "text": new_text}
             
         elif command == 'move':
@@ -87,7 +87,7 @@ class QueryExecutor:
                 search_text = "".join(lines[start_line-1:end_line])
                 offset = sum(len(l) for l in lines[:start_line-1])
 
-            match = re.search(target_regex, search_text)
+            match = re.search(target_regex, search_text, flags=re.DOTALL)
             if not match:
                 return {"status": "error", "message": f"Target not found: {target}"}
             
