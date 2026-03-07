@@ -18,6 +18,8 @@ import { registerScanPrevention } from './core/scanPrevention';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 
+import { HSQEngine } from './core/queryEngine';
+
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
 let currentSelection: vscode.Selection | undefined;
@@ -743,24 +745,20 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // [추가] 쿼리 기능 처리 (? ...)
-            if (userInput.trim().startsWith('?')) {
-                const queryContent = userInput.trim().substring(1).trim();
-                const config = vscode.workspace.getConfiguration('tex-machina');
-                const payload = {
-                    mainCommand: "?",
-                    subCommands: [queryContent],
-                    parallelOptions: [],
-                    rawSelection: currentOriginalText || "",
-                    fullText: editor.document.getText(),
-                    config: {
-                        workspaceDir: path.dirname(editor.document.uri.fsPath)
-                    }
-                };
-                if (pythonProcess?.stdin) {
-                    pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-                }
+            // [추가] 쿼리 기능 처리 (? 또는 ; ...)
+            if (userInput.trim().startsWith('?') || userInput.trim().startsWith(';')) {
                 quickPick.hide();
+                try {
+                    const engine = new HSQEngine(editor);
+                    const success = await engine.execute(userInput);
+                    if (success) {
+                        vscode.window.showInformationMessage("쿼리가 성공적으로 수행되었습니다.");
+                    } else {
+                        vscode.window.showWarningMessage("쿼리와 일치하는 대상을 찾지 못했거나 변경 사항이 없습니다.");
+                    }
+                } catch (err: any) {
+                    vscode.window.showErrorMessage(`쿼리 실행 실패: ${err.message}`);
+                }
                 return;
             }
 

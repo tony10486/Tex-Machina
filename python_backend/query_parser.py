@@ -7,29 +7,29 @@ class QueryLexer:
         self.pos = 0
         self.tokens = []
         
-        # Multi-char operators first to avoid partial matching
+        # New Operators: added <->, :=, +=, -=, |, .|, |.
         ops = [
-            '>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', 
-            '^^', 'vv', '&&', '&', '->', '==', '!=', '<=', '>=', 
-            '::', '...', '(?!', '(?=', '(?<!', '(?<=', '_{', '_[', '_{#'
+            '<->', ':=', '+=', '-=', '>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', 
+            '<=>', '^^', 'vv', '&&', '->', '==', '!=', '<=', '>=', 
+            '::', '...', '_{', '_[', '_{#', '.|', '|.'
         ]
-        single_ops = list('+-*/|!$()>~?,:=.[]{}')
-        self.all_ops = sorted(ops + single_ops, key=len, reverse=True)
+        single_ops = list('+-*/|!$()>~?,:=.[]{}|') # Added | as single op too
+        self.all_ops = sorted(list(set(ops + single_ops)), key=len, reverse=True)
         self.ops_pattern = '|'.join(re.escape(op) for op in self.all_ops)
 
         self.patterns = [
             ('SUBQUERY_START', r'\^\('),
             ('SUBQUERY_END', r'\)\^'),
             ('LOOP_START', r'loop\s*\{'),
+            ('ALIAS', r'\bas\s+\$[a-zA-Z0-9_]+'), # as $var
             ('REGISTER_OP', r'->\s*//[a-zA-Z0-9_]+'),
-            ('REGISTER_REF', r'//[a-zA-Z0-9_]+'),
+            ('REGISTER_REF', r'//[a-zA-Z0-9_]+|\$[a-zA-Z0-9_]+'), # Support $var
             ('OPTION', r'-[a-z]+(?::[#@\w]+)?'),
             ('COMMAND', r'\b(?:find|exchange|move|duplicate|delete|insert|extract)(?::\[[^\]]+\])?'),
             ('ORDER_BY', r'order\s+by'),
-            ('KEYWORD', r'\b(?:where|without|has|and|or|to|in|at|not)\b'),
-            ('TAG', r'[#@][a-zA-Z0-9_]+(?:\[[^\]]+\])?(?:\{[^\}]+\})?(?::[#@][a-zA-Z0-9_]+)?'),
-            ('NUMBER', r'\d+\.\d+|\d+'),
-            # Tightened identifier: no dots, pipes, or stars unless escaped or part of command
+            ('KEYWORD', r'\b(?:where|without|has|and|or|to|in|at|not|as|bold|italic|clear)\b'),
+            ('TAG', r'[#@][a-zA-Z0-9_]+(?:\[[^\]]+\])?(?:\{[^\}]+\})?(?::[#@a-zA-Z0-9_*:]+)?'),
+            ('NUMBER', r'\d+\%\b|\d+\.\d+|\d+'), # Support 10%
             ('IDENTIFIER', r'\\[a-zA-Z0-9*]+|[a-zA-Z0-9_]+'),
             ('OPERATOR', self.ops_pattern),
             ('WHITESPACE', r'\s+'),
@@ -37,12 +37,15 @@ class QueryLexer:
 
     def tokenize(self):
         text = self.text.strip()
-        if text.startswith('?'):
+        # New prefix: ; instead of ?
+        if text.startswith(';'):
+            self.tokens.append(('PREFIX', ';'))
+            text = text[1:].strip()
+        elif text.startswith('?'): # Backwards compat
             self.tokens.append(('PREFIX', '?'))
             text = text[1:].strip()
         
         while self.pos < len(text):
-            # 1. Handle Strings
             if text[self.pos] in ("'", '"'):
                 quote = text[self.pos]
                 end = self.pos + 1
@@ -54,7 +57,6 @@ class QueryLexer:
                 self.pos = end + 1
                 continue
 
-            # 2. Match patterns
             matched = False
             for name, pattern in self.patterns:
                 regex = re.compile(pattern)
@@ -68,7 +70,6 @@ class QueryLexer:
                     break
             
             if not matched:
-                # Unrecognized character as operator if it's not whitespace
                 if not text[self.pos].isspace():
                     self.tokens.append(('OPERATOR', text[self.pos]))
                 self.pos += 1
@@ -102,7 +103,8 @@ class QueryParser:
                 statements.append(self.parse_statement())
                 
             sep = self.peek()
-            if sep and sep[1] in ('&', '&&', ','):
+            # New separators: | and , in addition to &
+            if sep and sep[1] in ('&', '&&', ',', '|', ';'):
                 statements[-1]['next_sep'] = self.consume()[1]
             else:
                 break
@@ -117,61 +119,71 @@ class QueryParser:
     def parse_statement(self):
         stmt = {"type": "statement"}
         
-        # 1. Command & Options
+        # 1. Command & Options (Optional now)
         if self.peek() and self.peek()[0] == 'COMMAND':
             stmt['command'] = self.consume()[1]
+        
         while self.peek() and self.peek()[0] == 'OPTION':
             stmt.setdefault('options', []).append(self.consume()[1])
         
-        # 2. Target Path (e.g., figure > ... > caption)
+        # 2. Target Path (Explicit or Implicit find)
         stmt['target'] = self.parse_path()
         
-        # 3. Mutation or Tail
+        # 3. Actions or Tail
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', ')^', '}'): break
+            if not t or t[1] in ('&', '&&', ',', '|', ';', ')^', '}'): break
             
-            if t[1] in ('>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv'):
+            # New operators: <->, :=, +=, -=, >>, etc.
+            if t[1] in ('>>', '<->', ':=', '+=', '-=', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv'):
                 stmt['operator'] = self.consume()[1]
                 stmt['action'] = self.parse_action_block()
-
+            
+            elif t[0] == 'ALIAS':
+                stmt['alias'] = self.consume()[1].replace('as', '').strip()
             elif t[0] == 'REGISTER_OP':
                 stmt['register_store'] = self.consume()[1].replace('->', '').strip()
             elif t[0] == 'ORDER_BY':
                 stmt['order_by'] = self.parse_order_by()
             elif t[0] == 'KEYWORD' and t[1] in ('where', 'without', 'has'):
                 stmt.setdefault('conditions', []).append(self.parse_natural_condition())
-            elif t[1] == '[': # Inline condition
+            elif t[0] == 'KEYWORD' and t[1] in ('bold', 'italic', 'clear'):
+                # Trait operators (+ bold, - italic)
+                # Check previous token for +/-
+                prev = self.tokens[self.pos - 1] if self.pos > 0 else None
+                op = prev[1] if prev and prev[1] in ('+', '-') else '+'
+                stmt.setdefault('traits', []).append({"op": op, "trait": self.consume()[1]})
+            elif t[1] == '[': 
                 stmt.setdefault('conditions', []).append({"type": "inline", "value": self.parse_bracket_content()})
+            elif t[1] == '{':
+                # Block scope
+                self.consume()
+                stmt['block'] = self.parse_query()
+                self.consume('OPERATOR', '}')
             else:
-                # Extra targets, operators, or literals
                 extra = self.parse_path()
                 if extra: 
                     stmt.setdefault('extra_targets', []).append(extra)
                 elif t[0] in ('OPERATOR', 'NUMBER', 'IDENTIFIER', 'TAG', 'KEYWORD'):
                     stmt.setdefault('extra_targets', []).append({"type": "raw", "value": self.consume()[1]})
                 else:
-                    self.pos += 1 # Safety break
+                    self.pos += 1
                 
         return stmt
 
     def parse_path(self):
-        """Parses complex paths like figure > ... > caption{*} or .|figure|"""
         parts = []
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', '->', '>>', '+>', '<+', 'where', 'without', 'has', ')^', '}', 'order'):
+            if not t or t[1] in ('&', '&&', ',', '|', ';', '->', '>>', '<->', ':=', '+=', '-=', 'where', 'without', 'has', ')^', '}', 'order', 'as'):
                 break
             
-            # Path Operators
             if t[1] in ('>', '~', '...', '<', '<<', '$'):
                 parts.append({"type": "path_op", "value": self.consume()[1]})
                 continue
 
-            # Atoms
             atom = self.parse_atom()
             if atom:
-                # Suffixes like ? for optional
                 next_t = self.peek()
                 if next_t and next_t[1] == '?':
                     atom['optional'] = True
@@ -187,25 +199,21 @@ class QueryParser:
         t = self.peek()
         if not t: return None
 
-        # Self-reference with properties: _{#scale}, _[opt], _{arg}
         if t[1] == '_':
             self.consume()
             atom = {"type": "self_ref", "value": "_"}
             next_t = self.peek()
             if next_t and next_t[1] in ('_{', '_[', '_{#'):
                 atom['property'] = self.consume()[1]
-                # Consume until matching closing
                 atom['content'] = self.parse_bracket_content()
             return atom
         
-        # Tags, Strings, Identifiers, Numbers
         if t[0] == 'TAG': return {"type": "tag", "value": self.consume()[1]}
         if t[0] == 'STRING': return {"type": "string", "value": self.consume()[1][1:-1]}
         if t[0] == 'NUMBER': return {"type": "number", "value": self.consume()[1]}
         if t[0] == 'IDENTIFIER': return {"type": "identifier", "value": self.consume()[1]}
         if t[0] == 'REGISTER_REF': return {"type": "register", "value": self.consume()[1]}
         
-        # Special Regex / Groups
         if t[0] == 'SUBQUERY_START':
             self.consume()
             inner = self.parse_query()
@@ -213,16 +221,17 @@ class QueryParser:
             return {"type": "subquery", "query": inner}
         
         if t[1] == '{':
+            # This could be a property mutation {width: 0.8} or a block
+            # For now, if it's inside a path, it's likely property-related if it has :
+            # But parse_statement handles block. parse_atom handles nested groups.
             self.consume()
             inner = self.parse_query()
             self.consume('OPERATOR', '}')
             return {"type": "group", "body": inner}
 
-        # Cursor symbols: | and .
-        if t[1] in ('|', '.'):
+        if t[1] in ('|', '.', '.|', '|.'):
             return {"type": "cursor", "value": self.consume()[1]}
 
-        # Parenthesized Regex or Logic: (?! ...), ( ... )
         if t[1] in ('(', '(?!', '(?=', '(?<!', '(?<='):
             op = self.consume()[1]
             inner = []
@@ -238,13 +247,11 @@ class QueryParser:
         return None
 
     def parse_action_block(self):
-        """Parses the RHS of a mutation, supporting math and mixed tokens."""
         parts = []
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', ')^', '}', '->'): break
+            if not t or t[1] in ('&', '&&', ',', '|', ';', ')^', '}', '->'): break
             
-            # Handle math expressions or strings in action
             atom = self.parse_atom()
             if atom:
                 parts.append(atom)
@@ -255,10 +262,9 @@ class QueryParser:
         return parts[0] if len(parts) == 1 else {"type": "action_complex", "parts": parts}
 
     def parse_bracket_content(self):
-        # Helper to consume content within [], {}, etc. handles nesting.
         start_node = self.peek()
         if not start_node: return ""
-        start_char = start_node[1][-1] # Last char for _{ or [
+        start_char = start_node[1][-1]
         end_char = ']' if start_char == '[' else '}'
         
         depth = 0
@@ -271,8 +277,6 @@ class QueryParser:
             if depth == 0: break
             content.append(t[1])
             
-        # If the first token was something like '_{', we might want to strip it from content 
-        # but usually we want what's inside.
         if content and content[0] == start_node[1]:
             content = content[1:]
         return "".join(content)
@@ -280,11 +284,11 @@ class QueryParser:
     def parse_natural_condition(self):
         keyword = self.consume()[1]
         expr = []
-        mutation_ops = ('>>', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
+        mutation_ops = ('>>', '<->', ':=', '+=', '-=', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', '->', ')^', '}', 'order', 'to', 'at', '{'): break
-            if t[0] == 'REGISTER_OP': break
+            if not t or t[1] in ('&', '&&', ',', '|', ';', '->', ')^', '}', 'order', 'to', 'at', '{'): break
+            if t[0] == 'REGISTER_OP' or t[0] == 'ALIAS': break
             if t[1] in mutation_ops: break
             if t[0] == 'KEYWORD' and t[1] not in ('and', 'or', 'not'): break
             expr.append(self.consume()[1])
@@ -295,7 +299,7 @@ class QueryParser:
         criteria = []
         while self.pos < len(self.tokens):
             t = self.peek()
-            if not t or t[1] in ('&', '&&', ',', ')^', '}'): break
+            if not t or t[1] in ('&', '&&', ',', '|', ';', ')^', '}'): break
             criteria.append(self.consume()[1])
         return {"criteria": " ".join(criteria)}
 
@@ -309,16 +313,3 @@ def parse_tex_machina_query(query_str):
     except Exception as e:
         import traceback
         return {"status": "error", "message": str(e), "trace": traceback.format_exc()}
-
-if __name__ == "__main__":
-    # Test cases from attack script
-    test_queries = [
-        "? move 'caption' >> figure.|",
-        "? @img >> _{#scale * 0.5}",
-        "? find \\includegraphics (?! \\caption)",
-        "? find @row{3} > @cell",
-        "? find figure > ... > caption"
-    ]
-    for q in test_queries:
-        print(f"Query: {q}")
-        print(json.dumps(parse_tex_machina_query(q), indent=2, ensure_ascii=False))

@@ -1,100 +1,54 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
-import { performance } from 'perf_hooks';
-import { parseUserCommand } from '../core/commandParser';
-import { splitMathString } from '../core/mathSplitter';
-import { expandSiunitx } from '../core/unitExpander';
+import { SemanticScanner } from '../core/queryEngine';
 
-suite('Pure Logic Performance Test Suite', () => {
-
-    test('Pure Logic: Command Parser (10,000 runs)', () => {
-        const input = "taylor > x, 5 / newline / step=2";
-        const selection = "sin(x)";
+suite('HSQ Engine Performance & Optimization Suite', () => {
+    
+    test('Performance: 10,000 lines should be scanned under 100ms', () => {
+        const lines = 10000;
+        const text = "\\section{Start}\n" + Array(lines).fill("This is a line with \\keyword{val} and some text.").join("\n") + "\n\\section{End}";
         
-        const start = performance.now();
-        for (let i = 0; i < 10000; i++) {
-            parseUserCommand(input, selection);
-        }
-        const end = performance.now();
-        const avg = (end - start) / 10000;
-        console.log(`[Perf] Command Parser average: ${avg.toFixed(4)}ms (${(avg * 1000).toFixed(2)}μs)`);
+        const startTime = Date.now();
+        const scanner = new SemanticScanner(text);
+        const root = scanner.scan();
+        const endTime = Date.now();
+        
+        const duration = endTime - startTime;
+        console.log(`      🚀 10,000 lines scanned in: ${duration}ms`);
+        
+        // Target: under 100ms (Previous Python was ~6600ms)
+        assert.ok(duration < 100, `Optimization Failed: Took ${duration}ms, should be < 100ms`);
+        assert.ok(root.children.length > 10000, "Should have correctly identified nodes");
     });
 
-    test('Pure Logic: Math Splitter (10,000 runs)', () => {
-        const input = "f(x) = \int_{a}^{b} g(t) dt = G(b) - G(a)";
+    test('Precision: Semantic identification of nested properties', () => {
+        const text = "\\includegraphics[width=0.5, scale=1.2]{fig.png}";
+        const scanner = new SemanticScanner(text);
+        const root = scanner.scan();
         
-        const start = performance.now();
-        for (let i = 0; i < 10000; i++) {
-            splitMathString(input);
-        }
-        const end = performance.now();
-        const avg = (end - start) / 10000;
-        console.log(`[Perf] Math Splitter average: ${avg.toFixed(4)}ms (${(avg * 1000).toFixed(2)}μs)`);
+        const img = root.children.find(n => n.name === 'includegraphics');
+        assert.ok(img, "Should find includegraphics node");
+        
+        const opt = img!.children.find(c => c.type === 'opt');
+        assert.ok(opt, "Should find options node");
+        
+        const widthProp = opt!.children.find(c => c.name === 'width');
+        assert.ok(widthProp, "Should identify 'width' as a property");
+        
+        const valNode = widthProp!.children[0];
+        assert.strictEqual(text.substring(valNode.start, valNode.end), "0.5", "Property value should be correct");
     });
 
-    test('Pure Logic: Unit Expander (1,000 runs)', () => {
-        const input = "\meter\per\second\squared";
+    test('Safety: Plain text exclusion near commands', () => {
+        const text = "Word \\command{arg} Another";
+        const scanner = new SemanticScanner(text);
+        const root = scanner.scan();
         
-        const start = performance.now();
-        for (let i = 0; i < 1000; i++) {
-            expandSiunitx(input);
-        }
-        const end = performance.now();
-        const avg = (end - start) / 1000;
-        console.log(`[Perf] Unit Expander average: ${avg.toFixed(4)}ms (${(avg * 1000).toFixed(2)}μs)`);
-    });
-
-    test('Editor Interaction: Auto-bracing (No artificial delay)', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^a' });
-        const editor = await vscode.window.showTextDocument(document);
+        const textNodes = root.children.filter(n => n.type === 'text');
+        const cmdNodes = root.children.filter(n => n.type === 'cmd');
         
-        // Wait for extension to be active
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const start = performance.now();
-        // Simulate 'b' insertion
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), 'b');
-        });
-
-        // Wait for change to reflect WITHOUT fixed long setTimeout
-        let success = false;
-        for (let i = 0; i < 100; i++) {
-            if (document.lineAt(0).text === 'x^{ab}') {
-                success = true;
-                break;
-            }
-            await new Promise(resolve => setImmediate(resolve)); // yield to event loop
-        }
-        const end = performance.now();
-        
-        console.log(`[Perf] Auto-bracing (Editor + Event Loop): ${(end - start).toFixed(2)}ms (Success: ${success})`);
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-    });
-
-    test('Editor Interaction: Markdown Bold (No artificial delay)', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '**test**' });
-        const editor = await vscode.window.showTextDocument(document);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const start = performance.now();
-        // Simulate space insertion
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 8), ' ');
-        });
-
-        let success = false;
-        for (let i = 0; i < 100; i++) {
-            if (document.lineAt(0).text.includes('	extbf{test}')) {
-                success = true;
-                break;
-            }
-            await new Promise(resolve => setImmediate(resolve));
-        }
-        const end = performance.now();
-        
-        console.log(`[Perf] Markdown Bold (Editor + Event Loop): ${(end - start).toFixed(2)}ms (Success: ${success})`);
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        assert.strictEqual(cmdNodes.length, 1);
+        // 'command' should NOT be in textNodes
+        const hasOverlap = textNodes.some(tn => text.substring(tn.start, tn.end) === 'command');
+        assert.strictEqual(hasOverlap, false, "Command names should not be misidentified as plain text");
     });
 });
