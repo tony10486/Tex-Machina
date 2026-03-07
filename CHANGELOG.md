@@ -1,9 +1,19 @@
-# Change Log
+# 변경 로그 (Change Log)
 
-All notable changes to the "tex-machina" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+"tex-machina" 확장 프로그램의 주요 변경 사항이 이 파일에 기록됩니다.
 
 ## [Unreleased]
 
-- Initial release
+### 추가됨
+- **수식 자동 분할 기능 강화 (Math Auto-Splitter)**: 
+  - 긴 수식을 등호(`=`) 뿐만 아니라 최외곽의 `+` 및 `-` 연산자에서도 줄바꿈할 수 있도록 기능을 확장했습니다.
+  - `analyze` 명령어 하위 메뉴에 세부 분할 옵션을 추가했습니다:
+    - `analyze > split`: 등호(`=`) 기준으로 분할 (기본값)
+    - `analyze > split / plus`: 등호, `+`, `-` 기호를 모두 포함하여 분할
+  - `tex-machina.splitMath.atPlus` 설정을 추가하여 기본 분할 동작 시 덧셈/뺄셈 기호 포함 여부를 선택할 수 있습니다.
+
+### 수정됨
+- **CLI 명령어 자동완성 개선**: 명령어 입력 시 `>` 구분자 앞에 공백이 없는 경우(예: `calc>`)에도 하위 메뉴와 명령어 설명(description)이 올바르게 표시되도록 수정했습니다.
+
+## [0.1.8] - 2026-03-07
+- LaTeX 기호 연산, 그래프 시각화, 문헌 인용 관리 기능을 포함한 초기 버전 출시.

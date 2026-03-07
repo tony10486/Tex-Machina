@@ -141,11 +141,29 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(result, input); // No '=' means no split
     });
 
-    test('Math Splitter: Handle display math \\[ \\]', () => {
+    test('Math Splitter: Handle display math \\[ \]', () => {
         const input = "\\[x = y = z\\]";
         const expected = "\\begin{align}\n    x &= y \\\\\n    &= z\n\\end{align}";
         const result = splitMathString(input);
         assert.strictEqual(result, expected);
+    });
+
+    test('Math Splitter: Split at plus and minus', () => {
+        const input = "$a + b - c = d$";
+        // Default (splitAtPlus = false)
+        const res1 = splitMathString(input, false);
+        assert.ok(res1.includes("a + b - c &="), "Should only split at = by default");
+
+        // splitAtPlus = true
+        const res2 = splitMathString(input, true);
+        // Check for presence of operators at line starts
+        assert.ok(res2.includes("&+"), "Should contain &+");
+        assert.ok(res2.includes("&-"), "Should contain &-");
+        assert.ok(res2.includes("&="), "Should contain &=");
+        // Check for segments
+        assert.ok(res2.includes("a &+"), "Should have 'a' before &+");
+        assert.ok(res2.includes("b \\\\"), "Should have 'b' before \\\\");
+        assert.ok(res2.includes("c \\\\"), "Should have 'c' before \\\\");
     });
 
     test('Math Splitter: Handle raw text without delimiters', () => {

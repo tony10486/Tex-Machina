@@ -15,6 +15,7 @@ import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerScanPrevention } from './core/scanPrevention';
+import { registerFormulaHistory } from './core/formulaHistory';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 
@@ -224,6 +225,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
     registerScanPrevention(context);
+
+    // [Formula History] 수식 블록 기반 히스토리 기능 등록
+    registerFormulaHistory(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
@@ -662,7 +666,9 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "cite > Attention is all you need", description: "제목으로 논문 검색" }
             ],
             analyze: [
-                { label: "analyze > width", description: "수식 너비 분석 (문서 너비 초과 여부 확인)" }
+                { label: "analyze > width", description: "수식 너비 분석 (문서 너비 초과 여부 확인)" },
+                { label: "analyze > split", description: "수식 자동 분할 (= 기준)" },
+                { label: "analyze > split / plus", description: "수식 자동 분할 (=, +, - 기준)" }
             ]
         };
 
@@ -670,17 +676,18 @@ export function activate(context: vscode.ExtensionContext) {
 
         // 입력값이 변할 때마다 하위 메뉴 노출
         quickPick.onDidChangeValue(value => {
-            if (value.startsWith("calc >")) {
+            // [Fix] 'calc >' 뿐만 아니라 공백 없는 'calc>' 형태도 인식하도록 개선 (Regex 사용)
+            if (/^calc\s*>/.test(value)) {
                 quickPick.items = commandLib.calc;
-            } else if (value.startsWith("oeis >")) {
+            } else if (/^oeis\s*>/.test(value)) {
                 quickPick.items = commandLib.oeis;
-            } else if (value.startsWith("matrix >")) {
+            } else if (/^matrix\s*>/.test(value)) {
                 quickPick.items = commandLib.matrix;
-            } else if (value.startsWith("plot >")) {
+            } else if (/^plot\s*>/.test(value)) {
                 quickPick.items = commandLib.plot;
-            } else if (value.startsWith("cite >")) {
+            } else if (/^cite\s*>/.test(value)) {
                 quickPick.items = commandLib.cite;
-            } else if (value.startsWith("analyze >")) {
+            } else if (/^analyze\s*>/.test(value)) {
                 quickPick.items = commandLib.analyze;
             } else if (value === "") {
                 quickPick.items = commandLib.root;
@@ -765,6 +772,11 @@ export function activate(context: vscode.ExtensionContext) {
             // 특수 커맨드 (분석) 처리
             if (userInput === "analyze > width") {
                 vscode.commands.executeCommand('tex-machina.analyzeWidth');
+                return;
+            }
+            if (userInput.startsWith("analyze > split")) {
+                const splitAtPlus = userInput.includes("/ plus");
+                vscode.commands.executeCommand('tex-machina.splitMath', { splitAtPlus });
                 return;
             }
 

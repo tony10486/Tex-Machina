@@ -6,10 +6,12 @@ import * as vscode from 'vscode';
  * and splits at outermost = or + operators.
  */
 export function registerMathSplitter(context: vscode.ExtensionContext) {
-    let splitCommand = vscode.commands.registerCommand('tex-machina.splitMath', async () => {
+    let splitCommand = vscode.commands.registerCommand('tex-machina.splitMath', async (options?: { splitAtPlus?: boolean }) => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) { return; }
 
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        const splitAtPlus = options?.splitAtPlus ?? config.get<boolean>('splitMath.atPlus', false);
         const document = editor.document;
         const selection = editor.selection;
         let range: vscode.Range;
@@ -29,9 +31,10 @@ export function registerMathSplitter(context: vscode.ExtensionContext) {
             text = found.text;
         }
 
-        const result = splitMathString(text);
+        const result = splitMathString(text, splitAtPlus);
         if (result === text) {
-            vscode.window.showInformationMessage("분할할 수 있는 최외곽 = 또는 + 기호가 없습니다.");
+            const msg = splitAtPlus ? "분할할 수 있는 최외곽 =, +, - 기호가 없습니다." : "분할할 수 있는 최외곽 = 기호가 없습니다.";
+            vscode.window.showInformationMessage(msg);
             return;
         }
 
@@ -70,29 +73,35 @@ export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Positio
 
 /**
  * The core logic for splitting math strings.
+ * @param text The math text to split
+ * @param splitAtPlus If true, also split at outermost + and - operators.
  */
-export function splitMathString(text: string): string {
+export function splitMathString(text: string, splitAtPlus: boolean = false): string {
     // 1. Determine inner content and if it was wrapped
     let inner = text.trim();
     let wasWrapped = false;
+    let wrapperStart = "";
+    let wrapperEnd = "";
     
     if (inner.startsWith('$$') && inner.endsWith('$$')) {
         inner = inner.substring(2, inner.length - 2).trim();
+        wrapperStart = "$$";
+        wrapperEnd = "$$";
         wasWrapped = true;
     } else if (inner.startsWith('\\[') && inner.endsWith('\\]')) {
         inner = inner.substring(2, inner.length - 2).trim();
-        wasWrapped = true;
-    } else if (inner.startsWith('\\\[') && inner.endsWith('\\\]')) {
-        // Handle escaped case if it comes in as \\\[ ... \\\] (3 chars)
-        inner = inner.substring(3, inner.length - 3).trim();
+        wrapperStart = "\\[";
+        wrapperEnd = "\\]";
         wasWrapped = true;
     } else if (inner.startsWith('$') && inner.endsWith('$')) {
         inner = inner.substring(1, inner.length - 1).trim();
+        wrapperStart = "$";
+        wrapperEnd = "$";
         wasWrapped = true;
     }
 
-    // 2. Find outermost = and +
-    // We ignore operators at the very end of the string (like 'y = 0 =')
+    // 2. Find outermost = and (+, - if enabled)
+    // We ignore operators at the very end of the string
     const operators: { pos: number, char: string }[] = [];
     let depth = 0;
     
@@ -105,11 +114,9 @@ export function splitMathString(text: string): string {
             depth--;
         } else if (inner.substring(i).startsWith('\\begin')) {
             depth++;
-            // Skip the word 'begin' to avoid re-matching
             i += 5;
         } else if (inner.substring(i).startsWith('\\end')) {
             depth--;
-            // Skip the word 'end'
             i += 3;
         } else if (inner.substring(i).startsWith('\\left')) {
             depth++;
@@ -118,11 +125,21 @@ export function splitMathString(text: string): string {
             depth--;
             i += 6;
         } else if (depth === 0) {
+            // Check for '='
             if (char === '=') {
-                // Only add if it's not the last character (ignoring trailing whitespace)
                 const remaining = inner.substring(i + 1).trim();
                 if (remaining.length > 0) {
                     operators.push({ pos: i, char });
+                }
+            } 
+            // Check for '+' or '-' if splitAtPlus is enabled
+            else if (splitAtPlus && (char === '+' || char === '-')) {
+                // Ignore unary operators at the start
+                if (i > 0 && inner.substring(0, i).trim().length > 0) {
+                    const remaining = inner.substring(i + 1).trim();
+                    if (remaining.length > 0) {
+                        operators.push({ pos: i, char });
+                    }
                 }
             }
         }

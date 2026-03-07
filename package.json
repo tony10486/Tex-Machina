@@ -95,6 +95,11 @@
           "default": true,
           "description": "수식 점프 시 슬롯(괄호) 내 내용이 있다면 자동으로 선택(Selection)합니다."
         },
+        "tex-machina.splitMath.atPlus": {
+          "type": "boolean",
+          "default": false,
+          "description": "수식 자동 분할 시 등호(=) 뿐만 아니라 덧셈/뺄셈(+, -) 기호에서도 줄바꿈을 허용합니다."
+        },
         "tex-machina.cli.chainDelimiter": {
           "type": "string",
           "enum": [
