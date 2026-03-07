@@ -46,9 +46,9 @@ export function registerFormulaHistory(context: vscode.ExtensionContext) {
     let changeTimeout: NodeJS.Timeout | undefined;
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(event => {
-            if (event.document.languageId !== 'latex') return;
+            if (event.document.languageId !== 'latex') {return;}
             
-            if (changeTimeout) clearTimeout(changeTimeout);
+            if (changeTimeout) {clearTimeout(changeTimeout);}
             changeTimeout = setTimeout(() => {
                 captureFormulaHistory(event.document);
             }, 2000); // 2 second debounce
@@ -58,7 +58,7 @@ export function registerFormulaHistory(context: vscode.ExtensionContext) {
     // 5. Decoration Update
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(editor => {
-            if (editor) updateDecorations(editor, decorationType);
+            if (editor) {updateDecorations(editor, decorationType);}
         }),
         vscode.workspace.onDidChangeTextDocument(event => {
             const editor = vscode.window.activeTextEditor;
@@ -114,7 +114,7 @@ function updateDecorations(editor: vscode.TextEditor, decorationType: vscode.Tex
 async function captureFormulaHistory(document: vscode.TextDocument) {
     const text = document.getText();
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!workspaceFolder) return;
+    if (!workspaceFolder) { return; }
 
     const historyBasePath = path.join(workspaceFolder.uri.fsPath, HISTORY_DIR);
     if (!fs.existsSync(historyBasePath)) {
@@ -124,8 +124,11 @@ async function captureFormulaHistory(document: vscode.TextDocument) {
     // Find all math blocks
     const mathRegex = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\begin\{(equation|align|gather|multline|flalign|alignat)\*?\}[\s\S]*?\\end\{\2\*?\})/g;
     let match;
-    const editor = vscode.window.activeTextEditor;
     
+    // Accumulate all edits in a WorkspaceEdit
+    const workspaceEdit = new vscode.WorkspaceEdit();
+    let hasEdits = false;
+
     while ((match = mathRegex.exec(text)) !== null) {
         let blockText = match[0];
         const idMatch = blockText.match(ID_REGEX);
@@ -143,21 +146,17 @@ async function captureFormulaHistory(document: vscode.TextDocument) {
                 }
             }
 
-            // Clean latex for history (remove the ID comment itself from storage to keep it clean, or keep it?)
-            // Let's keep the raw text but check if it changed
             const lastEntry = history.length > 0 ? history[history.length - 1] : null;
             if (!lastEntry || lastEntry.latex !== blockText) {
                 history.push({
                     timestamp: Date.now(),
                     latex: blockText
                 });
-                // Keep last 50 versions
-                if (history.length > 50) history.shift();
+                if (history.length > 50) { history.shift(); }
                 fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
             }
         } else {
-            // No ID found, auto-inject one if it's a block
-            // Only inject if it's not a temporary edit
+            // No ID found, auto-inject one
             const newId = Math.random().toString(36).substring(2, 9);
             const firstLineEnd = blockText.indexOf('\n');
             let newBlockText: string;
@@ -165,7 +164,6 @@ async function captureFormulaHistory(document: vscode.TextDocument) {
             if (firstLineEnd !== -1) {
                 newBlockText = blockText.substring(0, firstLineEnd) + ` % @hist:${newId}` + blockText.substring(firstLineEnd);
             } else {
-                // Single line block like $$x=y$$
                 if (blockText.startsWith('$$')) {
                     newBlockText = `$$ % @hist:${newId}\n` + blockText.substring(2, blockText.length - 2).trim() + '\n$$';
                 } else {
@@ -176,22 +174,22 @@ async function captureFormulaHistory(document: vscode.TextDocument) {
             const startPos = document.positionAt(match.index);
             const endPos = document.positionAt(match.index + blockText.length);
             
-            if (editor && editor.document === document) {
-                // Use a separate edit to avoid interfering with current typing
-                const workspaceEdit = new vscode.WorkspaceEdit();
-                workspaceEdit.replace(document.uri, new vscode.Range(startPos, endPos), newBlockText);
-                await vscode.workspace.applyEdit(workspaceEdit);
-            }
+            workspaceEdit.replace(document.uri, new vscode.Range(startPos, endPos), newBlockText);
+            hasEdits = true;
         }
+    }
+
+    if (hasEdits) {
+        await vscode.workspace.applyEdit(workspaceEdit);
     }
 }
 
 async function showHistoryQuickPick(id: string, range: vscode.Range, context: vscode.ExtensionContext) {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
+    if (!editor) {return;}
 
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-    if (!workspaceFolder) return;
+    if (!workspaceFolder) {return;}
 
     const historyPath = path.join(workspaceFolder.uri.fsPath, HISTORY_DIR, `${id}.json`);
     if (!fs.existsSync(historyPath)) {
@@ -222,14 +220,14 @@ async function showHistoryQuickPick(id: string, range: vscode.Range, context: vs
         placeHolder: "버전을 선택하세요. (현재 버전은 맨 위에 표시됨)"
     });
 
-    if (!selected) return;
+    if (!selected) {return;}
 
     const action = await vscode.window.showQuickPick([
         { label: "$(diff) 현재와 비교 (Diff)", value: "diff" },
         { label: "$(history) 이 버전으로 복구 (Restore)", value: "restore" }
     ], { placeHolder: "원하는 작업을 선택하세요" });
 
-    if (!action) return;
+    if (!action) {return;}
 
     if (action.value === "diff") {
         // Find current block text

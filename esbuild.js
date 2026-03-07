@@ -1,7 +1,29 @@
+const fs = require("fs");
+const path = require("path");
+
 const esbuild = require("esbuild");
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+/**
+ * @type {import('esbuild').Plugin}
+ */
+const copyHtmlPlugin = {
+	name: 'copy-html',
+	setup(build) {
+		build.onEnd(() => {
+			try {
+				const src = path.join(__dirname, 'src', 'webview', 'index.html');
+				const dest = path.join(__dirname, 'dist', 'index.html');
+				fs.copyFileSync(src, dest);
+				console.log('[copy-html] index.html copied to dist');
+			} catch (err) {
+				console.error('[copy-html] error copying index.html:', err);
+			}
+		});
+	},
+};
 
 /**
  * @type {import('esbuild').Plugin}
@@ -24,7 +46,7 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
-	const ctx = await esbuild.context({
+	const extensionCtx = await esbuild.context({
 		entryPoints: [
 			'src/extension.ts'
 		],
@@ -41,15 +63,42 @@ async function main() {
 		},
 		logLevel: 'silent',
 		plugins: [
-			/* add to the end of plugins array */
 			esbuildProblemMatcherPlugin,
 		],
 	});
+
+	const webviewCtx = await esbuild.context({
+		entryPoints: [
+			'src/webview/main.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outfile: 'dist/webview.js',
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+			copyHtmlPlugin,
+		],
+	});
+
 	if (watch) {
-		await ctx.watch();
+		await Promise.all([
+			extensionCtx.watch(),
+			webviewCtx.watch()
+		]);
 	} else {
-		await ctx.rebuild();
-		await ctx.dispose();
+		await Promise.all([
+			extensionCtx.rebuild(),
+			webviewCtx.rebuild()
+		]);
+		await Promise.all([
+			extensionCtx.dispose(),
+			webviewCtx.dispose()
+		]);
 	}
 }
 
