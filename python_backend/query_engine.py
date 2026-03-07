@@ -248,6 +248,29 @@ class QueryExecutor:
                 if el['value'] == '|': want_start = True
                 elif el['value'] == '.': want_inside = True
                 if i == len(elements) - 1: nodes = self.match_node(nodes, el, want_start, want_inside)
+            elif el['type'] == 'string' and any(op in el['value'] for op in ('>', '...', '$', '~', '<')):
+                # [FIX] Handle shorthand path strings by splitting them
+                shorthand = el['value']
+                m = re.search(r'(\{.*\}|\[.*\])$', shorthand)
+                suffix = m.group(1) if m else ""
+                core = shorthand[:len(shorthand)-len(suffix)]
+                
+                parts = re.split(r'\s*(>|~|\.\.\.|<|<<|\$)\s*', core)
+                new_elements = []
+                for j, part in enumerate(parts):
+                    if part in ('>', '~', '...', '<', '<<', '$'):
+                        new_elements.append({'type': 'path_op', 'value': part})
+                    elif part.strip():
+                        atom = {'type': 'identifier', 'value': part.strip()}
+                        if j == len(parts) - 1 and suffix:
+                            atom['value'] += suffix
+                            atom['type'] = 'string'
+                        new_elements.append(atom)
+                
+                # Resolve the reconstructed path
+                for sub_el in new_elements:
+                    nodes = self.resolve_path(sub_el, nodes)
+                is_first_atom = False
             else:
                 if is_first_atom and nodes == [self.root]:
                     search_pool = self.all_descendants(self.root)
@@ -304,6 +327,7 @@ class QueryExecutor:
                             v = LatexNode('cursor', 'cursor', -1, -1)
                             v.cursor_pos = target_arg.start
                             v.start = v.end = v.cursor_pos
+                            v.context_node = target_arg
                             results.append(v)
                         else:
                             results.append(target_arg)
@@ -503,8 +527,12 @@ class QueryExecutor:
                     if context_node.opts: v = context_node.opts[0].get_text(self.text)
                 else: v = context_node.get_text(self.text)
             if '*' in v:
-                if context_node.ntype == 'arg': v = v.replace('*', context_node.get_text(self.text))
-                elif context_node.ntype == 'cmd' and context_node.args: v = v.replace('*', context_node.args[0].get_text(self.text))
+                target = context_node
+                if target.ntype == 'cursor' and hasattr(target, 'context_node'):
+                    target = target.context_node
+                
+                if target.ntype == 'arg': v = v.replace('*', target.get_text(self.text))
+                elif target.ntype == 'cmd' and target.args: v = v.replace('*', target.args[0].get_text(self.text))
             res += v
         return res
 

@@ -325,7 +325,7 @@ LaTeX는 문서 작성 환경이 크게 세 가지로 나뉩니다.
 
 #### 연산자
 1. 계층 및 탐색 연산자 : 계층 및 탐색 연산자는 대상의 속성을 구체적으로 지정하는 역할을 합니다. 즉, 계층 및 탐색 연산자는 대상을 지정하는 작은따옴표 속에 들어가야 합니다.
-> `? find 'figure' > \includegraphics`는 틀린 구문이며, `? find 'figure > \includegraphics'` 가 옳은 구문입니다.
+> `? find figure > \includegraphics`와 같이 각 요소를 경로 연산자(`>`)로 구분하여 입력하는 것이 권장됩니다. 만약 `? find 'figure > \includegraphics'`와 같이 전체를 따옴표로 묶어 입력할 경우, 파서가 이를 하나의 문자열로 인식하지만 내부적으로 경로를 해석하여 처리합니다.
 
   - `>` : 직계 자식을 의미합니다. 즉, 계층으로 나누어지는 어떤 환경이나 명령어에서 하위 계층을 `>`로 표시합니다. `figure` 속 `includegraphics`가 있는 구조에서 해당 `includegraphics`에 대해 쿼리를 수행하기 위해선 `figure > \includegraphics`로 명시해 주어야 합니다.
   - `~` : 동일한 관계의 요소를 의미합니다. 만약 `figure` 속 `includegraphics`와 `caption`이 있을 경우 이들 간에 쿼리를 수행하기 위해선 `\includegraphics ~ \caption`으로 명시해 주어야 합니다. 
