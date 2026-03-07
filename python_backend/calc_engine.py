@@ -836,7 +836,7 @@ def preprocess_matrix_latex(latex_str):
         # 전치행렬: ^T, ^\top, ^\intercal -> .T (백슬래시 유무와 상관없이 매칭)
         processed = re.sub(r'\^\{\s*\\*(?:T|top|intercal)\s*\}|\^\\*(?:T|top|intercal)', '.T', processed)
         # 거듭제곱: ^{n} -> **n
-        processed = re.sub(r'\^\{\s*(\d+)\s*\}|\^(\d+)', r'**\1\2', processed)
+        processed = re.sub(r'\^\{\s*(\d+)\s*\}|\^(\d+)', lambda m: '**' + (m.group(1) or m.group(2)), processed)
         
         # 곱셈 및 기타 LaTeX 명령어 처리
         # 모든 \command 형태에서 \를 제거하고 times/cdot은 *로 교환
