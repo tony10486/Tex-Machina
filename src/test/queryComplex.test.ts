@@ -30,8 +30,8 @@ suite('HSQEngine Complex Query Test Suite', () => {
         await engine.execute('; \\\\textbf | - clear && find Normal | + bold');
 
         const text = document.getText();
-        assert.ok(text.includes('\\\\textbf{Normal}'), 'Normal should become bold');
-        assert.ok(!text.includes('\\\\textbf{Bold}'), 'Bold should be cleared');
+        assert.ok(text.includes('\\textbf{Normal}'), 'Normal should become bold');
+        assert.ok(!text.includes('\\textbf{Bold}'), 'Bold should be cleared');
         assert.ok(text.includes(' Bold '), 'Bold text should remain as plain text');
 
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
