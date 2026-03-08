@@ -1,3 +1,4 @@
+/*
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -285,3 +286,4 @@ async function showHistoryQuickPick(id: string, range: vscode.Range, context: vs
         }
     }
 }
+*/

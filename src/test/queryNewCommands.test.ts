@@ -28,23 +28,58 @@ suite('HSQEngine New Commands Test Suite', () => {
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
-    test('Query Engine: insert command', async () => {
-        const content = `\\section{Title}`;
+    test('Query Engine: @cell shortcut and :nth(n)', async () => {
+        const content = `
+\\begin{tabular}{cc}
+    A & B \\\\
+    C & D
+\\end{tabular}
+`;
         const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
         const editor = await vscode.window.showTextDocument(document);
 
         const engine = new HSQEngine(editor);
-        // Insert text before section
-        // Syntax: ; insert "Header\\n" >> .|\\section
-        await engine.execute('; insert "Header\\n" >> .|\\section');
+        // Replace 3rd cell (which is C)
+        await engine.execute('; @cell:nth(3) >> "X"');
 
         const text = document.getText();
-        assert.ok(text.startsWith('Header\n\\section{Title}'), 'Header should be inserted before section');
+        assert.ok(text.includes('A & B'), 'A and B should remain');
+        assert.ok(text.includes('X & D'), 'C should be replaced by X');
 
-        // Insert text after section
-        await engine.execute('; insert "\\nFooter" >> \\section.|');
-        const text2 = document.getText();
-        assert.ok(text2.endsWith('\\section{Title}\nFooter'), 'Footer should be inserted after section');
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Query Engine: inline filter [attr=val]', async () => {
+        const content = `\\includegraphics[width=50]{fig1.png}\\includegraphics[width=100]{fig2.png}`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Delete only images with width=50
+        await engine.execute('; delete @img[#width==50]');
+
+        const text = document.getText();
+        assert.ok(!text.includes('fig1.png'), 'fig1 should be deleted');
+        assert.ok(text.includes('fig2.png'), 'fig2 should remain');
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Query Engine: self-reference _ and subquery ^()^', async () => {
+        const content = `
+\\begin{figure}
+    \\includegraphics[width=100]{test.png}
+\\end{figure}
+`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Use subquery to find if any \includegraphics inside
+        await engine.execute('; @fig where ^(... \includegraphics)^ >> "Matched"');
+
+        const text = document.getText();
+        assert.ok(text.includes('Matched'), 'Should match figure containing includegraphics');
 
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });

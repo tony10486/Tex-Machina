@@ -15,7 +15,7 @@ import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerScanPrevention } from './core/scanPrevention';
-import { registerFormulaHistory } from './core/formulaHistory';
+// import { registerFormulaHistory } from './core/formulaHistory';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 
@@ -227,7 +227,7 @@ export function activate(context: vscode.ExtensionContext) {
     registerScanPrevention(context);
 
     // [Formula History] 수식 블록 기반 히스토리 기능 등록
-    registerFormulaHistory(context);
+    // registerFormulaHistory(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);

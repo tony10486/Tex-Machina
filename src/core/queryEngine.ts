@@ -108,8 +108,9 @@ export class HSQEngine {
     constructor(private editor: vscode.TextEditor) {}
 
     private shortcuts: Record<string, string[]> = {
-        'img': ['includegraphics'], 'fig': ['figure', 'figure*'], 'tbl': ['tabular', 'table', 'longtable'],
-        'eq': ['equation', 'align', 'gather', 'multline'], 'math': ['equation', 'align', 'gather', 'text']
+        'img': ['includegraphics'], 'fig': ['figure', 'figure*'], 'tbl': ['tabular', 'table', 'longtable', 'tabular*'],
+        'eq': ['equation', 'align', 'gather', 'multline', 'gather*'], 'math': ['equation', 'align', 'gather', 'text'],
+        'cell': ['tabular', 'table', 'longtable', 'tabular*', 'array']
     };
 
     private expand(n: string): string[] {
@@ -119,7 +120,6 @@ export class HSQEngine {
 
     private parseAction(raw: string) {
         const actionOps = ['>>', ':=', '\\+=', '-=', '><', '<>', '>\\+<', '\\+>', '<\\+', '\\^\\^', 'vv'];
-        const filterKeywords = ['where', 'without', 'has'];
         let op = "", opIdx = -1;
         for (const ao of actionOps) {
             const cAo = ao.replace(/\\/g, '');
@@ -179,41 +179,77 @@ export class HSQEngine {
         let currentNodes: LatexNode[] = [root];
         for (const seg of segments) {
             let nextNodes: LatexNode[] = [];
-            const targetNames = this.expand(seg.sel);
+            let targetSel = seg.sel;
+            if (targetSel.includes('[') && targetSel.endsWith(']')) targetSel = targetSel.substring(0, targetSel.indexOf('['));
+            const targetNames = this.expand(targetSel);
+            const isCell = seg.sel.startsWith('@cell');
+
             for (const n of currentNodes) {
-                if (seg.op === ">") nextNodes.push(...n.children.filter(child => this.matchNode(child, targetNames, seg.sel, text)));
+                const addIfMatch = (node: LatexNode) => {
+                    if (isCell && this.shortcuts.cell.includes(node.name || '')) {
+                        const s = node.start + `\\begin{${node.name}}`.length, e = node.end - `\\end{${node.name}}`.length;
+                        const contentWithOpt = text.substring(s, e);
+                        const optM = contentWithOpt.match(/^\{[^}]+\}/);
+                        const startOffset = optM ? s + optM[0].length : s;
+                        
+                        const inner = text.substring(startOffset, e);
+                        let rowOffset = 0;
+                        const rows = inner.split(/\\\\/);
+                        for (let r = 0; r < rows.length; r++) {
+                            const row = rows[r];
+                            let cellOffset = 0;
+                            const cells = row.split('&');
+                            for (let i = 0; i < cells.length; i++) {
+                                const cellText = cells[i];
+                                const trimmed = cellText.trim();
+                                const trimStart = cellText.indexOf(trimmed);
+                                const cellStart = startOffset + rowOffset + cellOffset + (trimStart !== -1 ? trimStart : 0);
+                                const cellEnd = cellStart + trimmed.length;
+                                nextNodes.push({ type: 'text', start: cellStart, end: cellEnd, children: [], opts: [], args: [], parent: node });
+                                cellOffset += cellText.length + 1; // +1 for &
+                            }
+                            rowOffset += row.length + 2; // +2 for \\
+                        }
+                    } else if (this.matchNode(node, targetNames, targetSel, text)) {
+                        nextNodes.push(node);
+                    }
+                };
+
+                if (seg.op === ">") n.children.forEach(addIfMatch);
                 else if (seg.op === "..." || seg.op === " ") {
                     const collect = (nodes: LatexNode[]) => {
                         for (const child of nodes) {
-                            if (this.matchNode(child, targetNames, seg.sel, text)) nextNodes.push(child);
+                            addIfMatch(child);
                             collect(child.children);
                         }
                     };
+                    addIfMatch(n);
                     collect(n.children);
                 } else if (seg.op === "~") {
                     if (n.parent) {
                         const idx = n.parent.children.indexOf(n);
-                        if (idx !== -1 && idx < n.parent.children.length - 1) {
-                            const sib = n.parent.children[idx + 1];
-                            if (this.matchNode(sib, targetNames, seg.sel, text)) nextNodes.push(sib);
-                        }
+                        if (idx !== -1 && idx < n.parent.children.length - 1) addIfMatch(n.parent.children[idx + 1]);
                     }
                 } else if (seg.op === "<") {
-                    if (n.parent && this.matchNode(n.parent, targetNames, seg.sel, text)) nextNodes.push(n.parent);
+                    if (n.parent) addIfMatch(n.parent);
                 } else if (seg.op === "<<") {
-                    let p = n.parent;
-                    while (p) { if (this.matchNode(p, targetNames, seg.sel, text)) nextNodes.push(p); p = p.parent; }
+                    let p = n.parent; while (p) { addIfMatch(p); p = p.parent; }
                 } else if (seg.op === "$") {
                     const collect = (nodes: LatexNode[]) => {
                         for (const child of nodes) {
-                            if (this.matchNode(child, targetNames, seg.sel, text)) nextNodes.push(child);
-                            collect(child.children);
+                            addIfMatch(child); collect(child.children);
                         }
                     };
                     collect(n.children);
                 }
             }
             currentNodes = Array.from(new Set(nextNodes));
+            
+            // Apply inline filter if any
+            if (seg.sel.includes('[') && seg.sel.endsWith(']')) {
+                const inlineFilter = seg.sel.substring(seg.sel.indexOf('[') + 1, seg.sel.length - 1);
+                currentNodes = currentNodes.filter(t => this.evaluateFilter(t, "where " + inlineFilter, text));
+            }
         }
         return currentNodes;
     }
@@ -221,64 +257,61 @@ export class HSQEngine {
     private evaluateFilter(t: LatexNode, filterStr: string, text: string): boolean {
         if (!filterStr) return true;
 
-        // Recursive evaluator for AND/OR/NOT
         const evalExpr = (expr: string): boolean => {
-            if (expr.includes(' or ')) {
-                return expr.split(' or ').some(part => evalExpr(part.trim()));
-            }
-            if (expr.includes(' and ')) {
-                return expr.split(' and ').every(part => evalExpr(part.trim()));
-            }
-            if (expr.startsWith('not ')) {
-                return !evalExpr(expr.substring(4).trim());
+            if (expr.includes(' or ')) return expr.split(' or ').some(part => evalExpr(part.trim()));
+            if (expr.includes(' and ')) return expr.split(' and ').every(part => evalExpr(part.trim()));
+            if (expr.startsWith('not ')) return !evalExpr(expr.substring(4).trim());
+
+            if (expr.startsWith('^(') && expr.endsWith(')^')) {
+                const sub = expr.slice(2, -2);
+                const subNodes = this.resolveHierarchy(sub, t, text);
+                return subNodes.length > 0;
             }
 
-            // Leaf conditions
             const hasC = (nodes: LatexNode[], name: string): boolean => nodes.some(n => n.name === name || hasC(n.children, name));
             const tt = text.substring(t.start, t.end);
 
-            if (expr.startsWith('has ')) {
-                return hasC(t.children, this.expand(expr.substring(4).trim())[0]);
-            }
-            if (expr.startsWith('without ')) {
-                return !hasC(t.children, this.expand(expr.substring(8).trim())[0]);
-            }
+            if (expr.startsWith('has ')) return hasC(t.children, this.expand(expr.substring(4).trim())[0]);
+            if (expr.startsWith('without ')) return !hasC(t.children, this.expand(expr.substring(8).trim())[0]);
             if (expr.startsWith('where ')) {
                 const sub = expr.substring(6).trim();
+                if (sub.includes('^(') && sub.endsWith(')^')) {
+                    const subIdx = sub.indexOf('^(');
+                    const inner = sub.substring(subIdx + 2, sub.length - 2);
+                    return this.resolveHierarchy(inner, t, text).length > 0;
+                }
                 
-                // Regex matches: $$ matches /pattern/
                 const regexMatch = sub.match(/\$\$\s+matches\s+\/(.*)\//);
                 if (regexMatch) {
                     const content = (t.type === 'env') ? tt.substring(`\\begin{${t.name}}`.length, tt.length - `\\end{${t.name}}`.length).trim() : (t.type === 'cmd' && t.args.length > 0) ? text.substring(t.args[0].start, t.args[0].end).trim() : tt.trim();
                     return new RegExp(regexMatch[1]).test(content);
                 }
 
-                // Numeric comparisons: #w > 10
-                const numCompMatch = sub.match(/#([a-zA-Z]+)\s*(>|<|>=|<=|==|!=)\s*([\d\.]+(?:[a-z]+|%)?)/);
+                const numCompMatch = sub.match(/(?:#|_#)([a-zA-Z]+)\s*(>|<|>=|<=|==|!=)\s*([\d\.]+(?:[a-z]+|%)?)/);
                 if (numCompMatch) {
                     const propName = numCompMatch[1];
                     const op = numCompMatch[2];
                     const valStr = numCompMatch[3];
                     
-                    const opt = t.opts.find(o => text.substring(o.start, o.end).includes(propName));
-                    if (opt) {
+                    let actual: number | undefined;
+                    for (const opt of t.opts) {
                         const optText = text.substring(opt.start, opt.end);
                         const m = optText.match(new RegExp(`${propName}=([\\d\\.]+)`));
-                        if (m) {
-                            const actual = parseFloat(m[1]);
-                            const target = parseFloat(valStr);
-                            if (op === '>') return actual > target;
-                            if (op === '<') return actual < target;
-                            if (op === '>=') return actual >= target;
-                            if (op === '<=') return actual <= target;
-                            if (op === '==') return actual === target;
-                            if (op === '!=') return actual !== target;
-                        }
+                        if (m) { actual = parseFloat(m[1]); break; }
+                    }
+                    
+                    if (actual !== undefined) {
+                        const target = parseFloat(valStr);
+                        if (op === '>') return actual > target;
+                        if (op === '<') return actual < target;
+                        if (op === '>=') return actual >= target;
+                        if (op === '<=') return actual <= target;
+                        if (op === '==') return actual === target;
+                        if (op === '!=') return actual !== target;
                     }
                     return false;
                 }
 
-                // Equality: $$ == "..."
                 const eqMatch = sub.match(/\$\$\s*==\s*"(.*?)"/);
                 if (eqMatch) {
                     const content = (t.type === 'env') ? tt.substring(`\\begin{${t.name}}`.length, tt.length - `\\end{${t.name}}`.length).trim() : (t.type === 'cmd' && t.args.length > 0) ? text.substring(t.args[0].start, t.args[0].end).trim() : tt.trim();
@@ -295,28 +328,50 @@ export class HSQEngine {
         if (queryStr.startsWith(';')) queryStr = queryStr.substring(1).trim();
         HSQEngine.globalCounter = 0;
 
+        // Split by sync execution mark &&
+        const syncStages = queryStr.split(/\s+&&\s+/);
+        if (syncStages.length > 1) {
+            for (const stage of syncStages) {
+                await this.execute(";" + stage);
+            }
+            return true;
+        }
+
         const document = this.editor.document;
         const text = document.getText();
         const root = new SemanticScanner(text).scan();
         const edit = new vscode.WorkspaceEdit();
 
-        const pipes: string[] = [];
-        let buf = "";
-        for (let i = 0; i < queryStr.length; i++) {
-            const c = queryStr[i], p = i > 0 ? queryStr[i-1] : "", n = i < queryStr.length - 1 ? queryStr[i+1] : "";
-            if (c === '|' && p !== '.' && n !== '.') { pipes.push(buf.trim()); buf = ""; }
-            else buf += c;
-        }
-        if (buf.trim()) pipes.push(buf.trim());
+        const pipes: string[] = queryStr.split(/\s*(?<!\.)\|(?!\.)\s*/);
         if (pipes.length === 0) return false;
 
-        let command = 'find', firstPart = pipes[0];
+        let firstPart = pipes[0];
+        let command = 'find';
         const cmdM = firstPart.match(/^(find|move|exchange|duplicate|delete|insert|extract)\b/);
         if (cmdM) { command = cmdM[1]; firstPart = firstPart.substring(cmdM[0].length).trim(); }
 
-        const actionsRaw = firstPart.split(/\s+&\s+/).map(a => a.trim());
-        const primary = this.parseAction(actionsRaw[0]);
-        let selStr = primary.selector;
+        let orderBy: string | null = null;
+        let actionsRaw: string[] = [];
+        let selStr = "";
+
+        if (firstPart.includes('{')) {
+            const start = firstPart.indexOf('{'), end = firstPart.lastIndexOf('}');
+            selStr = firstPart.substring(0, start).trim();
+            const obM = selStr.match(/order by\s+([^\s{}&]+)/);
+            if (obM) { orderBy = obM[1]; selStr = selStr.replace(obM[0], '').trim(); }
+            actionsRaw = firstPart.substring(start + 1, end).split(/,(?![^()]*\))/).map(a => a.trim());
+        } else {
+            const pts = firstPart.split(/\s+&\s+/);
+            let firstActionStr = pts[0];
+            const obM = firstActionStr.match(/order by\s+([^\s&]+)/);
+            if (obM) { orderBy = obM[1]; firstActionStr = firstActionStr.replace(obM[0], '').trim(); }
+            
+            const firstAction = this.parseAction(firstActionStr);
+            selStr = firstAction.selector;
+            actionsRaw = pts.map((p, i) => i === 0 ? p.substring(p.indexOf(selStr) + selStr.length).trim() : p).filter(a => a.length > 0);
+            if (actionsRaw.length === 0) actionsRaw = [""]; 
+        }
+
         const isContent = selStr.endsWith(':*');
         if (isContent) selStr = selStr.slice(0, -2);
         let pseudo = "";
@@ -325,20 +380,25 @@ export class HSQEngine {
         }
 
         let targets = this.resolveHierarchy(selStr, root, text);
-        let insertLiteral: string | null = null;
-        if (command === 'insert' && selStr.startsWith('"') && selStr.endsWith('"')) {
-            insertLiteral = selStr.slice(1, -1).replace(/\\n/g, '\n');
-            const a = this.parseAction(actionsRaw[0]);
-            let destSelector = a.actionText;
-            destSelector = destSelector.replace(/^\.\|/, '').replace(/\|$/, '').replace(/^\|/, '').replace(/\.$/, '');
-            if (destSelector.endsWith('|')) destSelector = destSelector.slice(0, -1);
-            targets = this.resolveHierarchy(destSelector, root, text);
+        
+        const primaryFilterM = firstPart.match(/\b(where|without|has)\b.*/);
+        if (primaryFilterM && !firstPart.includes('{')) {
+            targets = targets.filter(t => this.evaluateFilter(t, primaryFilterM[0], text));
         }
 
-        if (primary.filter && !(command === 'insert' && insertLiteral !== null)) targets = targets.filter(t => this.evaluateFilter(t, primary.filter, text));
+        if (orderBy) {
+            targets.sort((a, b) => {
+                const valA = text.substring(a.start, a.end), valB = text.substring(b.start, b.end);
+                return orderBy === '$$' ? valA.localeCompare(valB) : 0;
+            });
+        }
 
         if (pseudo === 'first') targets = targets.slice(0, 1);
-        if (pseudo === 'last') targets = targets.slice(-1);
+        else if (pseudo === 'last') targets = targets.slice(-1);
+        else if (pseudo && pseudo.startsWith('nth(')) {
+            const n = parseInt(pseudo.match(/\d+/)?.[0] || "1");
+            targets = targets.slice(n - 1, n);
+        }
 
         if (command === 'extract' && targets.length > 0) {
             edit.replace(document.uri, new vscode.Range(document.positionAt(0), document.positionAt(text.length)), targets.map(t => text.substring(t.start, t.end)).join('\n\n'));
@@ -363,11 +423,12 @@ export class HSQEngine {
             HSQEngine.globalCounter++;
             const getV = (cv: string) => ({
                 '$$': cv, '#i': HSQEngine.globalCounter.toString(), '#j': (j + 1).toString(),
+                '_': cv, '_#w': 'width', '_#h': 'height',
                 ...Object.fromEntries(Object.entries(HSQEngine.globalState).map(([k, v]) => [`$${k}`, v])),
                 ...Object.fromEntries(Object.entries(HSQEngine.registers).map(([k, v]) => [`//${k}`, v])),
                 ...Object.fromEntries(t.opts.flatMap(o => text.substring(o.start, o.end).split(',').map(p => {
                     const [pk, pv] = p.split('=').map(s => s.trim());
-                    return pk && pv ? [`#${pk}`, pv] : null;
+                    return pk && pv ? [`#${pk}`, pv] : pk ? [`#${pk}`, pk] : null;
                 }).filter(Boolean)) as [string, string][])
             });
 
@@ -381,14 +442,14 @@ export class HSQEngine {
                 const vs = getV(cv); let ev = ex;
                 for (const [k, v] of Object.entries(vs)) if (!isNaN(parseFloat(v))) ev = ev.split(k).join(v);
                 try {
-                    if (ev.includes('%')) {
-                        const m = ev.match(/([\d\.]+)\s*([\+\-\*\/])\s*([\d\.]+)%/);
-                        if (m) {
-                            const b = parseFloat(m[1]), o = m[2], p = parseFloat(m[3])/100;
-                            return Math.round(o === '+' ? b * (1+p) : b * (1-p)).toString();
-                        }
+                    const percM = ev.match(/([\d\.]+)\s*([\+\-\*\/=]+)\s*([\d\.]+)%/);
+                    if (percM) {
+                        const b = parseFloat(percM[1]), o = percM[2], p = parseFloat(percM[3])/100;
+                        if (o.includes('+')) return Math.round(b * (1+p)).toString();
+                        if (o.includes('-')) return Math.round(b * (1-p)).toString();
                     }
-                    return eval(ev.replace(/[a-zA-Z#]+/g, '')).toString();
+                    const clean = ev.replace(/[a-zA-Z#_]+/g, '').trim();
+                    return eval(clean || "0").toString();
                 } catch { return ex; }
             };
 
@@ -409,96 +470,73 @@ export class HSQEngine {
                 if (target2Str.includes(':') && !target2Str.includes('\\begin{')) {
                     const pts = target2Str.split(':'); target2Str = pts[0]; t2Pseudo = pts[1];
                 }
-
                 const rootAgain = new SemanticScanner(text).scan();
                 let target2Nodes = this.resolveHierarchy(target2Str, rootAgain, text);
                 if (t2Pseudo === 'first') target2Nodes = target2Nodes.slice(0, 1);
                 if (t2Pseudo === 'last') target2Nodes = target2Nodes.slice(-1);
-
                 if (target2Nodes.length > 0) {
                     const t2 = target2Nodes[0];
-                    const val1 = text.substring(t.start, t.end);
-                    const val2 = text.substring(t2.start, t2.end);
-                    
-                    edit.replace(document.uri, new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)), val2);
-                    edit.replace(document.uri, new vscode.Range(document.positionAt(t2.start), document.positionAt(t2.end)), val1);
+                    edit.replace(document.uri, new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)), text.substring(t2.start, t2.end));
+                    edit.replace(document.uri, new vscode.Range(document.positionAt(t2.start), document.positionAt(t2.end)), fullVal);
                     break; 
                 }
             } else if (command === 'insert') {
                 const a = this.parseAction(actionsRaw[0]);
-                const content = insertLiteral !== null ? insertLiteral : fullVal;
-                let insertPos = t.start;
-                const actionText = a.actionText;
-                
-                if (actionText.startsWith('.|') && actionText.endsWith('|')) {
-                    insertPos = t.start + (t.type === 'env' ? `\\begin{${t.name}}`.length : 0);
-                } else if (actionText.startsWith('.|')) {
-                    insertPos = t.start;
-                } else if (actionText.endsWith('.|')) {
-                    insertPos = t.end - (t.type === 'env' ? `\\end{${t.name}}`.length : 0);
-                } else if (actionText.startsWith('|') && actionText.endsWith('.')) {
-                    insertPos = t.end;
-                } else {
-                    insertPos = t.start;
-                }
-                edit.insert(document.uri, document.positionAt(insertPos), content);
+                let insertPos = a.actionText.startsWith('.|') ? t.start : a.actionText.endsWith('.|') ? t.end : t.start;
+                edit.insert(document.uri, document.positionAt(insertPos), rep(selStr.startsWith('"') ? selStr : fullVal, baseVal));
             } else {
                 let currentVal = baseVal;
                 let prependStr = "", appendStr = "";
                 let didReplace = false;
 
+                const applyTrait = (p: string) => {
+                    const cleanP = p.trim();
+                    if (cleanP === '+ bold') { currentVal = `\\textbf{${currentVal}}`; didReplace = true; }
+                    else if (cleanP === '+ italic') { currentVal = `\\textit{${currentVal}}`; didReplace = true; }
+                    else if (cleanP === '- clear') {
+                        if (t.type === 'cmd' || t.type === 'env') {
+                            currentVal = baseVal; baseRange = new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)); didReplace = true;
+                        } else {
+                            currentVal = currentVal.replace(/\\(?:textbf|textit|underline|sout)\{([^}]+)\}/g, '$1'); didReplace = true;
+                        }
+                    }
+                };
+
                 for (const aRaw of actionsRaw) {
-                    const a = this.parseAction(aRaw);
+                    if (!aRaw) continue;
+                    if (aRaw.includes('bold') || aRaw.includes('italic') || aRaw.includes('clear')) { applyTrait(aRaw); continue; }
+                    const a = this.parseAction(aRaw.startsWith('>>') || aRaw.startsWith(':=') || aRaw.startsWith('+=') || aRaw.startsWith('-=') ? aRaw : ">> " + aRaw);
                     if (a.storageVar) HSQEngine.globalState[a.storageVar] = currentVal;
                     if (a.storageReg) HSQEngine.registers[a.storageReg] = currentVal;
-                    if (!a.op) continue;
-                    let actRes = currentVal;
                     
-                    if (a.op === '>>' || a.op === ':=') {
+                    if (a.op === '>>' || a.op === ':=' || a.op === '+=' || a.op === '-=') {
                         if (a.actionText.includes('#') && !a.actionText.includes('"')) {
-                            const pN = a.actionText.split(':=')[0].trim().replace('#', '');
-                            const rM = evalM(a.actionText.includes(':=') ? a.actionText.split(':=')[1].trim() : a.actionText, currentVal);
-                            if (a.actionText.includes(':=')) {
+                            const pMatch = a.actionText.match(/#([a-zA-Z]+)\s*(>>|:=|\+=|-=)?\s*(.*)/);
+                            if (pMatch) {
+                                const pN = pMatch[1], pOp = pMatch[2] || a.op, pVal = pMatch[3];
                                 const opt = t.opts.find(o => text.substring(o.start, o.end).includes(pN));
-                                if (opt) { edit.replace(document.uri, new vscode.Range(document.positionAt(opt.start), document.positionAt(opt.end)), text.substring(opt.start, opt.end).replace(new RegExp(`${pN}=([\\d\\.]+)`), `${pN}=${rM}`)); continue; }
+                                if (opt) {
+                                    const optText = text.substring(opt.start, opt.end);
+                                    const m = optText.match(new RegExp(`${pN}=([\\d\\.]+)`));
+                                    const currentPropVal = m ? m[1] : "0";
+                                    const newVal = evalM(`${currentPropVal} ${pOp.replace(':=', '').replace('>>', '') || '+'} ${pVal}`, currentVal);
+                                    edit.replace(document.uri, new vscode.Range(document.positionAt(opt.start), document.positionAt(opt.end)), optText.replace(new RegExp(`${pN}=([\\d\\.]+)`), `${pN}=${newVal}`));
+                                }
                             }
-                            actRes = rM;
-                        } else actRes = rep(a.actionText, currentVal);
+                        } else { currentVal = rep(a.actionText, currentVal); didReplace = true; }
                     }
-                    else if (a.op === '><') actRes = `\\begin{${rep(a.actionText, currentVal)}}\n${isContent ? currentVal : fullVal}\n\\end{${rep(a.actionText, currentVal)}}`;
-                    else if (a.op === '<>') { 
-                        if (t.type === 'env') { actRes = fullVal.substring(`\\begin{${t.name}}`.length, fullVal.length - `\\end{${t.name}}`.length).trim(); baseRange = new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)); }
-                    }
-                    else if (a.op === '>+<') { const wrap = isContent ? currentVal : fullVal; actRes = a.actionText.includes('$$') ? rep(a.actionText, currentVal) : `${rep(a.actionText, currentVal)}${wrap}${rep(a.actionText, currentVal)}`; if (!isContent) baseRange = new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)); }
-                    else if (a.op === '+>') { actRes = rep(a.actionText, currentVal); }
-                    else if (a.op === '<+') { actRes = rep(a.actionText, currentVal); }
-                    else if (a.op === '^^') {
-                        let pe = t.parent; while (pe && pe.type !== 'env' && pe.type !== 'root') pe = pe.parent;
-                        if (pe && pe.type !== 'root') { edit.delete(document.uri, new vscode.Range(document.positionAt(t.start), document.positionAt(t.end))); edit.insert(document.uri, document.positionAt(pe.end), "\n" + fullVal); return await vscode.workspace.applyEdit(edit); }
-                    }
-
-                    if (a.op === '+>') { appendStr += actRes; continue; }
-                    if (a.op === '<+') { prependStr = actRes + prependStr; continue; }
-
-                    if (a.cursorMode === 'before') { prependStr = actRes + prependStr; }
-                    else if (a.cursorMode === 'after') { appendStr += actRes; }
-                    else if (a.cursorMode === 'inside-start') { currentVal = actRes + currentVal; didReplace = true; }
-                    else if (a.cursorMode === 'inside-end') { currentVal = currentVal + actRes; didReplace = true; }
-                    else { currentVal = actRes; didReplace = true; }
+                    else if (a.op === '><') { currentVal = `\\begin{${rep(a.actionText, currentVal)}}\n${currentVal}\n\\end{${rep(a.actionText, currentVal)}}`; didReplace = true; }
+                    else if (a.op === '<>') { if (t.type === 'env') { currentVal = fullVal.substring(`\\begin{${t.name}}`.length, fullVal.length - `\\end{${t.name}}`.length).trim(); didReplace = true; baseRange = new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)); } }
+                    else if (a.op === '>+<') { currentVal = a.actionText.includes('$$') ? rep(a.actionText, currentVal) : `${rep(a.actionText, currentVal)}${currentVal}${rep(a.actionText, currentVal)}`; didReplace = true; if (!isContent) baseRange = new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)); }
+                    else if (a.op === '+>') appendStr += rep(a.actionText, currentVal);
+                    else if (a.op === '<+') prependStr = rep(a.actionText, currentVal) + prependStr;
                 }
 
-                if (didReplace) {
-                    for (let i = 1; i < pipes.length; i++) {
-                        const p = pipes[i];
-                        if (p === '+ bold') currentVal = `\\textbf{${currentVal}}`;
-                        else if (p === '+ italic') currentVal = `\\textit{${currentVal}}`;
-                        else if (p === '- clear') currentVal = currentVal.replace(/\\(?:textbf|textit|underline)\{([^}]+)\}/g, '$1');
-                    }
-                }
+                for (let i = 1; i < pipes.length; i++) applyTrait(pipes[i]);
 
                 if (prependStr) edit.insert(document.uri, document.positionAt(t.start), prependStr);
                 if (appendStr) edit.insert(document.uri, document.positionAt(t.end), appendStr);
-                if (didReplace && currentVal !== baseVal) edit.replace(document.uri, baseRange, currentVal);
+                if (didReplace) edit.replace(document.uri, baseRange, currentVal);
             }
         }
         return await vscode.workspace.applyEdit(edit);

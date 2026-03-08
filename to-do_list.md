@@ -9,6 +9,32 @@
 - 수식 분할 기능에서 덧셈 기호에 대해서 줄바꿈을 할 수 있도록 옵션을 마련하면 좋을 듯 함
 - table generator 기능을 더 수정했으면 함 
 ## 추가 예정 기능 
+- cmd + ; / cmd + f / cmd + 폰트 속성을 통해 \textit, \textbf 등을 넣을 수 있도록 함 
+
+C-c C-f C-b
+Insert bold face ‘\textbf{∗}’ text.
+
+C-c C-f C-i
+Insert italics ‘\textit{∗}’ text.
+
+C-c C-f C-e
+Insert emphasized ‘\emph{∗}’ text.
+
+C-c C-f C-s
+Insert slanted ‘\textsl{∗}’ text.
+
+C-c C-f C-r
+Insert roman ‘\textrm{∗}’ text.
+
+C-c C-f C-f
+Insert sans serif ‘\textsf{∗}’ text.
+
+C-; C-f C-t
+Insert typewriter ‘\texttt{∗}’ text.
+
+C-; C-f C-c
+Insert SMALL CAPS ‘\textsc{∗}’ text.
+
 - 과학 상수 입력 기능 : 플랑크 상수 등을 간단히 넣을 수 있는 기능 
 - Label이 달린 내용이 변경되었을 시 알림 기능 : 참조가 일어난 Label의 수식, 정리의 내용이 수정되거나, label 이름이 수정되었을 때, 알림을 하는 기능 
 - Label 이름 추천 기능
@@ -102,7 +128,7 @@
        * 대부분의 할당(>>, :=) 및 증감(+=, -=), 감싸기(><, >+<) 등은 작동합니다.
        * 하지만 <->, <=> (Swap/Exchange) 연산자는 로직이 빠져 있어 작동하지 않습니다.
    * 계층 탐색: _ (자기 참조)를 제외한 나머지(>, ~, ..., <, <<, $)는 정상 작동합니다.
-   
+
    4. 논리 및 제어 흐름 (Logic & Control Flow)
    * 정렬: order by 기능이 아예 없습니다.
    * 루프: loop { ... } 문법은 Python 파서에만 존재하며, 현재 TS 엔진에서는 지원하지 않습니다.
@@ -112,3 +138,7 @@
   5. 아키텍처 상의 차이
    * 엔진의 불일치: README에서는 "Python 기반의 지능형 엔진"을 강조하지만, 실제 쿼리 실행은 VS Code 내부의 TypeScript 코드(HSQEngine)가 직접
      문서를 스캔하고 편집합니다. Python 백엔드는 주로 calc, plot 등 수학적 연산에만 관여하며 쿼리 실행에는 참여하지 않습니다.
+
+일부 줄만 수정할 수 있도록 기능을 추가해야 함 
+
+수식 히스토리 기능에 중대한 결함 발견, 해당 기능을 주석처리 해서 비활성화 해야 함 
