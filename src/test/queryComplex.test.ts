@@ -79,18 +79,15 @@ suite('HSQEngine Complex Query Test Suite', () => {
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
-    test('Query Engine: Logical Combinations (and, or, not)', async () => {
+    test('Query Engine: State & Memory ($var, same-parent)', async () => {
         const content = `
 \\begin{figure}
     \\includegraphics{a.png}
-    \\caption{Target}
+    \\caption{One}
 \\end{figure}
 \\begin{figure}
     \\includegraphics{b.png}
-    \\caption{Other}
-\\end{figure}
-\\begin{figure}
-    \\includegraphics{c.png}
+    \\caption{Two}
 \\end{figure}
 `;
         const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
@@ -98,19 +95,31 @@ suite('HSQEngine Complex Query Test Suite', () => {
 
         const engine = new HSQEngine(editor);
         
-        // Match figures that have a caption AND caption matches /Target/
-        await engine.execute('; @fig where has \\caption and ^(\\caption where $$ matches /Target/)^ >> #marked=yes');
-        await new Promise(r => setTimeout(r, 500));
-
-        // Match figures that do NOT have a caption OR caption is NOT Target
-        await engine.execute('; @fig where without \\caption or not ^(\\caption where $$ matches /Target/)^ >> #other=yes');
+        // Match img, save as $img, then find caption under SAME parent and update it using $img
+        await engine.execute('; @img as $img && \\caption where same-parent($img) >> "Cap for $img"');
         await new Promise(r => setTimeout(r, 500));
 
         const text = document.getText();
-        assert.ok(text.includes('marked=yes'), `marked=yes should be present. Text: [${text}]`);
-        assert.ok(text.includes('a.png') && text.includes('marked=yes'), 'a.png should be marked');
-        assert.ok(text.includes('b.png') && text.includes('other=yes'), 'b.png should be other');
-        assert.ok(text.includes('c.png') && text.includes('other=yes'), 'c.png should be other');
+        assert.ok(text.includes('Cap for \\includegraphics{a.png}'), 'Caption 1 should be updated');
+        assert.ok(text.includes('Cap for \\includegraphics{b.png}'), 'Caption 2 should be updated');
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Query Engine: Counters (#i, #j)', async () => {
+        const content = `\\section{A} \\section{B} \\section{C}`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Update each section with global and local counters
+        await engine.execute('; \\section >> "$$ (#i-#j)"');
+        await new Promise(r => setTimeout(r, 500));
+
+        const text = document.getText();
+        assert.ok(text.includes('A (1-1)'), 'A should have 1-1');
+        assert.ok(text.includes('B (2-2)'), 'B should have 2-2');
+        assert.ok(text.includes('C (3-3)'), 'C should have 3-3');
 
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });

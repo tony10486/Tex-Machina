@@ -245,6 +245,55 @@ Footer
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
+    test('Query Engine: structural operator "vv" (push in)', async () => {
+        const content = `
+\\section{One}
+\\begin{figure}
+\\end{figure}
+`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Push section One into figure
+        await engine.execute('; \\section vv figure');
+
+        const text = document.getText();
+        assert.ok(text.includes('\\begin{figure}\n\\section{One}'), 'Section should be inside figure');
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Query Engine: structural operator "<->" (swap positions)', async () => {
+        const content = `\\section{A} \\section{B}`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Swap A and B
+        await engine.execute('; find \\section:first <-> \\section:last');
+
+        const text = document.getText();
+        assert.ok(text.indexOf('B') < text.indexOf('A'), 'B should come before A after swap');
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Query Engine: structural operator "<=>" (swap content)', async () => {
+        const content = `\\section{A} \\section{B}`;
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
+        const editor = await vscode.window.showTextDocument(document);
+
+        const engine = new HSQEngine(editor);
+        // Swap content of A and B
+        await engine.execute('; find \\section:first <=> \\section:last');
+
+        const text = document.getText();
+        assert.ok(text.includes('\\section{B} \\section{A}'), 'Contents should be swapped');
+
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
     test('Query Engine: state & variables (#j, as $var)', async () => {
         const content = `
 \\section{One}
