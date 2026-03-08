@@ -382,7 +382,12 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:fast": "vscode-test --run out/test/parser.test.js out/test/mathSplitter.test.js out/test/unitExpander.test.js out/test/macro.test.js out/test/table.test.js out/test/smartSearch.test.js",
+    "test:integration": "vscode-test --run out/test/autoBracing.test.js out/test/markdown.test.js out/test/smartQuotes.test.js out/test/diacritics.test.js out/test/labelDetection.test.js out/test/labelDiscovery.test.js out/test/nodeNavigation.test.js",
+    "test:webview": "vscode-test --run out/test/webview.test.js",
+    "test:perf": "vscode-test --run out/test/performance.test.js out/test/extreme.test.js",
+    "test:only": "vscode-test --run"
   },
   "dependencies": {
     "mathjax-full": "^3.2.1"
