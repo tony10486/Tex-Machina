@@ -107,6 +107,16 @@ export class HSQEngine {
 
     constructor(private editor: vscode.TextEditor) {}
 
+    private shortcuts: Record<string, string[]> = {
+        'img': ['includegraphics'], 'fig': ['figure', 'figure*'], 'tbl': ['tabular', 'table', 'longtable'],
+        'eq': ['equation', 'align', 'gather', 'multline'], 'math': ['equation', 'align', 'gather', 'text']
+    };
+
+    private expand(n: string): string[] {
+        const c = n.replace(/^[@\\]/, '');
+        return (n.startsWith('@') && this.shortcuts[c]) ? this.shortcuts[c] : [c];
+    }
+
     private parseAction(raw: string) {
         const actionOps = ['>>', ':=', '\\+=', '-=', '><', '<>', '>\\+<', '\\+>', '<\\+', '\\^\\^', 'vv'];
         const filterKeywords = ['where', 'without', 'has'];
@@ -143,6 +153,144 @@ export class HSQEngine {
         return { selector: sel, filter: fil, op, actionText: aT, storageVar: sV, storageReg: sR, cursorMode: cM };
     }
 
+    private matchNode(n: LatexNode, targetNames: string[], selector: string, text: string): boolean {
+        const nt = text.substring(n.start, n.end);
+        return targetNames.includes(n.name || '') || targetNames.includes(n.type) || targetNames.includes(nt) || (selector.startsWith('\\begin{') && nt.startsWith(selector));
+    }
+
+    private resolveHierarchy(selectorStr: string, root: LatexNode, text: string): LatexNode[] {
+        const segments: { op: string, sel: string }[] = [];
+        const regex = /\s*(>|~|\.\.\.|<|<<|\$|\s)\s*/g;
+        let match;
+        let lastIdx = 0;
+        let lastOp = "..."; 
+
+        while ((match = regex.exec(selectorStr)) !== null) {
+            const selPart = selectorStr.substring(lastIdx, match.index).trim();
+            if (selPart) segments.push({ op: lastOp, sel: selPart });
+            lastOp = match[1].trim() || "...";
+            lastIdx = regex.lastIndex;
+        }
+        const finalPart = selectorStr.substring(lastIdx).trim();
+        if (finalPart) segments.push({ op: lastOp, sel: finalPart });
+
+        if (segments.length === 0) return [];
+
+        let currentNodes: LatexNode[] = [root];
+        for (const seg of segments) {
+            let nextNodes: LatexNode[] = [];
+            const targetNames = this.expand(seg.sel);
+            for (const n of currentNodes) {
+                if (seg.op === ">") nextNodes.push(...n.children.filter(child => this.matchNode(child, targetNames, seg.sel, text)));
+                else if (seg.op === "..." || seg.op === " ") {
+                    const collect = (nodes: LatexNode[]) => {
+                        for (const child of nodes) {
+                            if (this.matchNode(child, targetNames, seg.sel, text)) nextNodes.push(child);
+                            collect(child.children);
+                        }
+                    };
+                    collect(n.children);
+                } else if (seg.op === "~") {
+                    if (n.parent) {
+                        const idx = n.parent.children.indexOf(n);
+                        if (idx !== -1 && idx < n.parent.children.length - 1) {
+                            const sib = n.parent.children[idx + 1];
+                            if (this.matchNode(sib, targetNames, seg.sel, text)) nextNodes.push(sib);
+                        }
+                    }
+                } else if (seg.op === "<") {
+                    if (n.parent && this.matchNode(n.parent, targetNames, seg.sel, text)) nextNodes.push(n.parent);
+                } else if (seg.op === "<<") {
+                    let p = n.parent;
+                    while (p) { if (this.matchNode(p, targetNames, seg.sel, text)) nextNodes.push(p); p = p.parent; }
+                } else if (seg.op === "$") {
+                    const collect = (nodes: LatexNode[]) => {
+                        for (const child of nodes) {
+                            if (this.matchNode(child, targetNames, seg.sel, text)) nextNodes.push(child);
+                            collect(child.children);
+                        }
+                    };
+                    collect(n.children);
+                }
+            }
+            currentNodes = Array.from(new Set(nextNodes));
+        }
+        return currentNodes;
+    }
+
+    private evaluateFilter(t: LatexNode, filterStr: string, text: string): boolean {
+        if (!filterStr) return true;
+
+        // Recursive evaluator for AND/OR/NOT
+        const evalExpr = (expr: string): boolean => {
+            if (expr.includes(' or ')) {
+                return expr.split(' or ').some(part => evalExpr(part.trim()));
+            }
+            if (expr.includes(' and ')) {
+                return expr.split(' and ').every(part => evalExpr(part.trim()));
+            }
+            if (expr.startsWith('not ')) {
+                return !evalExpr(expr.substring(4).trim());
+            }
+
+            // Leaf conditions
+            const hasC = (nodes: LatexNode[], name: string): boolean => nodes.some(n => n.name === name || hasC(n.children, name));
+            const tt = text.substring(t.start, t.end);
+
+            if (expr.startsWith('has ')) {
+                return hasC(t.children, this.expand(expr.substring(4).trim())[0]);
+            }
+            if (expr.startsWith('without ')) {
+                return !hasC(t.children, this.expand(expr.substring(8).trim())[0]);
+            }
+            if (expr.startsWith('where ')) {
+                const sub = expr.substring(6).trim();
+                
+                // Regex matches: $$ matches /pattern/
+                const regexMatch = sub.match(/\$\$\s+matches\s+\/(.*)\//);
+                if (regexMatch) {
+                    const content = (t.type === 'env') ? tt.substring(`\\begin{${t.name}}`.length, tt.length - `\\end{${t.name}}`.length).trim() : (t.type === 'cmd' && t.args.length > 0) ? text.substring(t.args[0].start, t.args[0].end).trim() : tt.trim();
+                    return new RegExp(regexMatch[1]).test(content);
+                }
+
+                // Numeric comparisons: #w > 10
+                const numCompMatch = sub.match(/#([a-zA-Z]+)\s*(>|<|>=|<=|==|!=)\s*([\d\.]+(?:[a-z]+|%)?)/);
+                if (numCompMatch) {
+                    const propName = numCompMatch[1];
+                    const op = numCompMatch[2];
+                    const valStr = numCompMatch[3];
+                    
+                    const opt = t.opts.find(o => text.substring(o.start, o.end).includes(propName));
+                    if (opt) {
+                        const optText = text.substring(opt.start, opt.end);
+                        const m = optText.match(new RegExp(`${propName}=([\\d\\.]+)`));
+                        if (m) {
+                            const actual = parseFloat(m[1]);
+                            const target = parseFloat(valStr);
+                            if (op === '>') return actual > target;
+                            if (op === '<') return actual < target;
+                            if (op === '>=') return actual >= target;
+                            if (op === '<=') return actual <= target;
+                            if (op === '==') return actual === target;
+                            if (op === '!=') return actual !== target;
+                        }
+                    }
+                    return false;
+                }
+
+                // Equality: $$ == "..."
+                const eqMatch = sub.match(/\$\$\s*==\s*"(.*?)"/);
+                if (eqMatch) {
+                    const content = (t.type === 'env') ? tt.substring(`\\begin{${t.name}}`.length, tt.length - `\\end{${t.name}}`.length).trim() : (t.type === 'cmd' && t.args.length > 0) ? text.substring(t.args[0].start, t.args[0].end).trim() : tt.trim();
+                    return content === eqMatch[1];
+                }
+            }
+            return true;
+        };
+
+        return evalExpr(filterStr);
+    }
+
     public async execute(queryStr: string): Promise<boolean> {
         if (queryStr.startsWith(';')) queryStr = queryStr.substring(1).trim();
         HSQEngine.globalCounter = 0;
@@ -168,49 +316,26 @@ export class HSQEngine {
 
         const actionsRaw = firstPart.split(/\s+&\s+/).map(a => a.trim());
         const primary = this.parseAction(actionsRaw[0]);
-        let sel = primary.selector;
-        const isContent = sel.endsWith(':*');
-        if (isContent) sel = sel.slice(0, -2);
+        let selStr = primary.selector;
+        const isContent = selStr.endsWith(':*');
+        if (isContent) selStr = selStr.slice(0, -2);
         let pseudo = "";
-        if (sel.includes(':')) { const pts = sel.split(':'); sel = pts[0]; pseudo = pts[1]; }
-
-        const shortcuts: Record<string, string[]> = {
-            'img': ['includegraphics'], 'fig': ['figure', 'figure*'], 'tbl': ['tabular', 'table'],
-            'eq': ['equation', 'align', 'gather', 'multline'], 'math': ['equation', 'align', 'gather', 'text']
-        };
-        const expand = (n: string): string[] => {
-            const c = n.replace(/^[@\\]/, '');
-            return (n.startsWith('@') && shortcuts[c]) ? shortcuts[c] : [c];
-        };
-
-        const targetNames = expand(sel);
-        let targets: LatexNode[] = [];
-        const collect = (nodes: LatexNode[]) => {
-            for (const n of nodes) {
-                const nt = text.substring(n.start, n.end);
-                const isM = targetNames.includes(n.name || '') || targetNames.includes(n.type) || targetNames.includes(nt) || (sel.startsWith('\\begin{') && nt.startsWith(sel));
-                if (isM) targets.push(n);
-                collect(n.children);
-            }
-        };
-        collect(root.children);
-
-        if (primary.filter) {
-            targets = targets.filter(t => {
-                const tt = text.substring(t.start, t.end);
-                const hasC = (nodes: LatexNode[], name: string): boolean => nodes.some(n => n.name === name || hasC(n.children, name));
-                if (primary.filter.startsWith('without')) return !hasC(t.children, expand(primary.filter.substring(7).trim())[0]);
-                if (primary.filter.startsWith('has')) return hasC(t.children, expand(primary.filter.substring(3).trim())[0]);
-                if (primary.filter.startsWith('where')) {
-                    const m = primary.filter.match(/where\s+\$\$\s*==\s*"(.*?)"/);
-                    if (m) {
-                        let c = (t.type === 'env') ? tt.substring(`\\begin{${t.name}}`.length, tt.length - `\\end{${t.name}}`.length).trim() : (t.type === 'cmd' && t.args.length > 0) ? text.substring(t.args[0].start, t.args[0].end).trim() : tt.trim();
-                        return c === m[1];
-                    }
-                }
-                return true;
-            });
+        if (selStr.includes(':') && !selStr.includes('\\begin{')) { 
+            const pts = selStr.split(':'); selStr = pts[0]; pseudo = pts[1]; 
         }
+
+        let targets = this.resolveHierarchy(selStr, root, text);
+        let insertLiteral: string | null = null;
+        if (command === 'insert' && selStr.startsWith('"') && selStr.endsWith('"')) {
+            insertLiteral = selStr.slice(1, -1).replace(/\\n/g, '\n');
+            const a = this.parseAction(actionsRaw[0]);
+            let destSelector = a.actionText;
+            destSelector = destSelector.replace(/^\.\|/, '').replace(/\|$/, '').replace(/^\|/, '').replace(/\.$/, '');
+            if (destSelector.endsWith('|')) destSelector = destSelector.slice(0, -1);
+            targets = this.resolveHierarchy(destSelector, root, text);
+        }
+
+        if (primary.filter && !(command === 'insert' && insertLiteral !== null)) targets = targets.filter(t => this.evaluateFilter(t, primary.filter, text));
 
         if (pseudo === 'first') targets = targets.slice(0, 1);
         if (pseudo === 'last') targets = targets.slice(-1);
@@ -272,18 +397,51 @@ export class HSQEngine {
             else if (command === 'move') {
                 const a = this.parseAction(actionsRaw[0]);
                 const rawD = rep(a.actionText.replace('.|', '').replace('|.', '').trim(), baseVal);
-                const findD = (nodes: LatexNode[]): LatexNode | undefined => {
-                    for (const n of nodes) {
-                        const dNames = expand(rawD);
-                        if ((n.name && dNames.includes(n.name)) || dNames.includes(n.type) || text.substring(n.start, n.end).includes(rawD)) return n;
-                        const cr = findD(n.children); if (cr) return cr;
-                    }
-                };
-                const dNode = findD(root.children);
-                if (dNode) {
+                const findD = this.resolveHierarchy(rawD, root, text)[0];
+                if (findD) {
                     edit.delete(document.uri, new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)));
-                    edit.insert(document.uri, document.positionAt(a.actionText.includes('.|') ? dNode.end : dNode.start), fullVal);
+                    edit.insert(document.uri, document.positionAt(a.actionText.includes('.|') ? findD.end : findD.start), fullVal);
                 }
+            } else if (command === 'exchange') {
+                const a = this.parseAction(actionsRaw[0]);
+                let target2Str = rep(a.actionText, baseVal);
+                let t2Pseudo = "";
+                if (target2Str.includes(':') && !target2Str.includes('\\begin{')) {
+                    const pts = target2Str.split(':'); target2Str = pts[0]; t2Pseudo = pts[1];
+                }
+
+                const rootAgain = new SemanticScanner(text).scan();
+                let target2Nodes = this.resolveHierarchy(target2Str, rootAgain, text);
+                if (t2Pseudo === 'first') target2Nodes = target2Nodes.slice(0, 1);
+                if (t2Pseudo === 'last') target2Nodes = target2Nodes.slice(-1);
+
+                if (target2Nodes.length > 0) {
+                    const t2 = target2Nodes[0];
+                    const val1 = text.substring(t.start, t.end);
+                    const val2 = text.substring(t2.start, t2.end);
+                    
+                    edit.replace(document.uri, new vscode.Range(document.positionAt(t.start), document.positionAt(t.end)), val2);
+                    edit.replace(document.uri, new vscode.Range(document.positionAt(t2.start), document.positionAt(t2.end)), val1);
+                    break; 
+                }
+            } else if (command === 'insert') {
+                const a = this.parseAction(actionsRaw[0]);
+                const content = insertLiteral !== null ? insertLiteral : fullVal;
+                let insertPos = t.start;
+                const actionText = a.actionText;
+                
+                if (actionText.startsWith('.|') && actionText.endsWith('|')) {
+                    insertPos = t.start + (t.type === 'env' ? `\\begin{${t.name}}`.length : 0);
+                } else if (actionText.startsWith('.|')) {
+                    insertPos = t.start;
+                } else if (actionText.endsWith('.|')) {
+                    insertPos = t.end - (t.type === 'env' ? `\\end{${t.name}}`.length : 0);
+                } else if (actionText.startsWith('|') && actionText.endsWith('.')) {
+                    insertPos = t.end;
+                } else {
+                    insertPos = t.start;
+                }
+                edit.insert(document.uri, document.positionAt(insertPos), content);
             } else {
                 let currentVal = baseVal;
                 let prependStr = "", appendStr = "";
