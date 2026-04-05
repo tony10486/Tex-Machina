@@ -31,14 +31,16 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                 return;
             }
 
+            // Collect all edits to apply them at once if possible, 
+            // though for auto-bracing usually only the last one matters.
             for (const change of event.contentChanges) {
                 // Reset escape if user moves to a new word/line or deletes
                 if (change.text.includes(' ') || change.text.includes('\n') || change.text === '') {
                     isEscaped = false;
                 }
 
-                // Check for single character insertion
-                if (change.text.length !== 1 || change.text === ' ' || change.text === '\t' || change.text === '\n' || change.text === '\r') {
+                // Check for character insertion (allow small batches for fast typing)
+                if (change.text.length === 0 || change.text.length > 10 || /[\s,\]\)$]/.test(change.text)) {
                     continue;
                 }
 
@@ -51,6 +53,11 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                 const charOffsetAfter = change.range.start.character + change.text.length;
                 const line = change.range.start.line;
 
+                // Safety check for line bounds (in case of concurrent deletions)
+                if (line >= editor.document.lineCount) {
+                    continue;
+                }
+
                 const lineText = editor.document.lineAt(line).text;
                 
                 if (charOffsetAfter < 3) {
@@ -58,7 +65,6 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                 }
 
                 // Find if there's an unbraced sequence after ^ or _
-                // Look back from current position to find ^ or _
                 let foundPrefix = -1;
                 for (let i = charOffsetAfter - 2; i >= 0; i--) {
                     if (lineText[i] === '^' || lineText[i] === '_') {
@@ -79,14 +85,11 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                             new vscode.Position(line, foundPrefix + 1),
                             new vscode.Position(line, charOffsetAfter)
                         );
-                        const bracedText = `{${content}}`;
-
-                        await editor.edit(editBuilder => {
-                            editBuilder.replace(rangeToReplace, bracedText);
-                        }, { undoStopBefore: false, undoStopAfter: false });
-
-                        const newPosition = new vscode.Position(line, foundPrefix + 1 + content.length + 1);
-                        editor.selection = new vscode.Selection(newPosition, newPosition);
+                        
+                        // Use insertSnippet for atomic operation and better cursor management
+                        // $0 ensures the cursor stays inside the braces
+                        const snippet = new vscode.SnippetString(`{${content}$0}`);
+                        await editor.insertSnippet(snippet, rangeToReplace);
                     }
                 }
             }

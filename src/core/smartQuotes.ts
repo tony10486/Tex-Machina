@@ -33,6 +33,7 @@ export function registerSmartQuotes(context: vscode.ExtensionContext) {
 
                 // Determine if it should be an opening or closing quote
                 const line = position.line;
+                if (line >= document.lineCount) continue;
                 const charOffset = position.character;
                 const lineText = document.lineAt(line).text;
                 
