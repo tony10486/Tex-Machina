@@ -62,6 +62,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     let isMainCmdParsed = false;
 
     // Detect query to prevent '>' splitting conflict
+    /*
     const isQuery = input.trim().startsWith('?');
     let startIdx = 0;
     if (isQuery) {
@@ -69,6 +70,9 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
         isMainCmdParsed = true;
         startIdx = input.indexOf('?') + 1;
     }
+    */
+    const isQuery = false;
+    let startIdx = 0;
 
     // 제안서 준수: O(N) 시간 복잡도의 단일 루프 [cite: 132]
     for (let i = startIdx; i < input.length; i++) {

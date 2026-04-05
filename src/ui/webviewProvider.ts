@@ -72,7 +72,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     private _lastNodes: any[] = [];
     private _lastEdges: any[] = [];
 
-    public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string, expr_latex?: string) {
+    public updatePreview(latex: string, vars: string[], analysis?: any, x3d_data?: any, warning?: string, preview_img?: string, expr_latex?: string, shouldShow: boolean = true) {
         this._lastLatex = latex;
         this._lastExprLatex = expr_latex || "";
         this._lastVars = vars;
@@ -81,12 +81,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         this._lastWarning = warning || "";
         this._lastPreviewImg = preview_img || "";
         
-        if (!this._view) {
+        if (!this._view && shouldShow) {
             vscode.commands.executeCommand('tex-machina.preview.focus');
         }
         
         this._view?.webview.postMessage({ type: 'update', latex, vars, analysis, x3d_data, warning, preview_img, expr_latex });
-        if (this._view) {
+        if (this._view && shouldShow) {
             this._view.show?.(true);
         }
     }

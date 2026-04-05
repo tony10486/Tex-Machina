@@ -19,7 +19,7 @@ import { registerScanPrevention } from './core/scanPrevention';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 
-import { HSQEngine } from './core/queryEngine';
+// import { HSQEngine } from './core/queryEngine';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -400,6 +400,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 if (response.status === 'success') {
                     
+/*
                     // [query] 쿼리 성공 처리 (전체 문서 업데이트)
                     if (response.mainCommand === '?' && response.fullText && currentEditor) {
                         const firstLine = currentEditor.document.lineAt(0);
@@ -412,6 +413,7 @@ export function activate(context: vscode.ExtensionContext) {
                         vscode.window.showInformationMessage("쿼리가 수행되어 문서가 업데이트되었습니다.");
                         continue;
                     }
+*/
 
                     // [labels] 라벨 분석 성공 처리
                     if (response.mainCommand === 'labels' && response.nodes) {
@@ -463,7 +465,8 @@ export function activate(context: vscode.ExtensionContext) {
                     }
 
                     // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
-                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex);
+                    const shouldShowWebview = currentMainCommand === 'plot';
+                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex, shouldShowWebview);
 
                     // [2] 에디터 삽입 로직 (에디터가 활성화되어 있는 경우 수행)
                     // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 일반 삽입 제외
@@ -752,6 +755,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+/*
             // [추가] 쿼리 기능 처리 (? 또는 ; ...)
             if (userInput.trim().startsWith('?') || userInput.trim().startsWith(';')) {
                 quickPick.hide();
@@ -768,6 +772,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 return;
             }
+*/
 
             // 특수 커맨드 (분석) 처리
             if (userInput === "analyze > width") {
