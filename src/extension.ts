@@ -15,6 +15,7 @@ import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerScanPrevention } from './core/scanPrevention';
+import { registerEnvAutoDelete } from './core/envAutoDelete';
 // import { registerFormulaHistory } from './core/formulaHistory';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
@@ -138,6 +139,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Smart Auto-bracing] 첨자 자동 괄호 기능 등록
     registerAutoBracing(context);
+
+    // [Env Auto-Delete] LaTeX 환경 자동 삭제 등록
+    registerEnvAutoDelete(context);
 
     // [Math Auto-Splitter] 수식 자동 분할 기능 등록
     registerMathSplitter(context);
