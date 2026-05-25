@@ -14,6 +14,7 @@ import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
+import { registerMathAutoWrap } from './core/mathAutoWrap';
 import { registerScanPrevention } from './core/scanPrevention';
 import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
@@ -230,6 +231,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Label Detection] 미사용 라벨 감지 및 삭제 기능 등록
     registerLabelDetection(context);
+
+    // [Math Auto-Wrap] 수식 모드 자동 전환 기능 등록
+    registerMathAutoWrap(context);
 
     // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
     registerScanPrevention(context);
