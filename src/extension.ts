@@ -16,11 +16,8 @@ import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerScanPrevention } from './core/scanPrevention';
 import { registerEnvAutoDelete } from './core/envAutoDelete';
-// import { registerFormulaHistory } from './core/formulaHistory';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
-
-// import { HSQEngine } from './core/queryEngine';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -229,9 +226,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
     registerScanPrevention(context);
-
-    // [Formula History] 수식 블록 기반 히스토리 기능 등록
-    // registerFormulaHistory(context);
 
     // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
@@ -758,25 +752,6 @@ export function activate(context: vscode.ExtensionContext) {
                 provider.updateMacros(macroManager.getMacros()); // 웹뷰 동기화 추가
                 return;
             }
-
-/*
-            // [추가] 쿼리 기능 처리 (? 또는 ; ...)
-            if (userInput.trim().startsWith('?') || userInput.trim().startsWith(';')) {
-                quickPick.hide();
-                try {
-                    const engine = new HSQEngine(editor);
-                    const success = await engine.execute(userInput);
-                    if (success) {
-                        vscode.window.showInformationMessage("쿼리가 성공적으로 수행되었습니다.");
-                    } else {
-                        vscode.window.showWarningMessage("쿼리와 일치하는 대상을 찾지 못했거나 변경 사항이 없습니다.");
-                    }
-                } catch (err: any) {
-                    vscode.window.showErrorMessage(`쿼리 실행 실패: ${err.message}`);
-                }
-                return;
-            }
-*/
 
             // 특수 커맨드 (분석) 처리
             if (userInput === "analyze > width") {
