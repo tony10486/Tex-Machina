@@ -16,7 +16,7 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 | | `trigsimp`, `expand_trig` | 삼각함수 식 정리 및 전개 |
 | 미적분 및 해석학 | `diff`, `int` | 미분 및 적분 (예: `diff > x`, `int > x,0,1`) |
 | | `limit`, `taylor` | 극한 및 테일러 급수 (예: `limit > x,0`, `taylor / 5`) |
-| | `asymp`, `laurent` | 점근 전개 및 로랑 급수 |
+| | `asymp`, `lurent` | 점근 전개 및 로랑 급수 |
 | | `jacobian`, `hessian` | 야코비안 및 헤세 행렬 |
 | 선형대수학 | `rref`, `det`, `inv` | 기약 행사다리꼴, 행렬식, 역행렬 |
 | | `eigen`, `rank`, `trace` | 고유값, 랭크, 주대각합 |

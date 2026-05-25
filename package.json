@@ -86,7 +86,8 @@
           "default": true,
           "description": "LaTeX 스마트 따옴표 기능을 활성화합니다. \" 키를 누르면 상황에 맞게 `` 또는 ''로 변환됩니다."
         },
-        "tex-machina.mathNav.enabled": {          "type": "boolean",
+        "tex-machina.mathNav.enabled": {
+          "type": "boolean",
           "default": false,
           "description": "수식 계층별 점프 모드 (Math Navigation Mode) 기능을 활성화합니다. 활성화 시 Alt+방향키로 수식 내 주요 슬롯 사이를 점프할 수 있습니다."
         },
@@ -94,6 +95,30 @@
           "type": "boolean",
           "default": true,
           "description": "수식 점프 시 슬롯(괄호) 내 내용이 있다면 자동으로 선택(Selection)합니다."
+        },
+        "tex-machina.mathNav.jumpSymbols": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"],
+          "description": "수식 점프 시 멈출 기호(연산자, 구분자 등)들의 목록입니다."
+        },
+        "tex-machina.mathNav.selectBrackets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["{}", "[]", "()"],
+          "description": "자동 선택(Auto-selection)을 적용할 괄호 쌍 목록입니다. (예: '{}')"
+        },
+        "tex-machina.mathNav.skipCommands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["\\frac", "\\sqrt", "\\int", "\\sum", "\\prod", "\\lim", "\\vec", "\\bar", "\\hat", "\\tilde", "\\dot", "\\ddot", "\\sin", "\\cos", "\\tan", "\\log", "\\ln"],
+          "description": "점프 시 명령어를 건너뛰고 바로 내부 인자로 이동할 LaTeX 명령어 목록입니다."
+        },
+        "tex-machina.mathNav.boundaryBehavior": {
+          "type": "string",
+          "enum": ["before", "after", "both"],
+          "default": "both",
+          "description": "기호 주변에서 멈출 위치를 설정합니다. (before: 기호 앞, after: 기호 뒤, both: 양쪽 모두)"
         },
         "tex-machina.splitMath.atPlus": {
           "type": "boolean",
@@ -111,120 +136,81 @@
           "default": "&&",
           "description": "명령어 체이닝을 위한 구분자를 설정합니다. (기본값: &&)"
         },
-        "tex-machina.macros.customContexts": {
-          "type": "array",
-          "title": "사용자 정의 매크로 컨텍스트",
-          "markdownDescription": "### 🛠 매크로 컨텍스트 설정 가이드\n커서가 특정 환경(주석, 코드 등)에 있을 때만 작동하는 매크로를 정의합니다.\n- **사용법**: 매크로 정의 시 `이름:컨텍스트` 형태로 등록 (예: `;abc:comment`)\n- **편의 기능**: [자주 쓰이는 컨텍스트 세트 추가하기](command:tex-machina.addContextShortcut)",
-          "items": {
-            "type": "object",
-            "title": "컨텍스트 항목",
-            "properties": {
-              "name": {
-                "type": "string",
-                "title": "컨텍스트 이름",
-                "description": "매크로 호출 시 사용할 이름 (예: comment)",
-                "pattern": "^[a-zA-Z0-9_-]+$",
-                "errorMessage": "영문, 숫자, -, _ 만 사용 가능합니다."
-              },
-              "regex": {
-                "type": "string",
-                "title": "감지용 정규표현식",
-                "description": "해당 영역을 판별할 Regex (예: ^\\s*%.*)"
-              },
-              "scope": {
-                "type": "string",
-                "title": "검사 범위",
-                "enum": [
-                  "line",
-                  "around"
-                ],
-                "default": "line",
-                "enumDescriptions": [
-                  "현재 줄만 검사 (성능 위주)",
-                  "전후 2줄 포함 총 5줄 검사 (멀티라인 환경용)"
-                ]
-              }
+        "tex-machina.labelVisualization.settings": {
+          "type": "object",
+          "title": "라벨 시각화 설정",
+          "description": "라벨 디펜던시 시각화 그래프의 물리 엔진 및 노드 스타일을 설정합니다.",
+          "properties": {
+            "physicsEnabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "물리 엔진 애니메이션 활성화 여부"
             },
-            "required": [
-              "name",
-              "regex"
-            ]
-          },
-          "default": [
-            {
-              "name": "comment",
-              "regex": "^\\s*%.*",
-              "scope": "line"
+            "solver": {
+              "type": "string",
+              "enum": [
+                "barnesHut",
+                "forceAtlas2Based",
+                "repulsion",
+                "hierarchicalRepulsion"
+              ],
+              "default": "forceAtlas2Based",
+              "description": "물리 엔진 솔버"
+            },
+            "gravitationalConstant": {
+              "type": "number",
+              "default": -80,
+              "description": "중력 상수 (척력 강도)"
+            },
+            "springLength": {
+              "type": "number",
+              "default": 80,
+              "description": "노드 간 기본 거리 (스프링 길이)"
+            },
+            "springConstant": {
+              "type": "number",
+              "default": 0.04,
+              "description": "스프링 강성"
+            },
+            "avoidOverlap": {
+              "type": "number",
+              "default": 1,
+              "minimum": 0,
+              "maximum": 1,
+              "description": "노드 겹침 방지 강도"
+            },
+            "stabilizationIterations": {
+              "type": "integer",
+              "default": 150,
+              "description": "초기 안정화 반복 횟수"
+            },
+            "baseSize": {
+              "type": "number",
+              "default": 12,
+              "description": "노드의 기본 크기"
+            },
+            "stabilizationFinish": {
+              "type": "string",
+              "enum": [
+                "none",
+                "fit",
+                "disablePhysics"
+              ],
+              "default": "none",
+              "description": "안정화 종료 후 처리 방식"
             }
-          ]
-        },
-        "tex-machina.labelVisualization.physics.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "라벨 시각화에서 물리 엔진 애니메이션을 활성화합니다."
-        },
-        "tex-machina.labelVisualization.physics.solver": {
-          "type": "string",
-          "enum": [
-            "barnesHut",
-            "forceAtlas2Based",
-            "repulsion",
-            "hierarchicalRepulsion"
-          ],
-          "default": "forceAtlas2Based",
-          "description": "물리 엔진 솔버를 선택합니다."
-        },
-        "tex-machina.labelVisualization.physics.gravitationalConstant": {
-          "type": "number",
-          "default": -80,
-          "description": "중력 상수 (값이 작을수록 노드 간의 척력이 강해집니다)."
-        },
-        "tex-machina.labelVisualization.physics.springLength": {
-          "type": "number",
-          "default": 80,
-          "description": "스프링의 기본 길이."
-        },
-        "tex-machina.labelVisualization.physics.springConstant": {
-          "type": "number",
-          "default": 0.04,
-          "description": "스프링 상수 (값이 클수록 스프링이 팽팽해집니다)."
-        },
-        "tex-machina.labelVisualization.physics.avoidOverlap": {
-          "type": "number",
-          "default": 1,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "노드 겹침 방지 강도 (0~1)."
-        },
-        "tex-machina.labelVisualization.physics.stabilizationIterations": {
-          "type": "integer",
-          "default": 150,
-          "description": "초기 안정화 반복 횟수."
-        },
-        "tex-machina.labelVisualization.node.baseSize": {
-          "type": "number",
-          "default": 12,
-          "description": "노드의 기본 크기."
-        },
-        "tex-machina.labelVisualization.node.spacing": {
-          "type": "number",
-          "default": 80,
-          "description": "노드 간의 간격 (스프링 길이)."
-        },
-        "tex-machina.labelVisualization.physics.stabilizationFinish": {
-          "type": "string",
-          "enum": [
-            "none",
-            "fit",
-            "disablePhysics"
-          ],
-          "default": "none",
-          "enumDescriptions": [
-            "아무것도 하지 않음",
-            "화면에 맞게 크기 조절 (Fit View)",
-            "물리 엔진 비활성화"
-          ],
-          "description": "애니메이션(안정화) 종료 후 처리 방식."
+          },
+          "default": {
+            "physicsEnabled": true,
+            "solver": "forceAtlas2Based",
+            "gravitationalConstant": -80,
+            "springLength": 80,
+            "springConstant": 0.04,
+            "avoidOverlap": 1,
+            "stabilizationIterations": 150,
+            "baseSize": 12,
+            "stabilizationFinish": "none"
+          }
         }
       }
     },

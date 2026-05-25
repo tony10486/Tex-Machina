@@ -105,19 +105,18 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
     private _getLabelSettings() {
         const config = vscode.workspace.getConfiguration('tex-machina.labelVisualization');
-        const phys = config.get<any>('physics');
-        const node = config.get<any>('node');
+        const s = config.get<any>('settings') || {};
         
         return {
-            enabled: phys?.enabled !== false,
-            solver: phys?.solver || 'forceAtlas2Based',
-            gravitationalConstant: phys?.gravitationalConstant ?? -80,
-            springLength: node?.spacing ?? 80, // spacing을 springLength로 매핑
-            springConstant: phys?.springConstant ?? 0.04,
-            avoidOverlap: phys?.avoidOverlap ?? 1,
-            stabilizationIterations: phys?.stabilizationIterations ?? 150,
-            baseSize: node?.baseSize ?? 12,
-            stabilizationFinish: phys?.stabilizationFinish ?? 'none'
+            enabled: s.physicsEnabled !== false,
+            solver: s.solver || 'forceAtlas2Based',
+            gravitationalConstant: s.gravitationalConstant ?? -80,
+            springLength: s.springLength ?? 80,
+            springConstant: s.springConstant ?? 0.04,
+            avoidOverlap: s.avoidOverlap ?? 1,
+            stabilizationIterations: s.stabilizationIterations ?? 150,
+            baseSize: s.baseSize ?? 12,
+            stabilizationFinish: s.stabilizationFinish || 'none'
         };
     }
 

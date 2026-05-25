@@ -2,6 +2,10 @@ import * as vscode from 'vscode';
 
 let isMathNavActive = false;
 let isSelectContentEnabled = true;
+let jumpSymbols: string[] = ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"];
+let selectBrackets: string[] = ["{}", "[]", "()"];
+let skipCommands: string[] = ["\\frac", "\\sqrt", "\\int", "\\sum", "\\prod", "\\lim", "\\vec", "\\bar", "\\hat", "\\tilde", "\\dot", "\\ddot", "\\sin", "\\cos", "\\tan", "\\log", "\\ln"];
+let boundaryBehavior: 'before' | 'after' | 'both' = 'both';
 
 /**
  * Formula Node Navigation:
@@ -9,10 +13,18 @@ let isSelectContentEnabled = true;
  * instead of words.
  */
 export function registerNodeNavigation(context: vscode.ExtensionContext) {
-    const config = vscode.workspace.getConfiguration('tex-machina');
-    isMathNavActive = config.get<boolean>('mathNav.enabled', false);
-    isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
-    vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
+    const updateLocalConfig = () => {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        isMathNavActive = config.get<boolean>('mathNav.enabled', false);
+        isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
+        jumpSymbols = config.get<string[]>('mathNav.jumpSymbols', ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"]);
+        selectBrackets = config.get<string[]>('mathNav.selectBrackets', ["{}", "[]", "()"]);
+        skipCommands = config.get<string[]>('mathNav.skipCommands', ["\\frac", "\\sqrt", "\\int", "\\sum", "\\prod", "\\lim", "\\vec", "\\bar", "\\hat", "\\tilde", "\\dot", "\\ddot", "\\sin", "\\cos", "\\tan", "\\log", "\\ln"]);
+        boundaryBehavior = config.get<'before' | 'after' | 'both'>('mathNav.boundaryBehavior', 'both');
+        vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
+    };
+
+    updateLocalConfig();
 
     // Toggle Command: cmd+shift+' l
     let toggleCommand = vscode.commands.registerCommand('tex-machina.toggleMathNav', () => {
@@ -43,14 +55,8 @@ export function registerNodeNavigation(context: vscode.ExtensionContext) {
 
     // Listen for configuration changes
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('tex-machina.mathNav.enabled')) {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            isMathNavActive = config.get<boolean>('mathNav.enabled', false);
-            vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
-        }
-        if (e.affectsConfiguration('tex-machina.mathNav.selectContent.enabled')) {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
+        if (e.affectsConfiguration('tex-machina.mathNav')) {
+            updateLocalConfig();
         }
     }));
 }
@@ -110,8 +116,14 @@ function navigate(direction: 'left' | 'right') {
     let selection: vscode.Selection | undefined;
     if (isSelectContentEnabled) {
         const charBefore = targetOffset > 0 ? mathBlock.text[targetOffset - 1] : '';
-        if (charBefore === '{' || charBefore === '[' || charBefore === '(') {
-            const endOffset = findMatchingBracket(mathBlock.text, targetOffset - 1);
+        const openingBrackets = selectBrackets.map(b => b[0]);
+        const bracketIdx = openingBrackets.indexOf(charBefore);
+        
+        if (bracketIdx !== -1) {
+            const pair = selectBrackets[bracketIdx];
+            const open = pair[0];
+            const close = pair[1];
+            const endOffset = findMatchingBracket(mathBlock.text, targetOffset - 1, open, close);
             if (endOffset !== -1 && endOffset > targetOffset) {
                 const endPos = document.positionAt(document.offsetAt(mathBlock.range.start) + endOffset);
                 selection = new vscode.Selection(targetPos, endPos);
@@ -134,9 +146,7 @@ function navigate(direction: 'left' | 'right') {
 /**
  * Finds the matching closing bracket for an opening bracket at the given index.
  */
-function findMatchingBracket(text: string, startIdx: number): number {
-    const open = text[startIdx];
-    const close = open === '{' ? '}' : (open === '[' ? ']' : ')');
+function findMatchingBracket(text: string, startIdx: number, open: string, close: string): number {
     let depth = 1;
     for (let i = startIdx + 1; i < text.length; i++) {
         if (text[i] === open) {
@@ -193,46 +203,55 @@ export function getJumpPoints(text: string): number[] {
     else if (text.startsWith('\\[')) { points.add(2); points.add(text.length - 2); }
 
     // 2. Identify structural elements and semantic slots
-    // Regex matches common structural markers and operators
-    const regex = /\\\\|\\\{|\\\}|\\\[|\\\]|\\(?:[a-zA-Z]+)|[\{\}\[\]\(\)\^\_\&\=\+\-\*\/\<\>\,\;\:]/g;
+    // Separate multi-character and single-character symbols for correct regex construction
+    const openingBrackets = selectBrackets.map(b => b[0]);
+    const multiCharSymbols = jumpSymbols.filter(s => s.length > 1).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const singleCharSymbols = jumpSymbols.filter(s => s.length === 1);
+    const brackets = [...new Set([...openingBrackets, ...selectBrackets.map(b => b[1])])];
+    
+    // Combine all single characters into a character class
+    const charClassContent = [...new Set([...singleCharSymbols, ...brackets, '^', '_', '&'])]
+        .map(s => s.replace(/[\]\-\\]/g, '\\$&')) // Escape special characters in character class
+        .join('');
+    
+    const pattern = `\\\\\\\\|\\\\\\{|\\\\\\}|\\\\\\[|\\\\\\]|\\\\(?:[a-zA-Z]+)${multiCharSymbols ? '|' + multiCharSymbols : ''}|[${charClassContent}]`;
+    const regex = new RegExp(pattern, 'g');
+    
     let match;
     while ((match = regex.exec(text)) !== null) {
         const m = match[0];
         const pos = match.index;
 
-        if (m === '{' || m === '[' || m === '(') {
+        if (openingBrackets.includes(m)) {
             // Slot: Inside the opening bracket
             points.add(pos + 1);
         } else if (m === '^' || m === '_') {
             // If the script is followed by a bracket, let the bracket handle the jump point (inside the slot)
             let nextChar = pos + 1 < text.length ? text[pos + 1] : '';
-            if (nextChar === '{' || nextChar === '[' || nextChar === '(') {
+            if (openingBrackets.includes(nextChar)) {
                 // Skip adding a point before the bracket
             } else {
                 // Slot: Right after the script marker
                 points.add(pos + 1);
-                // If it's a single character script (e.g., x^2), also allow jumping after it
                 if (pos + 1 < text.length && !/\s/.test(nextChar)) {
                     points.add(pos + 2);
                 }
             }
-        } else if (m === '&' || m === '\\\\' || m === '=' || m === '+' || m === '-' || m === '*' || m === '/' || m === '<' || m === '>' || m === ',' || m === ';' || m === ':') {
+        } else if (jumpSymbols.includes(m)) {
             // Alignment markers and major operators act as node boundaries
-            points.add(pos);
-            let endPos = pos + m.length;
-            while (endPos < text.length && /\s/.test(text[endPos])) {
-                endPos++;
+            if (boundaryBehavior === 'before' || boundaryBehavior === 'both') {
+                points.add(pos);
             }
-            points.add(endPos);
+            if (boundaryBehavior === 'after' || boundaryBehavior === 'both') {
+                let endPos = pos + m.length;
+                while (endPos < text.length && /\s/.test(text[endPos])) {
+                    endPos++;
+                }
+                points.add(endPos);
+            }
         } else if (m.startsWith('\\')) {
             // For major commands, we usually want to jump straight to their arguments.
-            // But for standalone commands (like \sin, \alpha), jumping to the start is good.
-            const skipPrefix = [
-                '\\frac', '\\sqrt', '\\int', '\\sum', '\\prod', '\\lim', 
-                '\\vec', '\\bar', '\\hat', '\\tilde', '\\dot', '\\ddot',
-                '\\sin', '\\cos', '\\tan', '\\log', '\\ln'
-            ];
-            if (!skipPrefix.some(p => m.startsWith(p))) {
+            if (!skipCommands.some(p => m.startsWith(p))) {
                 points.add(pos);
             }
             // Escape sequences like \{ should be treated as atoms

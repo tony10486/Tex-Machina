@@ -1096,7 +1096,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Listen for physics configuration changes to update webview
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('tex-machina.labelVisualization.physics')) {
+        if (e.affectsConfiguration('tex-machina.labelVisualization.settings')) {
             vscode.commands.executeCommand('tex-machina.discoverLabels');
         }
     }));
