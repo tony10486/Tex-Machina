@@ -155,7 +155,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 0; font-size: 13px; }
                 #out { padding: 10px; }
                 #container { padding: 0 10px; }
-                x3d { width: 100%; height: 400px; border: 1px solid #444; background: #000; }
+                #x3d-wrapper { width: 100%; height: 400px; border: 1px solid #444; background: #000; display: none; margin-top: 10px; }
+                x3d { width: 100%; height: 100%; border: none; }
                 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
                 .group { display: flex; flex-direction: column; }
                 label { font-weight: bold; margin-bottom: 2px; font-size: 0.9em; }
@@ -274,7 +275,15 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         </head>
         <body>
             <div id="out">TeX-Machina</div>
-            <div id="container"></div>
+            <div id="container">
+                <div id="x3d-wrapper">
+                    <x3d id="x" style="width:100%; height:100%;">
+                        <scene id="main-scene">
+                            <!-- content will be injected here -->
+                        </scene>
+                    </x3d>
+                </div>
+            </div>
             <div id="ui">
                 <details id="details-labels" ontoggle="vscode.postMessage({ command: 'toggleLabelDiscovery', expanded: this.open })">
                     <summary>Label Discovery</summary>
@@ -1124,34 +1133,49 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             }
 
                             document.getElementById('container').innerHTML = \`
-                                <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
-                                    <scene>
-                                        <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
-                                        <directionalLight id="dir-light" direction="-1 -1 -1" intensity="\${dirInt}" shadowIntensity="\${shdInt}" shadowMapSize="1024"></directionalLight>
-                                        <ambientLight id="amb-light" intensity="\${ambInt}"></ambientLight>
-                                        <\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')} id="vp" position="0 15 15" orientation="1 0 0 -0.785" \${(document.getElementById('proj').value === 'ortho' ? 'fieldOfView="-5 -5 5 5"' : '')}></\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')}>
-                                        <background skyColor="\${skyCol}"></background>
-                                        \${axesXml}
-                                        <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                        <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                        <transform translation="0 0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
-                                        <transform rotation="1 0 0 -1.57">
-                                            <ClipPlane plane="0 0 -1 \${rz[1]}" enabled="true"></ClipPlane>
-                                            <ClipPlane plane="0 0 1 \${-rz[0]}" enabled="true"></ClipPlane>
-                                            <shape>
-                                                <appearance><material></material></appearance>
-                                                <IndexedFaceSet solid="false" colorPerVertex="true" coordIndex="\${idx.join(' ')}">
-                                                    <coordinate point="\${x3d_data.points.map(p=>p.join(' ')).join(' ')}"></coordinate>
-                                                    <color color="\${x3d_data.colors.map(c=>c.join(' ')).join(' ')}"></color>
-                                                </IndexedFaceSet>
-                                            </shape>
-                                        </transform>
-                                    </scene>
-                                </x3d>\`;
-                            if(window.x3dom) {
-                                window.x3dom.reload();
-                                setTimeout(updateFromSliders, 200);
-                            }
+                                <div style="width:100%; height:400px; border:1px solid #444; background:#000;">
+                                    <x3d id="x" antialiasing="\${aa}" style="width:100%; height:100%; border:none;">
+                                        <scene>
+                                            <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
+                                            <directionalLight id="dir-light" direction="-1 -1 -1" intensity="\${dirInt}" shadowIntensity="\${shdInt}" shadowMapSize="1024"></directionalLight>
+                                            <ambientLight id="amb-light" intensity="\${ambInt}"></ambientLight>
+                                            <\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')} id="vp" position="0 15 15" orientation="1 0 0 -0.785" \${(document.getElementById('proj').value === 'ortho' ? 'fieldOfView="-5 -5 5 5"' : '')}></\${(document.getElementById('proj').value === 'ortho' ? 'OrthoViewpoint' : 'Viewpoint')}>
+                                            <background skyColor="\${skyCol}"></background>
+                                            \${axesXml}
+                                            <transform translation="0 \${ry[1]+1} 0"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.y}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                            <transform translation="\${rx[1]+1} 0 0" rotation="0 0 1 -1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.x}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                            <transform translation="0 0 \${rz[1]+1}" rotation="0 1 0 1.57"><shape><appearance><material diffuseColor="1 1 1"></material></appearance><text string='"\${x3d_data.labels.z}"'><fontstyle family='"\${f}"' size="1" justify='"MIDDLE"'></fontstyle></text></shape></transform>
+                                            <transform rotation="1 0 0 -1.57">
+                                                <ClipPlane plane="0 0 -1 \${rz[1]}" enabled="true"></ClipPlane>
+                                                <ClipPlane plane="0 0 1 \${-rz[0]}" enabled="true"></ClipPlane>
+                                                <shape>
+                                                    <appearance><material></material></appearance>
+                                                    <IndexedFaceSet solid="false" colorPerVertex="true" coordIndex="\${idx.join(' ')}">
+                                                        <coordinate point="\${x3d_data.points.map(p=>p.join(' ')).join(' ')}"></coordinate>
+                                                        <color color="\${x3d_data.colors.map(c=>c.join(' ')).join(' ')}"></color>
+                                                    </IndexedFaceSet>
+                                                </shape>
+                                            </transform>
+                                        </scene>
+                                    </x3d>
+                                </div>\`;
+                            
+                            // Re-initialize X3DOM with a small delay to ensure DOM is ready
+                            setTimeout(() => {
+                                if (window.x3dom) {
+                                    window.x3dom.reload();
+                                    setTimeout(updateFromSliders, 100);
+                                } else {
+                                    const checkX3dom = setInterval(() => {
+                                        if (window.x3dom) {
+                                            window.x3dom.reload();
+                                            setTimeout(updateFromSliders, 100);
+                                            clearInterval(checkX3dom);
+                                        }
+                                    }, 100);
+                                    setTimeout(() => clearInterval(checkX3dom), 5000);
+                                }
+                            }, 50);
                         } else if (preview_img) {
                             document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
                             document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
