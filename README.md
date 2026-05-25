@@ -188,3 +188,5 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 1. VS Code 확장 마켓플레이스에서 `TeX-Machina`를 검색하여 설치합니다.
 2. `.tex` 파일을 열고 `ctrl+shift+;` (macOS: `cmd+shift+;`)를 눌러 명령줄(CLI)이 뜨는지 확인하세요.
 
+
+

@@ -121,24 +121,25 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtml(webview: vscode.Webview) {
-        const mathjaxUri = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
-        const x3domJs = "https://www.x3dom.org/download/1.8.3/x3dom.js";
-        const x3domCss = "https://www.x3dom.org/download/1.8.3/x3dom.css";
-        const visNetworkJs = "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js";
-        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org https://unpkg.com; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net https://www.x3dom.org; font-src https://cdn.jsdelivr.net https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
+        const scriptUriMathjax = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'tex-mml-chtml.js'));
+        const scriptUriX3dom = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'x3dom.js'));
+        const styleUriX3dom = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'x3dom.css'));
+        const scriptUriVisNetwork = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vis-network.min.js'));
+
+        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' ${webview.cspSource}; style-src 'unsafe-inline' ${webview.cspSource}; font-src ${webview.cspSource}; connect-src ${webview.cspSource} blob:; worker-src 'self' ${webview.cspSource} blob:;`;
 
         return `<!DOCTYPE html>
         <html>
         <head>
             <meta http-equiv="Content-Security-Policy" content="${csp}">
-            <link rel="stylesheet" href="${x3domCss}">
-            <script src="${x3domJs}"></script>
-            <script src="${visNetworkJs}"></script>
+            <link rel="stylesheet" href="${styleUriX3dom}">
+            <script src="${scriptUriX3dom}"></script>
+            <script src="${scriptUriVisNetwork}"></script>
             <script>
                 window.MathJax = {
                     tex: {
-                        inlineMath: [['$', '$'], ['\\(', '\\)']],
-                        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                        inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                        displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
                         processEnvironments: true
                     },
                     options: {
@@ -149,7 +150,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 };
             </script>
-            <script src="${mathjaxUri}"></script>
+            <script src="${scriptUriMathjax}"></script>
             <style>
                 body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 0; font-size: 13px; }
                 #out { padding: 10px; }

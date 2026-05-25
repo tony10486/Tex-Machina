@@ -50,7 +50,10 @@
             },
             "angleUnit": {
               "type": "string",
-              "enum": ["deg", "rad"],
+              "enum": [
+                "deg",
+                "rad"
+              ],
               "default": "deg",
               "description": "각도 계산의 기본 단위 (도 또는 라디안)"
             },
@@ -63,7 +66,10 @@
             },
             "imaginaryUnit": {
               "type": "string",
-              "enum": ["i", "j"],
+              "enum": [
+                "i",
+                "j"
+              ],
               "default": "i",
               "description": "허수 단위 기호 (i 또는 j)"
             },
@@ -74,7 +80,10 @@
             },
             "defaultDomain": {
               "type": "string",
-              "enum": ["real", "complex"],
+              "enum": [
+                "real",
+                "complex"
+              ],
               "default": "real",
               "description": "변수의 기본 도메인 설정 (실수 또는 복소수). 복소수 설정 시 로그나 거듭제곱 계산 방식이 달라질 수 있습니다."
             },
@@ -110,9 +119,9 @@
         },
         "tex-machina.plot.yMultiplier": {
           "type": "number",
-          "default": 5.0,
-          "minimum": 1.0,
-          "maximum": 50.0,
+          "default": 5,
+          "minimum": 1,
+          "maximum": 50,
           "description": "2D 그래프 데이터(.dat) 생성 시 y축 표시 범위를 넘어서 계산할 배수 (Clipping Limit)"
         },
         "tex-machina.plot.lineColor": {
@@ -147,25 +156,70 @@
         },
         "tex-machina.mathNav.jumpSymbols": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\\\",
+            "&",
+            "=",
+            "+",
+            "-",
+            "*",
+            "/",
+            "<",
+            ">",
+            ",",
+            ";",
+            ":"
+          ],
           "description": "수식 점프 시 멈출 기호(연산자, 구분자 등)들의 목록입니다."
         },
         "tex-machina.mathNav.selectBrackets": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["{}", "[]", "()"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "{}",
+            "[]",
+            "()"
+          ],
           "description": "자동 선택(Auto-selection)을 적용할 괄호 쌍 목록입니다. (예: '{}')"
         },
         "tex-machina.mathNav.skipCommands": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["\\frac", "\\sqrt", "\\int", "\\sum", "\\prod", "\\lim", "\\vec", "\\bar", "\\hat", "\\tilde", "\\dot", "\\ddot", "\\sin", "\\cos", "\\tan", "\\log", "\\ln"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\frac",
+            "\\sqrt",
+            "\\int",
+            "\\sum",
+            "\\prod",
+            "\\lim",
+            "\\vec",
+            "\\bar",
+            "\\hat",
+            "\\tilde",
+            "\\dot",
+            "\\ddot",
+            "\\sin",
+            "\\cos",
+            "\\tan",
+            "\\log",
+            "\\ln"
+          ],
           "description": "점프 시 명령어를 건너뛰고 바로 내부 인자로 이동할 LaTeX 명령어 목록입니다."
         },
         "tex-machina.mathNav.boundaryBehavior": {
           "type": "string",
-          "enum": ["before", "after", "both"],
+          "enum": [
+            "before",
+            "after",
+            "both"
+          ],
           "default": "both",
           "description": "기호 주변에서 멈출 위치를 설정합니다. (before: 기호 앞, after: 기호 뒤, both: 양쪽 모두)"
         },
@@ -428,15 +482,17 @@
     "mathjax-full": "^3.2.1"
   },
   "devDependencies": {
-    "@types/vscode": "^1.109.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.54.0",
-    "eslint": "^9.39.2",
+    "@types/vscode": "^1.109.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.54.0",
+    "vis-network": "^10.1.0",
+    "x3dom": "^1.8.3"
   }
 }
