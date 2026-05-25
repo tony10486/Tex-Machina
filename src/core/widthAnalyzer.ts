@@ -234,12 +234,22 @@ export async function performWidthAnalysis(document: vscode.TextDocument) {
         return; // Canceled
     }
     
-    // 5. Extract Formulas
-    const formulaRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\]|\\begin\{(equation|align|gather|split|displaymath|multline|alignat)\*?\}[\s\S]*?\\end\{\2\*?\})/g;
+    // 5. Extract Formulas - Improved Regex for better performance
+    // Use a more non-backtracking friendly pattern
+    const formulaRegex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\[[\s\S]*?\\\]|\\begin\{(?:equation|align|gather|split|displaymath|multline|alignat)\*?\}[\s\S]*?\\end\{(?:\w+)\*?\})/g;
     
     const formulas: { formula: string, line: number }[] = [];
     let match;
+    
+    // Performance optimization: If document is very large, only analyze nearby or skip if too many
+    const maxFormulas = 200; 
+    let count = 0;
+
     while ((match = formulaRegex.exec(text)) !== null) {
+        if (count++ > maxFormulas) {
+            vscode.window.showWarningMessage(`문서 내 수식이 너무 많아 상위 ${maxFormulas}개만 분석합니다.`);
+            break;
+        }
         const startLine = document.positionAt(match.index).line + 1;
         formulas.push({ formula: match[0], line: startLine });
     }

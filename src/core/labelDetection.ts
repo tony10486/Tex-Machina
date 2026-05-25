@@ -90,36 +90,9 @@ export async function getUnusedLabels(document: vscode.TextDocument): Promise<La
     const text = document.getText();
     const allLabels = findLabels(text, document);
     
-    // Scan all .tex files in the workspace for references
-    const allRefs = new Set<string>();
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    
-    if (workspaceFolders) {
-        const texFiles = await vscode.workspace.findFiles('**/*.tex');
-        
-        for (const file of texFiles) {
-            // Optimization: if it's the current document, we already have the text
-            let fileText: string;
-            if (file.fsPath === document.uri.fsPath) {
-                fileText = text;
-            } else {
-                try {
-                    const doc = await vscode.workspace.openTextDocument(file);
-                    fileText = doc.getText();
-                } catch (e) {
-                    // Skip files that cannot be opened
-                    continue;
-                }
-            }
-            
-            const refsInFile = findReferences(fileText);
-            refsInFile.forEach(ref => allRefs.add(ref));
-        }
-    } else {
-        // No workspace, just scan the current document
-        const refsInFile = findReferences(text);
-        refsInFile.forEach(ref => allRefs.add(ref));
-    }
+    // Use the optimized cache from LabelTracker
+    await labelTracker.syncWorkspaceRefs(document.uri);
+    const allRefs = labelTracker.getGlobalRefs();
 
     return allLabels.filter(l => !allRefs.has(l.label));
 }
@@ -139,52 +112,66 @@ export async function updateLabelDecorations(editor: vscode.TextEditor) {
  */
 class LabelTracker {
     private previousLabels: Map<string, Map<string, string>> = new Map();
+    private fileRefCache: Map<string, Set<string>> = new Map();
     private allWorkspaceRefs: Set<string> = new Set();
     private isInitialized = false;
 
-    async syncWorkspaceRefs() {
-        const allRefs = new Set<string>();
-        
-        // 1. Check all open documents in the editor (includes unsaved changes)
-        for (const doc of vscode.workspace.textDocuments) {
-            if (doc.languageId === 'latex') {
-                const refs = findReferences(doc.getText());
-                refs.forEach(r => allRefs.add(r));
-            }
-        }
+    public getGlobalRefs(): Set<string> {
+        return this.allWorkspaceRefs;
+    }
 
-        // 2. Check other files in the workspace not currently open
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders) {
+    async syncWorkspaceRefs(affectedUri?: vscode.Uri) {
+        if (!this.isInitialized && !affectedUri) {
+            const allRefs = new Set<string>();
             const texFiles = await vscode.workspace.findFiles('**/*.tex');
-            const openUris = new Set(vscode.workspace.textDocuments.map(d => d.uri.toString()));
             
             for (const file of texFiles) {
-                if (!openUris.has(file.toString())) {
-                    try {
-                        const content = await vscode.workspace.fs.readFile(file);
-                        const text = new TextDecoder().decode(content);
-                        const refs = findReferences(text);
-                        refs.forEach(r => allRefs.add(r));
-                    } catch (e) { /* ignore */ }
-                }
+                await this.updateFileRefCache(file);
             }
+            this.rebuildGlobalRefs();
+            this.isInitialized = true;
+            return;
         }
-        
-        this.allWorkspaceRefs = allRefs;
+
+        if (affectedUri) {
+            await this.updateFileRefCache(affectedUri);
+            this.rebuildGlobalRefs();
+        }
+    }
+
+    private async updateFileRefCache(uri: vscode.Uri) {
+        try {
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+            let text: string;
+            if (doc) {
+                text = doc.getText();
+            } else {
+                const content = await vscode.workspace.fs.readFile(uri);
+                text = new TextDecoder().decode(content);
+            }
+            this.fileRefCache.set(uri.toString(), findReferences(text));
+        } catch (e) {
+            this.fileRefCache.delete(uri.toString());
+        }
+    }
+
+    private rebuildGlobalRefs() {
+        const newGlobalRefs = new Set<string>();
+        for (const refs of this.fileRefCache.values()) {
+            refs.forEach(r => newGlobalRefs.add(r));
+        }
+        this.allWorkspaceRefs = newGlobalRefs;
     }
 
     async initialize() {
         if (this.isInitialized) { return; }
         await this.syncWorkspaceRefs();
         
-        // Record initial state for all currently open documents
         for (const doc of vscode.workspace.textDocuments) {
             if (doc.languageId === 'latex') {
                 this.recordDocumentState(doc);
             }
         }
-        this.isInitialized = true;
     }
 
     recordDocumentState(document: vscode.TextDocument) {
@@ -205,17 +192,15 @@ class LabelTracker {
         const oldLabelMap = this.previousLabels.get(uri);
 
         if (oldLabelMap) {
-            // Re-sync references to catch the current state of \ref commands
-            await this.syncWorkspaceRefs();
+            // Only sync the current document's references to be efficient
+            await this.syncWorkspaceRefs(document.uri);
 
             for (const [label, oldContext] of oldLabelMap.entries()) {
                 if (!currentLabelMap.has(label)) {
-                    // Label was removed or renamed
                     if (this.allWorkspaceRefs.has(label)) {
                         vscode.window.showWarningMessage(`참조된 라벨 '${label}'이(가) 삭제되거나 이름이 변경되었습니다.`);
                     }
                 } else {
-                    // Label exists, check context change
                     const newContext = currentLabelMap.get(label);
                     if (newContext !== oldContext) {
                         if (this.allWorkspaceRefs.has(label)) {
