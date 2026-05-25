@@ -88,7 +88,14 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                         
                         // Use insertSnippet for atomic operation and better cursor management
                         // $0 ensures the cursor stays inside the braces
-                        const snippet = new vscode.SnippetString(`{${content}$0}`);
+                        // For common exponents defined in config, move cursor outside
+                        const escapeExponents = config.get<string[]>('autoBracing.escapeExponents', ['-1']);
+                        let snippet: vscode.SnippetString;
+                        if (escapeExponents.includes(content)) {
+                            snippet = new vscode.SnippetString(`{${content}}$0`);
+                        } else {
+                            snippet = new vscode.SnippetString(`{${content}$0}`);
+                        }
                         await editor.insertSnippet(snippet, rangeToReplace);
                     }
                 }

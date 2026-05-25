@@ -141,4 +141,52 @@ suite('Auto-bracing Test Suite', () => {
         assert.strictEqual(doc.lineAt(0).text, 'v_1)', "v_1) should NOT be auto-braced");
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
+
+    test('Auto-bracing: x^-1 should become x^{-1} and cursor outside', async () => {
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^-' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), '1');
+        });
+
+        for (let i = 0; i < 10; i++) {
+            if (document.lineAt(0).text === 'x^{-1}') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, 'x^{-1}', "Text should be auto-braced");
+        // x^{-1} is 6 characters. Cursor outside means it should be at index 6.
+        assert.strictEqual(editor.selection.active.character, 6, "Cursor should be outside braces for -1");
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    test('Auto-bracing: Configurable escape exponents (e.g., 12)', async () => {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        await config.update('autoBracing.escapeExponents', ['-1', '12'], vscode.ConfigurationTarget.Global);
+
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^1' });
+        const editor = await vscode.window.showTextDocument(document);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 3), '2');
+        });
+
+        for (let i = 0; i < 10; i++) {
+            if (document.lineAt(0).text === 'x^{12}') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        assert.strictEqual(document.lineAt(0).text, 'x^{12}', "Text should be auto-braced");
+        assert.strictEqual(editor.selection.active.character, 6, "Cursor should be outside braces for 12 when configured");
+
+        await config.update('autoBracing.escapeExponents', ['-1'], vscode.ConfigurationTarget.Global);
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
 });
