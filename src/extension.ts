@@ -53,11 +53,12 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
 
     // 설정 가져오기 (각 명령마다 동일한 설정 사용)
     const config = vscode.workspace.getConfiguration('tex-machina');
+    const calcSettings = config.get<any>('calc.settings', {});
     const laplaceConfig = {
-        source: config.get('laplace.sourceVariable', 't'),
-        target: config.get('laplace.targetVariable', 's')
+        source: calcSettings.laplaceSource || 't',
+        target: calcSettings.laplaceTarget || 's'
     };
-    const angleUnit = config.get('angleUnit', 'deg');
+    const angleUnit = calcSettings.angleUnit || 'deg';
     const datDensity = config.get('plot.datDensity', 500);
     const yMultiplier = config.get('plot.yMultiplier', 5.0);
     const lineColor = config.get('plot.lineColor', 'blue');
@@ -75,6 +76,12 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
             config: {
                 laplace: laplaceConfig,
                 angleUnit: angleUnit,
+                precision: calcSettings.precision,
+                imaginaryUnit: calcSettings.imaginaryUnit,
+                simplifyResult: calcSettings.simplifyResult,
+                defaultDomain: calcSettings.defaultDomain,
+                rationalNotation: calcSettings.rationalNotation,
+                autoFactor: calcSettings.autoFactor,
                 datDensity: datDensity,
                 yMultiplier: yMultiplier,
                 lineColor: lineColor,
@@ -848,13 +855,14 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             }
 
-            // 라플라스 및 각도 설정 가져오기
+            // 설정 가져오기
             const config = vscode.workspace.getConfiguration('tex-machina');
+            const calcSettings = config.get<any>('calc.settings', {});
             const laplaceConfig = {
-                source: config.get('laplace.sourceVariable', 't'),
-                target: config.get('laplace.targetVariable', 's')
+                source: calcSettings.laplaceSource || 't',
+                target: calcSettings.laplaceTarget || 's'
             };
-            const angleUnit = config.get('angleUnit', 'deg');
+            const angleUnit = calcSettings.angleUnit || 'deg';
             const datDensity = config.get('plot.datDensity', 500);
             const yMultiplier = config.get('plot.yMultiplier', 5.0);
             const lineColor = config.get('plot.lineColor', 'blue');
@@ -874,6 +882,9 @@ export function activate(context: vscode.ExtensionContext) {
                 config: {
                     laplace: laplaceConfig,
                     angleUnit: angleUnit,
+                    precision: calcSettings.precision,
+                    imaginaryUnit: calcSettings.imaginaryUnit,
+                    simplifyResult: calcSettings.simplifyResult,
                     datDensity: datDensity,
                     yMultiplier: yMultiplier,
                     lineColor: lineColor,
