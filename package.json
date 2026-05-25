@@ -136,6 +136,11 @@
           "default": true,
           "description": "수식 모드 자동 전환 기능을 활성화합니다. 일반 텍스트 모드에서 \\alpha나 \\sum 같은 수학 전용 매크로를 타이핑하면 자동으로 $ $를 씌워줍니다."
         },
+        "tex-machina.fractionShorthand.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "분수 자동 변환 기능을 활성화합니다. '1/2' 또는 '(a+b)/c' 입력 후 스페이스를 누르면 자동으로 \\frac{}{}으로 변환됩니다."
+        },
         "tex-machina.markdownLatex.enabled": {
           "type": "boolean",
           "default": true,
@@ -430,7 +435,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:fast": "vscode-test --run out/test/parser.test.js out/test/mathSplitter.test.js out/test/unitExpander.test.js out/test/macro.test.js out/test/table.test.js out/test/smartSearch.test.js",
-    "test:integration": "vscode-test --run out/test/autoBracing.test.js out/test/markdown.test.js out/test/smartQuotes.test.js out/test/diacritics.test.js out/test/labelDetection.test.js out/test/labelDiscovery.test.js out/test/nodeNavigation.test.js out/test/mathAutoWrap.test.js",
+    "test:integration": "vscode-test --run out/test/autoBracing.test.js out/test/markdown.test.js out/test/smartQuotes.test.js out/test/diacritics.test.js out/test/labelDetection.test.js out/test/labelDiscovery.test.js out/test/nodeNavigation.test.js out/test/mathAutoWrap.test.js out/test/fractionShorthand.test.js",
     "test:webview": "vscode-test --run out/test/webview.test.js",
     "test:perf": "vscode-test --run out/test/performance.test.js out/test/extreme.test.js",
     "test:only": "vscode-test --run"
