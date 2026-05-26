@@ -281,10 +281,26 @@
             "baseSize": 12,
             "stabilizationFinish": "none"
           }
+        },
+        "tex-machina.toggle.duration": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 3600,
+          "description": "토글 모드가 활성화되어 유지되는 시간(초)입니다."
+        },
+        "tex-machina.toggle.changeStatusBarColor": {
+          "type": "boolean",
+          "default": true,
+          "description": "토글 모드가 활성화되었을 때 VS Code의 상태 표시줄(Status Bar) 배경색을 초록색으로 변경할지 여부입니다."
         }
       }
     },
     "commands": [
+      {
+        "command": "tex-machina.toggleSubscriptMode",
+        "title": "LaTeX: Toggle Implicit Subscript Mode"
+      },
       {
         "command": "tex-machina.addContextShortcut",
         "title": "LaTeX: Add Common Macro Contexts"
@@ -365,6 +381,12 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "tex-machina.toggleSubscriptMode",
+        "key": "ctrl+'",
+        "mac": "cmd+'",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
       {
         "command": "tex-machina.openCLI",
         "key": "ctrl+shift+;",

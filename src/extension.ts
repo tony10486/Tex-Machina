@@ -21,6 +21,7 @@ import { registerScanPrevention } from './core/scanPrevention';
 import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
+import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -138,6 +139,9 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
+
+    // [Toggle Subscript Mode] 토글 모드 및 숫자 첨자 자동화 등록
+    registerToggleMode(context);
 
     macroManager = new MacroManager(context);
 
@@ -1125,7 +1129,8 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 }
 
-export function deactivate() {
+export async function deactivate() {
+    await deactivateToggleMode();
     if (pythonProcess) {
         pythonProcess.kill();
     }
