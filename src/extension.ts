@@ -6,6 +6,7 @@ import { parseUserCommand, splitChain } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
 import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
+import { registerAutoLeftRight } from './core/autoLeftRight';
 import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
 import { registerMarkdownLatex } from './core/markdownLatex';
@@ -145,6 +146,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Smart Auto-bracing] 첨자 자동 괄호 기능 등록
     registerAutoBracing(context);
+
+    // [Auto \left \right] 괄호 크기 자동 조절 기능 등록
+    registerAutoLeftRight(context);
 
     // [Env Auto-Delete] LaTeX 환경 자동 삭제 등록
     registerEnvAutoDelete(context);

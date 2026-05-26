@@ -131,6 +131,11 @@
           "default": ["-1"],
           "description": "중괄호 자동 완성 시 커서를 밖으로 이동시킬 지수(exponent) 목록입니다. (예: ['-1', '2'])"
         },
+        "tex-machina.autoLeftRight.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "수식 모드 자동 \u005cleft \u005cright (Auto \u005cleft \u005cright) 기능을 활성화합니다. ( ) 등 입력 시 내부에 분수나 적분 같은 높은 요소가 있으면 자동으로 \u005cleft, \u005cright를 붙여줍니다."
+        },
         "tex-machina.autoMathWrap.enabled": {
           "type": "boolean",
           "default": true,
