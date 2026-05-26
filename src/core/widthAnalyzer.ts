@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { mathjax } from 'mathjax-full/js/mathjax.js';
 import { TeX } from 'mathjax-full/js/input/tex.js';
 import { SVG } from 'mathjax-full/js/output/svg.js';
@@ -114,8 +114,9 @@ function staticAnalysis(text: string): { width: number, fontSize: number } {
 
 /**
  * Dynamic Analysis: Use pdflatex to get actual \textwidth and \f@size.
+ * Refactored to be asynchronous to avoid blocking the UI.
  */
-function dynamicAnalysis(preamble: string, workspaceDir: string): { width: number, fontSize: number } {
+async function dynamicAnalysis(preamble: string, workspaceDir: string): Promise<{ width: number, fontSize: number }> {
     const tempFile = path.join(workspaceDir, '_width_check_temp.tex');
     const content = `
 ${preamble}
@@ -128,34 +129,49 @@ ${preamble}
 `;
     fs.writeFileSync(tempFile, content);
     
-    try {
-        const res = spawnSync('pdflatex', ['-interaction=nonstopmode', tempFile], { 
-            cwd: workspaceDir,
-            timeout: 10000 
+    return new Promise((resolve) => {
+        const child = spawn('pdflatex', ['-interaction=nonstopmode', tempFile], { 
+            cwd: workspaceDir
         });
+
+        let output = "";
+        child.stdout.on('data', (data) => { output += data.toString(); });
+        child.stderr.on('data', (data) => { output += data.toString(); });
         
-        const output = res.stdout.toString();
-        const mWidth = output.match(/WIDTH_RESULT=([\d\.]+)pt/);
-        const mSize = output.match(/FONT_SIZE_RESULT=([\d\.]+)pt/);
-        
-        // Clean up temp files
-        const base = path.join(workspaceDir, '_width_check_temp');
-        ['.tex', '.aux', '.log', '.pdf'].forEach(ext => {
-            const f = base + ext;
-            if (fs.existsSync(f)) { fs.unlinkSync(f); }
+        const timeout = setTimeout(() => {
+            child.kill();
+            resolve({ width: 0, fontSize: 10 });
+        }, 15000);
+
+        child.on('close', (code) => {
+            clearTimeout(timeout);
+            
+            const mWidth = output.match(/WIDTH_RESULT=([\d\.]+)pt/);
+            const mSize = output.match(/FONT_SIZE_RESULT=([\d\.]+)pt/);
+            
+            // Clean up temp files
+            const base = path.join(workspaceDir, '_width_check_temp');
+            ['.tex', '.aux', '.log', '.pdf'].forEach(ext => {
+                const f = base + ext;
+                if (fs.existsSync(f)) { try { fs.unlinkSync(f); } catch(e) {} }
+            });
+            
+            if (mWidth) {
+                resolve({
+                    width: parseFloat(mWidth[1]),
+                    fontSize: mSize ? parseFloat(mSize[1]) : 10
+                });
+            } else {
+                resolve({ width: 0, fontSize: 10 });
+            }
         });
-        
-        if (mWidth) {
-            return {
-                width: parseFloat(mWidth[1]),
-                fontSize: mSize ? parseFloat(mSize[1]) : 10
-            };
-        }
-    } catch (e) {
-        console.error("Dynamic analysis failed", e);
-    }
-    
-    return { width: 0, fontSize: 10 }; 
+
+        child.on('error', (err) => {
+            console.error("pdflatex execution error:", err);
+            clearTimeout(timeout);
+            resolve({ width: 0, fontSize: 10 });
+        });
+    });
 }
 
 export async function performWidthAnalysis(document: vscode.TextDocument) {
@@ -223,7 +239,7 @@ export async function performWidthAnalysis(document: vscode.TextDocument) {
     );
     
     if (dynamicAnswer === "정밀 분석(Dynamic)") {
-        const dRes = dynamicAnalysis(preamble, workspaceDir);
+        const dRes = await dynamicAnalysis(preamble, workspaceDir);
         if (dRes.width > 0) {
             docWidth = dRes.width;
             baseFontSize = dRes.fontSize;

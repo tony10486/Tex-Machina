@@ -69,25 +69,69 @@ suite('Macro and Chaining Test Suite', () => {
         await manager.defineMacro('abc', 'default_result');
 
         // Mock Document and Editor
-        const createMockEditor = (text: string, pos: number): any => ({
-            document: {
-                getText: (range?: vscode.Range) => {
-                    if (range) {
-                        return text.substring(range.start.character, range.end.character);
-                    }
-                    return text;
-                },
-                offsetAt: (p: any) => p.character, // Simple offset for testing
-                positionAt: (offset: number) => ({ character: offset, line: 0 }),
-                lineAt: (line: number) => ({
-                    text: text.split('\n')[line] || ""
-                })
-            },
-            selection: {
-                active: { character: pos, line: 0 },
-                translate: (deltaLine: number) => ({ character: pos, line: deltaLine }) // simplistic
+        const createMockEditor = (text: string, pos: number): any => {
+            const lines = text.split('\n');
+            let currentLine = 0;
+            let currentChar = pos;
+            let tempPos = pos;
+            for (let i = 0; i < lines.length; i++) {
+                if (tempPos <= lines[i].length) {
+                    currentLine = i;
+                    currentChar = tempPos;
+                    break;
+                }
+                tempPos -= (lines[i].length + 1); // +1 for \n
             }
-        });
+
+            return {
+                document: {
+                    getText: (range?: vscode.Range) => {
+                        if (range) {
+                            const start = range.start.line;
+                            const end = range.end.line;
+                            const textLines = text.split('\n');
+                            if (start === end) {
+                                return textLines[start].substring(range.start.character, range.end.character);
+                            }
+                            let result = textLines[start].substring(range.start.character) + '\n';
+                            for (let i = start + 1; i < end; i++) {
+                                result += textLines[i] + '\n';
+                            }
+                            result += textLines[end].substring(0, range.end.character);
+                            return result;
+                        }
+                        return text;
+                    },
+                    offsetAt: (p: any) => {
+                        const lines = text.split('\n');
+                        let offset = 0;
+                        for (let i = 0; i < p.line; i++) {
+                            offset += lines[i].length + 1;
+                        }
+                        return offset + p.character;
+                    },
+                    positionAt: (offset: number) => {
+                        const lines = text.split('\n');
+                        let tempOffset = offset;
+                        for (let i = 0; i < lines.length; i++) {
+                            if (tempOffset <= lines[i].length) {
+                                return { line: i, character: tempOffset };
+                            }
+                            tempOffset -= (lines[i].length + 1);
+                        }
+                        return { line: lines.length - 1, character: lines[lines.length - 1].length };
+                    },
+                    lineAt: (line: number) => ({
+                        text: text.split('\n')[line] || ""
+                    }),
+                    lineCount: text.split('\n').length
+                },
+                selection: {
+                    active: { line: currentLine, character: currentChar },
+                    translate: (deltaLine: number) => ({ line: Math.max(0, currentLine + deltaLine), character: currentChar })
+                }
+            };
+        };
 
         // 1. Math mode (inside $...$)
         const mathEditor = createMockEditor("$ a + b $", 5);

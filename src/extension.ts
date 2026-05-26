@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
 import { parseUserCommand, splitChain } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
 import { performWidthAnalysis } from './core/widthAnalyzer';
@@ -23,8 +22,9 @@ import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
 import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
 import { registerImplicitSubscripts } from './core/implicitSubscripts';
+import { PythonService } from './services/pythonService';
 
-let pythonProcess: ChildProcess | null = null;
+let pythonService: PythonService;
 let currentEditor: vscode.TextEditor | undefined;
 let currentSelection: vscode.Selection | undefined;
 let currentOriginalText: string = "";
@@ -33,30 +33,14 @@ let currentParallels: string[] = [];
 let isExportingPdf: boolean = false;
 let pdfTargetDir: string = "";
 let macroManager: MacroManager;
-let responseResolver: ((response: any) => void) | null = null;
 
 let lastLabelNodes: any[] = [];
 let lastLabelEdges: any[] = [];
-
-/**
- * 파이썬 프로세스에 명령을 보내고 응답을 기다립니다 (Promise).
- */
-function sendToPythonAndWait(payload: any): Promise<any> {
-    return new Promise((resolve) => {
-        if (!pythonProcess?.stdin) {
-            resolve({ status: 'error', message: 'Python process is not running' });
-            return;
-        }
-        responseResolver = resolve;
-        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-    });
-}
 
 async function executeChain(chain: string[], initialSelection: string, editor: vscode.TextEditor, selection: vscode.Selection) {
     let currentInput = initialSelection;
     let lastResponse: any = null;
 
-    // 설정 가져오기 (각 명령마다 동일한 설정 사용)
     const config = vscode.workspace.getConfiguration('tex-machina');
     const calcSettings = config.get<any>('calc.settings', {});
     const laplaceConfig = {
@@ -72,7 +56,6 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
         const cmdStr = chain[i];
         const parsed = parseUserCommand(cmdStr, currentInput);
         
-        // 전역 상태 업데이트 (웹뷰 연동용)
         currentMainCommand = parsed.mainCommand;
         currentParallels = parsed.parallelOptions;
 
@@ -94,16 +77,14 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
             }
         };
 
-        const response = await sendToPythonAndWait(payload);
+        const response = await pythonService.sendAndWait(payload);
         lastResponse = response;
 
         if (response.status === 'success') {
-            // [OEIS/CITE 등 인터랙티브 명령어는 체인에서 지원하지 않음]
             if (response.status === 'oeis_results' || response.status === 'search_results') {
                 vscode.window.showWarningMessage(`체인 내에서 인터랙티브 명령어(${parsed.mainCommand})는 지원되지 않습니다.`);
                 break;
             }
-            // 다음 명령어의 입력으로 현재 결과를 사용
             currentInput = response.latex;
         } else {
             vscode.window.showErrorMessage(`체인 중단 (${cmdStr}): ${response.message}`);
@@ -111,7 +92,6 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
         }
     }
 
-    // 최종 결과 에디터 삽입 (마지막 명령의 응답을 기준으로)
     if (lastResponse && lastResponse.status === 'success') {
         const resultLatex = lastResponse.latex;
         let outputText = "";
@@ -122,7 +102,7 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
             if (lastResponse.latex.includes("tikzpicture")) {
                 outputText = resultLatex;
             } else {
-                outputText = initialSelection; // 3D Plot 등은 텍스트 유지
+                outputText = initialSelection;
             }
         } else if (currentParallels.includes("newline")) {
             outputText = `${initialSelection}\n\n\\[\n${resultLatex}\n\\]`;
@@ -141,103 +121,60 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
 
-    // [Toggle System] 토글 연동 기능들을 먼저 레지스트리에 등록 (리스너 등록 전에 완료되어야 함)
+    pythonService = new PythonService(context);
+    pythonService.start();
+
     registerImplicitSubscripts();
-
-    // [Toggle Mode] 토글 모드 컨트롤러 등록 (이때부터 리스너가 활성화됨)
     registerToggleMode(context);
-
     macroManager = new MacroManager(context);
-
-    // [Node Navigation] 수식 계층별 이동 기능 등록
     registerNodeNavigation(context);
-
-    // [Smart Auto-bracing] 첨자 자동 괄호 기능 등록
     registerAutoBracing(context);
-
-    // [Auto \left \right] 괄호 크기 자동 조절 기능 등록
     registerAutoLeftRight(context);
-
-    // [Env Auto-Delete] LaTeX 환경 자동 삭제 등록
     registerEnvAutoDelete(context);
-
-    // [Math Auto-Splitter] 수식 자동 분할 기능 등록
     registerMathSplitter(context);
-
-    // [Unit Expander] siunitx 단위 확장 기능 등록
     registerUnitExpander(context);
-
-    // [Markdown Latex] 마크다운 스타일 자동 변환 등록
     registerMarkdownLatex(context);
-
-    // [Smart Quotes] LaTeX 스마트 따옴표 기능 등록
     registerSmartQuotes(context);
-
-    // [Ellipsis] 말줄임표 자동 변환 기능 등록
     registerEllipsis(context);
-
-    // [Diacritics] 다이어크리틱 입력 기능 등록
     registerDiacritics(context);
 
-    // [Label Dependency] 라벨 종속 관계 추가 커맨드
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {return;}
-
-        const range = new vscode.Range(
-            new vscode.Position(args.line, args.startChar),
-            new vscode.Position(args.line, args.endChar)
-        );
-
+        const range = new vscode.Range(new vscode.Position(args.line, args.startChar), new vscode.Position(args.line, args.endChar));
         await editor.edit(editBuilder => {
-            // 라벨 끝(}) 바로 뒤에 삽입
             editBuilder.insert(range.end, `%(from:${args.sourceLabel})`);
         });
-        
-        // 실시간 반영을 위해 즉시 분석 실행
         vscode.commands.executeCommand('tex-machina.discoverLabels');
     }));
 
-    // [Label Hover] 라벨 위에 마우스를 올렸을 때 관계 설정을 돕는 호버 제공
     context.subscriptions.push(vscode.languages.registerHoverProvider('latex', {
         provideHover(document, position, token) {
             const line = document.lineAt(position.line).text;
             const labelRegex = /\\label\{([^}]+)\}/g;
             let match;
-            
             while ((match = labelRegex.exec(line)) !== null) {
                 const labelName = match[1];
                 const startPos = new vscode.Position(position.line, match.index);
                 const endPos = new vscode.Position(position.line, match.index + match[0].length);
                 const range = new vscode.Range(startPos, endPos);
-
                 if (range.contains(position)) {
                     const allLabels = findLabels(document.getText(), document);
                     const otherLabels = allLabels.filter(l => l.label !== labelName);
-                    
-                    const hoverContent = new vscode.MarkdownString('', true); // true: supportThemeIcons
+                    const hoverContent = new vscode.MarkdownString('', true);
                     hoverContent.isTrusted = true;
                     hoverContent.supportHtml = true;
-                    
                     hoverContent.appendMarkdown(`### 🏷️ Label: **${labelName}**\n\n`);
                     hoverContent.appendMarkdown(`이 라벨의 **출발점(Source)**을 지정하세요:\n\n`);
-                    
                     if (otherLabels.length === 0) {
                         hoverContent.appendMarkdown(`*현재 문서에 다른 라벨이 없습니다.*`);
                     } else {
                         otherLabels.forEach(l => {
-                            // 복잡한 Range 객체 대신 기본 자료형만 전달
-                            const commandArgs = {
-                                line: position.line,
-                                startChar: match!.index,
-                                endChar: match!.index + match![0].length,
-                                sourceLabel: l.label
-                            };
+                            const commandArgs = { line: position.line, startChar: match!.index, endChar: match!.index + match![0].length, sourceLabel: l.label };
                             const commandUri = vscode.Uri.parse(`command:tex-machina.addLabelDependency?${encodeURIComponent(JSON.stringify(commandArgs))}`);
                             hoverContent.appendMarkdown(`- [Connect from **${l.label}**](${commandUri} "Click to add dependency")\n`);
                         });
                     }
-                    
                     return new vscode.Hover(hoverContent, range);
                 }
             }
@@ -245,28 +182,19 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    // [Label Detection] 미사용 라벨 감지 및 삭제 기능 등록
     registerLabelDetection(context);
-
-    // [Math Auto-Wrap] 수식 모드 자동 전환 기능 등록
     registerMathAutoWrap(context);
-
-    // [Fraction Shorthand] 분수 자동 변환 기능 등록
     registerFractionShorthand(context);
-
-    // [Scan Prevention] 스캔 방지 패턴 생성 기능 등록
     registerScanPrevention(context);
 
-    // 1. Webview 프로바이더 등록 (우측 패널)
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(TeXMachinaWebviewProvider.viewType, provider)
-    );
-
-    // 초기 매크로 동기화
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(TeXMachinaWebviewProvider.viewType, provider));
     provider.updateMacros(macroManager.getMacros());
 
-    // 매크로 관련 커맨드 등록
+    pythonService.onResponse(async (response) => {
+        await handlePythonResponse(response, provider);
+    });
+
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.defineMacro', async (name: string, chain: string) => {
         await macroManager.defineMacro(name, chain);
         provider.updateMacros(macroManager.getMacros());
@@ -281,8 +209,6 @@ export function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor;
         if (!editor) { return; }
         const expanded = macroManager.expand(`;${name}`, editor);
-        
-        // 확장된 커맨드가 원래 입력과 다르다면 (매크로가 존재한다면) 실행
         if (expanded !== `;${name}`) {
             const chain = splitChain(expanded, vscode.workspace.getConfiguration('tex-machina').get<string>('cli.chainDelimiter', '&&'));
             await executeChain(chain, editor.document.getText(editor.selection), editor, editor.selection);
@@ -290,42 +216,19 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.discoverLabels', async () => {
-        // [수정] 라벨 시각화가 접혀 있으면 분석을 실행하지 않음
-        if (!provider.isLabelDiscoveryExpanded()) {
-            return;
-        }
-
+        if (!provider.isLabelDiscoveryExpanded()) { return; }
         const editor = vscode.window.activeTextEditor;
-        if (!editor || !editor.document.fileName.endsWith('.tex')) {
-            return;
-        }
-
-        const payload = {
-            mainCommand: "labels",
-            subCommands: [],
-            parallelOptions: [],
-            rawSelection: "",
-            config: {
-                filepath: editor.document.uri.fsPath
-            }
-        };
-
-        if (pythonProcess?.stdin) {
-            pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-        }
+        if (!editor || !editor.document.fileName.endsWith('.tex')) { return; }
+        const payload = { mainCommand: "labels", config: { filepath: editor.document.uri.fsPath } };
+        pythonService.send(payload);
     }));
 
-    // [추가] 실시간 라벨 업데이트를 위한 디바운싱 로직
     let labelUpdateTimeout: NodeJS.Timeout | undefined;
     vscode.workspace.onDidChangeTextDocument(event => {
         const editor = vscode.window.activeTextEditor;
         if (editor && event.document === editor.document && event.document.fileName.endsWith('.tex')) {
-            if (labelUpdateTimeout) {
-                clearTimeout(labelUpdateTimeout);
-            }
-            labelUpdateTimeout = setTimeout(() => {
-                vscode.commands.executeCommand('tex-machina.discoverLabels');
-            }, 1000); // 1초 동안 입력이 없으면 업데이트
+            if (labelUpdateTimeout) { clearTimeout(labelUpdateTimeout); }
+            labelUpdateTimeout = setTimeout(() => { vscode.commands.executeCommand('tex-machina.discoverLabels'); }, 1000);
         }
     }, null, context.subscriptions);
 
@@ -337,270 +240,9 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }, null, context.subscriptions);
 
-    // 2. Python 데몬 백그라운드 실행
-	const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
-    
-    // Python 데몬 백그라운드 실행
-    const serverPath = context.asAbsolutePath('python_backend/server.py');
-    pythonProcess = spawn(pythonCommand, [serverPath]);
-
-    // ✨ [핵심 추가] 파이썬 프로그램 자체가 실행되지 않았을 때 알림을 띄우는 기능
-    pythonProcess.on('error', (err) => {
-        vscode.window.showErrorMessage(`Python 실행 실패! 컴퓨터에 파이썬이 설치되어 있는지 확인하세요. 상세: ${err.message}`);
-    });
-
-    // Python 연산 및 시스템 오류 감지
-    pythonProcess.stderr?.on('data', (data: Buffer) => {
-        const errorMsg = data.toString();
-        console.error(`Python Error: ${errorMsg}`);
-        vscode.window.showErrorMessage(`Python 에러: ${errorMsg}`);
-    });
-
-    // 3. Python 연산 결과를 받았을 때의 처리 (에디터 삽입 & 웹뷰 업데이트)
-    let stdoutBuffer = "";
-	pythonProcess.stdout?.on('data', async (data: Buffer) => {
-        stdoutBuffer += data.toString();
-        let lines = stdoutBuffer.split('\n');
-        stdoutBuffer = lines.pop() || ""; // 마지막 조각은 보관
-
-        for (const line of lines) {
-            if (!line.trim()) {continue;}
-            console.log(`Python Output: ${line}`);
-            try {
-                const response = JSON.parse(line);
-
-                // [Chain Logic] 만약 Promise 대기 중이라면 resolve 호출
-                if (responseResolver) {
-                    const resolve = responseResolver;
-                    responseResolver = null;
-                    resolve(response);
-                    // 체인 중간에는 에디터 업데이트를 건너뛰는 것이 좋지만,
-                    // 웹뷰는 업데이트하고 싶을 수 있으므로 아래 로직을 계속 실행할 수도 있습니다.
-                    // 단, 에디터 삽입 로직은 executeChain에서 처리할 예정이므로
-                    // 여기서는 responseResolver가 있으면 에디터 수정을 막는 플래그를 고려할 수 있습니다.
-                }
-
-                // [oeis] 수열 검색 결과 처리
-                if (response.status === 'oeis_results') {
-                    const selected = await vscode.window.showQuickPick(response.results as vscode.QuickPickItem[], {
-                        placeHolder: `'${response.query}' 검색 결과 (15개까지 표시)`
-                    });
-                    if (selected) {
-                        const s = selected as any;
-                        const options = [
-                            { label: "ID만 삽입", detail: s.id, value: s.id },
-                            { label: "수열 데이터 삽입", detail: s.data, value: s.data },
-                            { label: "ID와 이름 삽입", detail: `${s.id}: ${s.full_name}`, value: `${s.id}: ${s.full_name}` }
-                        ];
-                        const insertType = await vscode.window.showQuickPick(options, {
-                            placeHolder: "어떤 형식으로 삽입할까요?"
-                        }) as any;
-
-                        if (insertType && currentEditor) {
-                            await currentEditor.edit(editBuilder => {
-                                editBuilder.insert(currentEditor!.selection.active, insertType.value);
-                            });
-                        }
-                    }
-                    continue;
-                }
-
-                // [cite] 인용 검색 결과 처리
-                if (response.status === 'search_results') {
-                    const selected = await vscode.window.showQuickPick(response.results, {
-                        placeHolder: "인용할 논문을 선택하세요"
-                    });
-                    if (selected && (selected as any).doi) {
-                        // 선택된 DOI로 다시 요청 (parseUserCommand 대신 직접 payload 구성)
-                        const payload = {
-                            mainCommand: "cite",
-                            subCommands: [(selected as any).doi],
-                            parallelOptions: [],
-                            rawSelection: "",
-                            config: {}
-                        };
-                        if (pythonProcess?.stdin) {
-                            pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-                        }
-                    }
-                    continue;
-                }
-
-                if (response.status === 'success') {
-                    
-/*
-                    // [query] 쿼리 성공 처리 (전체 문서 업데이트)
-                    if (response.mainCommand === '?' && response.fullText && currentEditor) {
-                        const firstLine = currentEditor.document.lineAt(0);
-                        const lastLine = currentEditor.document.lineAt(currentEditor.document.lineCount - 1);
-                        const fullRange = new vscode.Range(firstLine.range.start, lastLine.range.end);
-                        
-                        await currentEditor.edit(editBuilder => {
-                            editBuilder.replace(fullRange, response.fullText);
-                        });
-                        vscode.window.showInformationMessage("쿼리가 수행되어 문서가 업데이트되었습니다.");
-                        continue;
-                    }
-*/
-
-                    // [labels] 라벨 분석 성공 처리
-                    if (response.mainCommand === 'labels' && response.nodes) {
-                        const nodesJson = JSON.stringify(response.nodes);
-                        const edgesJson = JSON.stringify(response.edges);
-                        const lastNodesJson = JSON.stringify(lastLabelNodes);
-                        const lastEdgesJson = JSON.stringify(lastLabelEdges);
-
-                        if (nodesJson !== lastNodesJson || edgesJson !== lastEdgesJson) {
-                            lastLabelNodes = response.nodes;
-                            lastLabelEdges = response.edges;
-                            provider.updateLabels(response.nodes, response.edges);
-                        }
-                        continue;
-                    }
-
-                    // [cite] 인용 성공 처리
-                    if (response.bibtex && response.cite_key) {
-                        const editor = vscode.window.activeTextEditor;
-                        if (editor) {
-                            const texDir = path.dirname(editor.document.uri.fsPath);
-                            // 1. .bib 파일 찾기 (없으면 references.bib 생성)
-                            const files = fs.readdirSync(texDir);
-                            let bibFile = files.find(f => f.endsWith('.bib'));
-                            if (!bibFile) {
-                                bibFile = 'references.bib';
-                            }
-                            const bibPath = path.join(texDir, bibFile);
-
-                            // 2. BibTeX 추가 (중복 체크 생략 - 필요시 고도화)
-                            let content = "";
-                            if (fs.existsSync(bibPath)) {
-                                content = fs.readFileSync(bibPath, 'utf8');
-                            }
-                            
-                            if (!content.includes(response.cite_key)) {
-                                fs.appendFileSync(bibPath, `\n\n${response.bibtex}`);
-                                vscode.window.showInformationMessage(`BibTeX이 ${bibFile}에 추가되었습니다.`);
-                            } else {
-                                vscode.window.showInformationMessage(`이미 존재하는 인용 키입니다: ${response.cite_key}`);
-                            }
-
-                            // 3. 에디터에 \cite{key} 삽입
-                            await editor.edit(editBuilder => {
-                                editBuilder.insert(editor.selection.active, `\\cite{${response.cite_key}}`);
-                            });
-                        }
-                        continue;
-                    }
-
-                    // [1] Webview 업데이트는 에디터 상태와 상관없이 항상 수행
-                    const shouldShowWebview = currentMainCommand === 'plot';
-                    provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex, shouldShowWebview);
-
-                    // [2] 에디터 삽입 로직 (에디터가 활성화되어 있는 경우 수행)
-                    // currentParallels에 'samples'가 포함되어 있다면 이는 웹뷰에서의 조정일 가능성이 높으므로 일반 삽입 제외
-                    const isRerender = currentParallels.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
-
-                    if (currentEditor && currentSelection) {
-                        // 내보내기 모드인 경우 파일 저장 및 Figure 삽입 (isRerender와 상관없이 수행)
-                        if (isExportingPdf) {
-                            if (response.export_content) {
-                                const exportBuffer = Buffer.from(response.export_content, 'base64');
-                                const imagesDir = path.join(pdfTargetDir, 'images');
-                                const ext = response.export_format || 'pdf';
-                                const filename = `plot_3d.${ext}`;
-                                const exportPath = path.join(imagesDir, filename);
-
-                                try {
-                                    if (!fs.existsSync(imagesDir)) {
-                                        fs.mkdirSync(imagesDir, { recursive: true });
-                                    }
-                                    fs.writeFileSync(exportPath, exportBuffer);
-                                    
-                                                                    // LaTeX Figure 코드 생성 및 삽입
-                                                                    const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
-                                                                    
-                                                                    await currentEditor.edit(editBuilder => {
-                                                                        editBuilder.replace(currentSelection!, figureCode);
-                                                                    });                                    
-                                    vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
-                                } catch (err: any) {
-                                    vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
-                                } finally {
-                                    isExportingPdf = false;
-                                }
-                                continue;
-                            } else {
-                                // 내보내기 요청이었으나 콘텐츠가 없는 경우 상태 리셋
-                                isExportingPdf = false;
-                            }
-                        }
-
-                        // 일반 결과 삽입 (재랜더링이 아닌 경우에만)
-                        if (!isRerender) {
-                            const resultLatex = response.latex;
-                            let outputText = "";
-
-                            // .dat 파일 생성 처리 (텍스트 교체 전에 수행하여 파일이 존재하도록 함)
-                            if (response.dat_content) {
-                                const texDir = path.dirname(currentEditor.document.uri.fsPath);
-                                const dataDir = path.join(texDir, 'data');
-                                const datFilename = response.dat_filename || 'plot_data.dat';
-                                const datPath = path.join(dataDir, datFilename);
-
-                                try {
-                                    if (!fs.existsSync(dataDir)) {
-                                        fs.mkdirSync(dataDir, { recursive: true });
-                                    }
-                                    fs.writeFileSync(datPath, response.dat_content);
-                                } catch (err: any) {
-                                    vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`);
-                                }
-                            }
-
-                            if (currentMainCommand === "matrix") {
-                                outputText = resultLatex;
-                            } else if (currentMainCommand === "plot") {
-                                // 2D Plot(PGFPlots)인 경우에만 에디터에 삽입, 3D는 웹뷰 프리뷰만 유지
-                                if (response.latex.includes("tikzpicture")) {
-                                    outputText = resultLatex;
-                                } else {
-                                    outputText = currentOriginalText;
-                                }
-                            } else if (currentParallels.includes("newline")) {
-                                outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`;
-                            } else {
-                                outputText = `${currentOriginalText} = ${resultLatex}`;
-                            }
-
-                            // 2D plot이거나 plot이 아닐 때 에디터 텍스트 교체 수행
-                            if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && response.latex.includes("tikzpicture"))) {
-                                await currentEditor.edit(editBuilder => {
-                                    editBuilder.replace(currentSelection!, outputText);
-                                });
-                            }
-                        }
-                    }
-
-                    // 경고 메시지가 있으면 출력
-                    if (response.warning) {
-                        vscode.window.showWarningMessage(response.warning);
-                    }
-                } else if (response.status === 'error') {
-                    vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
-                    isExportingPdf = false;
-                }
-            } catch (e) {
-                console.error("결과 처리 중 오류:", e, "원본 데이터:", line);
-            }
-        }
-	});
-
-    // 4. Cmd + Shift + ; 단축키 커맨드 등록
-	let cliCommand = vscode.commands.registerCommand('tex-machina.openCLI', async () => {
+	context.subscriptions.push(vscode.commands.registerCommand('tex-machina.openCLI', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {return;}
-
-        // 명령 실행 시점의 상태를 전역 변수에 저장 (비동기 응답 처리용)
         currentEditor = editor;
         currentSelection = editor.selection;
         currentOriginalText = editor.document.getText(currentSelection);
@@ -608,7 +250,6 @@ export function activate(context: vscode.ExtensionContext) {
         const quickPick = vscode.window.createQuickPick();
         quickPick.placeholder = "명령어를 입력하세요 (예: calc >, matrix >)";
         
-        // 명령어 라이브러리 정의
         const commandLib = {
             root: [
                 { label: "calc >", description: "수학 연산 명령어 (미분, 적분, 단순화 등)" },
@@ -704,220 +345,107 @@ export function activate(context: vscode.ExtensionContext) {
         };
 
         quickPick.items = commandLib.root;
-
-        // 입력값이 변할 때마다 하위 메뉴 노출
         quickPick.onDidChangeValue(value => {
-            // [Fix] 'calc >' 뿐만 아니라 공백 없는 'calc>' 형태도 인식하도록 개선 (Regex 사용)
-            if (/^calc\s*>/.test(value)) {
-                quickPick.items = commandLib.calc;
-            } else if (/^oeis\s*>/.test(value)) {
-                quickPick.items = commandLib.oeis;
-            } else if (/^matrix\s*>/.test(value)) {
-                quickPick.items = commandLib.matrix;
-            } else if (/^plot\s*>/.test(value)) {
-                quickPick.items = commandLib.plot;
-            } else if (/^cite\s*>/.test(value)) {
-                quickPick.items = commandLib.cite;
-            } else if (/^analyze\s*>/.test(value)) {
-                quickPick.items = commandLib.analyze;
-            } else if (value === "") {
-                quickPick.items = commandLib.root;
-            }
+            if (/^calc\s*>/.test(value)) { quickPick.items = commandLib.calc; }
+            else if (/^oeis\s*>/.test(value)) { quickPick.items = commandLib.oeis; }
+            else if (/^matrix\s*>/.test(value)) { quickPick.items = commandLib.matrix; }
+            else if (/^plot\s*>/.test(value)) { quickPick.items = commandLib.plot; }
+            else if (/^cite\s*>/.test(value)) { quickPick.items = commandLib.cite; }
+            else if (/^analyze\s*>/.test(value)) { quickPick.items = commandLib.analyze; }
+            else if (value === "") { quickPick.items = commandLib.root; }
         });
 
         quickPick.show();
-
-        // 사용자가 아이템을 선택하거나 엔터를 쳤을 때 처리
         quickPick.onDidAccept(async () => {
             const selected = quickPick.selectedItems[0];
             let userInput = selected ? selected.label : quickPick.value;
-            
-            // [Bug Fix] 사용자가 선택 항목보다 더 길게 타이핑했다면 (예: 데이터 입력), 타이핑한 내용을 우선함.
-            // 이는 자동완성 후 추가 입력 시 이전 선택 항목(Prefix)으로 롤백되는 현상을 방지함.
-            if (selected && quickPick.value.length > selected.label.length) {
-                userInput = quickPick.value;
-            }
-
-            // [New Fix] 이미 완전한 명령어(예: 'calc')를 입력했을 때 자동완성(' >')이 강제되는 현상 방지
-            // 사용자가 입력한 내용이 선택된 항목의 명령어 그룹(Prefix)과 정확히 일치하면 사용자의 입력을 우선함.
+            if (selected && quickPick.value.length > selected.label.length) { userInput = quickPick.value; }
             if (selected && selected.label.endsWith(" >") && quickPick.value) {
                 const lastGTIndex = selected.label.lastIndexOf(" >");
                 const baseCmd = selected.label.substring(0, lastGTIndex).trim();
-                if (quickPick.value.trim() === baseCmd) {
-                    userInput = quickPick.value.trim();
-                }
+                if (quickPick.value.trim() === baseCmd) { userInput = quickPick.value.trim(); }
             }
-
-            // ✨ [순서 변경] 매크로 확장을 UI 결정(닫기 여부) 전에 수행
             userInput = macroManager.expand(userInput, editor);
-
-            // 만약 끝이 '>'로 끝나면 (그룹 선택 또는 매크로 확장 결과), 입력창에 채워주고 계속 진행
             if (userInput.trim().endsWith(">")) {
                 quickPick.value = userInput.trim() + " ";
-                // 다음 단계 필터링을 위해 선택 상태 초기화
                 quickPick.selectedItems = [];
                 return;
             }
-
             quickPick.hide();
-
             if (!userInput) {return;}
-
-            // ✨ [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);
             if (macroDef) {
                 await macroManager.defineMacro(macroDef.name, macroDef.chain);
-                provider.updateMacros(macroManager.getMacros()); // 웹뷰 동기화 추가
+                provider.updateMacros(macroManager.getMacros());
                 return;
             }
-
-            // 특수 커맨드 (분석) 처리
-            if (userInput === "analyze > width") {
-                vscode.commands.executeCommand('tex-machina.analyzeWidth');
-                return;
-            }
+            if (userInput === "analyze > width") { vscode.commands.executeCommand('tex-machina.analyzeWidth'); return; }
             if (userInput.startsWith("analyze > split")) {
                 const splitAtPlus = userInput.includes("/ plus");
                 vscode.commands.executeCommand('tex-machina.splitMath', { splitAtPlus });
                 return;
             }
-
-            if (userInput === "labels") {
-                vscode.commands.executeCommand('tex-machina.discoverLabels');
-                return;
-            }
-
-            // [추가] 명령어 체이닝 처리
+            if (userInput === "labels") { vscode.commands.executeCommand('tex-machina.discoverLabels'); return; }
             const cliConfig = vscode.workspace.getConfiguration('tex-machina');
             const delimiter = cliConfig.get<string>('cli.chainDelimiter', '&&');
             const chain = splitChain(userInput, delimiter);
             if (chain.length > 1) {
-                if (currentEditor && currentSelection) {
-                    await executeChain(chain, currentOriginalText, currentEditor, currentSelection);
-                }
+                if (currentEditor && currentSelection) { await executeChain(chain, currentOriginalText, currentEditor, currentSelection); }
                 return;
             }
-
-            // 행렬 명령어일 경우 빈 칸 확인 팝업 (Interactive Popup)
             if (userInput.includes("matrix")) {
                 const parts = userInput.split(">").map(p => p.trim());
                 const lastPart = parts[parts.length - 1];
-                
-                // 이미 fill_dots가 포함되어 있다면 묻지 않음
                 if (!lastPart.includes("fill_dots")) {
                     let shouldAsk = false;
-
-                    // 1. 크기만 지정하고 데이터를 안 적은 경우 (예: matrix > 3x3)
-                    // 첫 번째 세그먼트(데이터 시작부분)가 NxM 형태인지 확인
                     const firstSegment = lastPart.split("/")[0].trim();
-                    if (parts.length <= 3 && /^\d+x\d+$/.test(firstSegment)) {
-                        shouldAsk = true;
-                    }
-                    
-                    // 2. 명시적으로 빈 칸이 있는 경우 (데이터 입력 중)
-                    // / / (빈 행) 또는 ,, (빈 열) 또는 마지막이 구분자로 끝나는 경우
+                    if (parts.length <= 3 && /^\d+x\d+$/.test(firstSegment)) { shouldAsk = true; }
                     if (!shouldAsk) {
                         const cells = lastPart.split(/[\/,;]/).map(c => c.trim());
                         const knownOptions = ["analyze", "fill_dots", "newline"];
-                        
-                        // 구분자 사이가 비어있거나, 마지막이 구분자인 경우
-                        if (cells.some(c => c === "" && !knownOptions.includes(c)) || 
-                            lastPart.endsWith(",") || lastPart.endsWith("/") || lastPart.endsWith(";")) {
-                            shouldAsk = true;
-                        }
+                        if (cells.some(c => c === "" && !knownOptions.includes(c)) || lastPart.endsWith(",") || lastPart.endsWith("/") || lastPart.endsWith(";")) { shouldAsk = true; }
                     }
-
-                    // 3. 데이터 없이 스타일만 지정한 경우 (예: matrix > b)
-                    if (!shouldAsk && parts.length <= 2 && !lastPart.includes(",") && !lastPart.includes("/") && !lastPart.includes("x")) {
-                        shouldAsk = true;
-                    }
-
+                    if (!shouldAsk && parts.length <= 2 && !lastPart.includes(",") && !lastPart.includes("/") && !lastPart.includes("x")) { shouldAsk = true; }
                     if (shouldAsk) {
-                        const answer = await vscode.window.showInformationMessage(
-                            "행렬에 빈 공간이 감지되었습니다. 스마트 점(Dots)으로 자동 채우시겠습니까?",
-                            "예 (스마트 점)", "아니오 (0으로 채움)"
-                        );
-                        if (answer === "예 (스마트 점)") {
-                            userInput += " / fill_dots";
-                        }
+                        const answer = await vscode.window.showInformationMessage("행렬에 빈 공간이 감지되었습니다. 스마트 점(Dots)으로 자동 채우시겠습니까?", "예 (스마트 점)", "아니오 (0으로 채움)");
+                        if (answer === "예 (스마트 점)") { userInput += " / fill_dots"; }
                     }
                 }
             }
-
             const parsed = parseUserCommand(userInput, currentOriginalText);
             currentMainCommand = parsed.mainCommand;
             currentParallels = parsed.parallelOptions;
-
-            // [추가] 변수 z 감지 시 복소 그래프 모드 제안
             if (currentMainCommand === 'plot' && parsed.subCommands.includes('3d')) {
                 const zDetected = /[^a-zA-Z]z[^a-zA-Z]|^z[^a-zA-Z]|[^a-zA-Z]z$|^z$/.test(currentOriginalText);
                 if (zDetected && !currentParallels.some(p => p.includes('complex'))) {
-                    const answer = await vscode.window.showInformationMessage(
-                        "변수 'z'가 감지되었습니다. 복소 평면 시각화(Complex Mode)를 활성화할까요?",
-                        "예 (Abs|Phase)", "아니오"
-                    );
+                    const answer = await vscode.window.showInformationMessage("변수 'z'가 감지되었습니다. 복소 평면 시각화(Complex Mode)를 활성화할까요?", "예 (Abs|Phase)", "아니오");
                     if (answer === "예 (Abs|Phase)") {
                         userInput += " / complex=abs_phase";
-                        // 다시 파싱
                         const updatedParsed = parseUserCommand(userInput, currentOriginalText);
                         currentParallels = updatedParsed.parallelOptions;
                         parsed.parallelOptions = updatedParsed.parallelOptions;
                     }
                 }
             }
-
-            // 설정 가져오기
             const config = vscode.workspace.getConfiguration('tex-machina');
             const calcSettings = config.get<any>('calc.settings', {});
-            const laplaceConfig = {
-                source: calcSettings.laplaceSource || 't',
-                target: calcSettings.laplaceTarget || 's'
-            };
+            const laplaceConfig = { source: calcSettings.laplaceSource || 't', target: calcSettings.laplaceTarget || 's' };
             const angleUnit = calcSettings.angleUnit || 'deg';
             const datDensity = config.get('plot.datDensity', 500);
             const yMultiplier = config.get('plot.yMultiplier', 5.0);
             const lineColor = config.get('plot.lineColor', 'blue');
-
-            // [추가] 현재 줄의 들여쓰기 감지
             let currentIndentation = "";
             if (editor) {
                 const lineText = editor.document.lineAt(editor.selection.active.line).text;
                 const match = lineText.match(/^(\s*)/);
-                if (match) {
-                    currentIndentation = match[1];
-                }
+                if (match) { currentIndentation = match[1]; }
             }
-
-            const payload = {
-                ...parsed,
-                config: {
-                    laplace: laplaceConfig,
-                    angleUnit: angleUnit,
-                    precision: calcSettings.precision,
-                    imaginaryUnit: calcSettings.imaginaryUnit,
-                    simplifyResult: calcSettings.simplifyResult,
-                    datDensity: datDensity,
-                    yMultiplier: yMultiplier,
-                    lineColor: lineColor,
-                    indentation: currentIndentation,
-                    workspaceDir: path.dirname(editor.document.uri.fsPath)
-                }
-            };
-
-            if (pythonProcess?.stdin) {
-                pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-            }
+            const payload = { ...parsed, config: { laplace: laplaceConfig, angleUnit: angleUnit, precision: calcSettings.precision, imaginaryUnit: calcSettings.imaginaryUnit, simplifyResult: calcSettings.simplifyResult, datDensity: datDensity, yMultiplier: yMultiplier, lineColor: lineColor, indentation: currentIndentation, workspaceDir: path.dirname(editor.document.uri.fsPath) } };
+            pythonService.send(payload);
         });
+    }));
 
-        // 텍스트가 바뀔 때 필터링은 QuickPick이 자동으로 수행함
-    });
-
-    context.subscriptions.push(cliCommand);
-
-    // 5. 웹뷰에서 보낸 재랜더링(해상도 조절) 요청 처리 커맨드
-    let rerenderCommand = vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string, options?: any) => {
-        if (!pythonProcess?.stdin) {return;}
-        
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string, options?: any) => {
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
             if (options.x) {userInput += ` / x=${options.x}`;}
@@ -925,208 +453,203 @@ export function activate(context: vscode.ExtensionContext) {
             if (options.z) {userInput += ` / z=${options.z}`;}
             if (options.scheme) {userInput += ` / scheme=${options.scheme}`;}
             if (options.color) {userInput += ` / color=${options.color}`;}
-            
-            if (options.scheme === 'preset' && options.preset) {
-                userInput += ` / preset=${options.preset}`;
-            } else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) {
-                userInput += ` / stops=${options.stops}`;
-            }
-
+            if (options.scheme === 'preset' && options.preset) { userInput += ` / preset=${options.preset}`; }
+            else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) { userInput += ` / stops=${options.stops}`; }
             if (options.label) {userInput += ` / label=${options.label}`;}
             if (options.bg) {userInput += ` / bg=${options.bg}`;}
             if (options.complex) {userInput += ` / complex=${options.complex}`;}
             if (options.axis) {userInput += ` / axis=${options.axis}`;}
         }
-
         const parsed = parseUserCommand(userInput, exprLatex);
-        
         currentMainCommand = parsed.mainCommand;
         currentParallels = parsed.parallelOptions;
-
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const payload = {
-            ...parsed,
-            config: {
-                angleUnit: config.get('angleUnit', 'deg'),
-                datDensity: config.get('plot.datDensity', 500),
-                workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined
-            }
-        };
+        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined } };
+        pythonService.send(payload);
+    }));
 
-        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-    });
-
-    context.subscriptions.push(rerenderCommand);
-
-    // 6. 3D 그래프 PDF 내보내기 커맨드
-    let exportCommand = vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string, options?: any) => {
-        if (!pythonProcess?.stdin || !currentEditor) {return;}
-
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string, options?: any) => {
+        if (!currentEditor) {return;}
         const fmt = (options && options.export) || 'pdf';
-        const answer = await vscode.window.showInformationMessage(
-            `현재 3D 그래프를 ${fmt.toUpperCase()}로 저장하고 Figure를 삽입하시겠습니까?`,
-            "예 (images 폴더 생성 및 저장)", "아니오"
-        );
-
+        const answer = await vscode.window.showInformationMessage(`현재 3D 그래프를 ${fmt.toUpperCase()}로 저장하고 Figure를 삽입하시겠습니까?`, "예 (images 폴더 생성 및 저장)", "아니오");
         if (answer !== "예 (images 폴더 생성 및 저장)") {return;}
-
-        // 내보내기 상태 설정
         isExportingPdf = true;
         pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
-
-        // plot > 3d / samples=..., export, color=... 형태의 명령어 전달
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
             if (options.x) {userInput += ` / x=${options.x}`;}
             if (options.y) {userInput += ` / y=${options.y}`;}
             if (options.z) {userInput += ` / z=${options.z}`;}
             if (options.scheme) {userInput += ` / scheme=${options.scheme}`;}
-            
-            // 스키마에 따라 필요한 옵션만 추가
-            if (options.scheme === 'uniform') {
-                userInput += ` / color=${color}`;
-            } else if (options.scheme === 'preset' && options.preset) {
-                userInput += ` / preset=${options.preset}`;
-            } else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) {
-                userInput += ` / stops=${options.stops}`;
-            } else {
-                // height, gradient 등은 추가 파라미터 불필요하지만 color는 기본값으로 넣어줄 수 있음
-                userInput += ` / color=${color}`;
-            }
-
+            if (options.scheme === 'uniform') { userInput += ` / color=${color}`; }
+            else if (options.scheme === 'preset' && options.preset) { userInput += ` / preset=${options.preset}`; }
+            else if ((options.scheme === 'custom' || options.scheme === 'height' || options.scheme === 'gradient') && options.stops) { userInput += ` / stops=${options.stops}`; }
+            else { userInput += ` / color=${color}`; }
             if (options.label) {userInput += ` / label=${options.label}`;}
             if (options.bg) {userInput += ` / bg=${options.bg}`;}
             if (options.complex) {userInput += ` / complex=${options.complex}`;}
             if (options.axis) {userInput += ` / axis=${options.axis}`;}
             if (options.export) {userInput += ` / export=${options.export}`;}
             else {userInput += ` / export`;}
-        } else {
-            userInput += ` / color=${color} / export`;
-        }
-        
+        } else { userInput += ` / color=${color} / export`; }
         const parsed = parseUserCommand(userInput, exprLatex);
-        
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const payload = {
-            ...parsed,
-            config: {
-                angleUnit: config.get('angleUnit', 'deg'),
-                datDensity: config.get('plot.datDensity', 500),
-                workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined
-            }
-        };
+        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined } };
+        pythonService.send(payload);
+    }));
 
-        pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-    });
-
-    context.subscriptions.push(exportCommand);
-
-    // 7. 웹뷰 캡처 이미지 저장 커맨드 (내부용)
-    let internalSaveCommand = vscode.commands.registerCommand('tex-machina.internalSaveWebviewImage', async (buffer: Buffer, format: string, expr: string) => {
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.internalSaveWebviewImage', async (buffer: Buffer, format: string, expr: string) => {
         if (!currentEditor) {return;}
-        
         const targetDir = path.dirname(currentEditor.document.uri.fsPath);
         const imagesDir = path.join(targetDir, 'images');
         const ext = format || 'png';
         const timestamp = new Date().getTime();
         const filename = `plot_3d_${timestamp}.${ext}`;
         const exportPath = path.join(imagesDir, filename);
-
         try {
-            if (!fs.existsSync(imagesDir)) {
-                fs.mkdirSync(imagesDir, { recursive: true });
-            }
+            if (!fs.existsSync(imagesDir)) { fs.mkdirSync(imagesDir, { recursive: true }); }
             fs.writeFileSync(exportPath, buffer);
-            
             const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
-            
             await currentEditor.edit(editBuilder => {
-                if (currentSelection) {
-                    editBuilder.replace(currentSelection, figureCode);
-                } else {
-                    editBuilder.insert(currentEditor!.selection.end, figureCode);
-                }
+                if (currentSelection) { editBuilder.replace(currentSelection, figureCode); }
+                else { editBuilder.insert(currentEditor!.selection.end, figureCode); }
             });
-            
             vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
-        } catch (err: any) {
-            vscode.window.showErrorMessage(`저장 실패: ${err.message}`);
-        }
-    });
-    context.subscriptions.push(internalSaveCommand);
+        } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
+    }));
 
-    // 8. 수식 너비 분석 커맨드 등록
-    let analyzeWidthCommand = vscode.commands.registerCommand('tex-machina.analyzeWidth', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.analyzeWidth', async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor || !editor.document.fileName.endsWith('.tex')) {
-            vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다.");
-            return;
-        }
+        if (!editor || !editor.document.fileName.endsWith('.tex')) { vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다."); return; }
         await performWidthAnalysis(editor.document);
-    });
-    context.subscriptions.push(analyzeWidthCommand);
+    }));
 
-    // 9. LaTeX 표 삽입 커맨드 등록
-    let insertTableCommand = vscode.commands.registerCommand('tex-machina.insertTable', async (options: TableOptions) => {
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.insertTable', async (options: TableOptions) => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage("활성화된 에디터가 없습니다.");
-            return;
-        }
-
+        if (!editor) { vscode.window.showErrorMessage("활성화된 에디터가 없습니다."); return; }
         const tableLatex = generateLatexTable(options);
-        await editor.edit(editBuilder => {
-            editBuilder.insert(editor.selection.active, tableLatex);
-        });
-    });
-    context.subscriptions.push(insertTableCommand);
+        await editor.edit(editBuilder => { editBuilder.insert(editor.selection.active, tableLatex); });
+    }));
 
-    // ✨ [직관적 UI 추가] 상용 컨텍스트 숏컷 추가 커맨드
-    let addContextShortcutCommand = vscode.commands.registerCommand('tex-machina.addContextShortcut', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addContextShortcut', async () => {
         const presets = [
             { label: "코드 블록 (verbatim)", detail: "verbatim 환경 내부를 감지합니다.", name: "code", regex: "\\\\begin{verbatim}[\\s\\S]*?\\\\end{verbatim}", scope: "around" },
             { label: "문서 서문 (preamble)", detail: "\\documentclass 가 있는 줄을 감지합니다.", name: "preamble", regex: "^\\\\documentclass", scope: "line" },
             { label: "수식 번호 (tag)", detail: "\\tag{...} 가 있는 줄을 감지합니다.", name: "tag", regex: "\\\\tag\\{.*?\\}", scope: "line" },
             { label: "커스텀 환경 (myEnv)", detail: "\\begin{myEnv} 환경 내부를 감지합니다.", name: "myEnv", regex: "\\\\begin{myEnv}[\\s\\S]*?\\\\end{myEnv}", scope: "around" }
         ];
-
-        const selected = await vscode.window.showQuickPick(presets, {
-            placeHolder: "추가할 매크로 컨텍스트를 선택하세요."
-        });
-
+        const selected = await vscode.window.showQuickPick(presets, { placeHolder: "추가할 매크로 컨텍스트를 선택하세요." });
         if (selected) {
             const config = vscode.workspace.getConfiguration('tex-machina');
             const currentContexts = config.get<any[]>('macros.customContexts', []);
-            
-            // 중복 체크
-            if (currentContexts.some(c => c.name === selected.name)) {
-                vscode.window.showWarningMessage(`이미 '${selected.name}' 컨텍스트가 등록되어 있습니다.`);
-                return;
-            }
-
-            const newContext = {
-                name: selected.name,
-                regex: selected.regex,
-                scope: selected.scope
-            };
-
+            if (currentContexts.some(c => c.name === selected.name)) { vscode.window.showWarningMessage(`이미 '${selected.name}' 컨텍스트가 등록되어 있습니다.`); return; }
+            const newContext = { name: selected.name, regex: selected.regex, scope: selected.scope };
             await config.update('macros.customContexts', [...currentContexts, newContext], vscode.ConfigurationTarget.Global);
             vscode.window.showInformationMessage(`'${selected.name}' 컨텍스트가 설정에 추가되었습니다. 이제 ';매크로:${selected.name}' 를 사용할 수 있습니다.`);
         }
-    });
-    context.subscriptions.push(addContextShortcutCommand);
-
-    // Listen for physics configuration changes to update webview
-    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('tex-machina.labelVisualization.settings')) {
-            vscode.commands.executeCommand('tex-machina.discoverLabels');
-        }
     }));
+
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('tex-machina.labelVisualization.settings')) { vscode.commands.executeCommand('tex-machina.discoverLabels'); }
+    }));
+}
+
+async function handlePythonResponse(response: any, provider: TeXMachinaWebviewProvider) {
+    try {
+        if (response.status === 'oeis_results') {
+            const selected = await vscode.window.showQuickPick(response.results as vscode.QuickPickItem[], { placeHolder: `'${response.query}' 검색 결과 (15개까지 표시)` });
+            if (selected) {
+                const s = selected as any;
+                const options = [ { label: "ID만 삽입", detail: s.id, value: s.id }, { label: "수열 데이터 삽입", detail: s.data, value: s.data }, { label: "ID와 이름 삽입", detail: `${s.id}: ${s.full_name}`, value: `${s.id}: ${s.full_name}` } ];
+                const insertType = await vscode.window.showQuickPick(options, { placeHolder: "어떤 형식으로 삽입할까요?" }) as any;
+                if (insertType && currentEditor) { await currentEditor.edit(editBuilder => { editBuilder.insert(currentEditor!.selection.active, insertType.value); }); }
+            }
+            return;
+        }
+        if (response.status === 'search_results') {
+            const selected = await vscode.window.showQuickPick(response.results, { placeHolder: "인용할 논문을 선택하세요" });
+            if (selected && (selected as any).doi) {
+                const payload = { mainCommand: "cite", subCommands: [(selected as any).doi], parallelOptions: [], rawSelection: "", config: {} };
+                pythonService.send(payload);
+            }
+            return;
+        }
+        if (response.status === 'success') {
+            if (response.mainCommand === 'labels' && response.nodes) {
+                const nodesJson = JSON.stringify(response.nodes);
+                const edgesJson = JSON.stringify(response.edges);
+                if (nodesJson !== JSON.stringify(lastLabelNodes) || edgesJson !== JSON.stringify(lastLabelEdges)) {
+                    lastLabelNodes = response.nodes;
+                    lastLabelEdges = response.edges;
+                    provider.updateLabels(response.nodes, response.edges);
+                }
+                return;
+            }
+            if (response.bibtex && response.cite_key) {
+                const editor = vscode.window.activeTextEditor;
+                if (editor) {
+                    const texDir = path.dirname(editor.document.uri.fsPath);
+                    const files = fs.readdirSync(texDir);
+                    let bibFile = files.find(f => f.endsWith('.bib')) || 'references.bib';
+                    const bibPath = path.join(texDir, bibFile);
+                    let content = fs.existsSync(bibPath) ? fs.readFileSync(bibPath, 'utf8') : "";
+                    if (!content.includes(response.cite_key)) {
+                        fs.appendFileSync(bibPath, `\n\n${response.bibtex}`);
+                        vscode.window.showInformationMessage(`BibTeX이 ${bibFile}에 추가되었습니다.`);
+                    } else { vscode.window.showInformationMessage(`이미 존재하는 인용 키입니다: ${response.cite_key}`); }
+                    await editor.edit(editBuilder => { editBuilder.insert(editor.selection.active, `\\cite{${response.cite_key}}`); });
+                }
+                return;
+            }
+            const shouldShowWebview = currentMainCommand === 'plot';
+            provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex, shouldShowWebview);
+            const isRerender = currentParallels.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
+            if (currentEditor && currentSelection) {
+                if (isExportingPdf && response.export_content) {
+                    const exportBuffer = Buffer.from(response.export_content, 'base64');
+                    const imagesDir = path.join(pdfTargetDir, 'images');
+                    const ext = response.export_format || 'pdf';
+                    const filename = `plot_3d.${ext}`;
+                    const exportPath = path.join(imagesDir, filename);
+                    try {
+                        if (!fs.existsSync(imagesDir)) { fs.mkdirSync(imagesDir, { recursive: true }); }
+                        fs.writeFileSync(exportPath, exportBuffer);
+                        const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                        await currentEditor.edit(editBuilder => { editBuilder.replace(currentSelection!, figureCode); });                                    
+                        vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
+                    } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); } finally { isExportingPdf = false; }
+                    return;
+                }
+                if (!isRerender) {
+                    const resultLatex = response.latex;
+                    let outputText = "";
+                    if (response.dat_content) {
+                        const texDir = path.dirname(currentEditor.document.uri.fsPath);
+                        const dataDir = path.join(texDir, 'data');
+                        const datFilename = response.dat_filename || 'plot_data.dat';
+                        const datPath = path.join(dataDir, datFilename);
+                        try { if (!fs.existsSync(dataDir)) { fs.mkdirSync(dataDir, { recursive: true }); } fs.writeFileSync(datPath, response.dat_content); } catch (err: any) { vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`); }
+                    }
+                    if (currentMainCommand === "matrix") { outputText = resultLatex; }
+                    else if (currentMainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : currentOriginalText; }
+                    else if (currentParallels.includes("newline")) { outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`; }
+                    else { outputText = `${currentOriginalText} = ${resultLatex}`; }
+                    if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && response.latex.includes("tikzpicture"))) {
+                        await currentEditor.edit(editBuilder => { editBuilder.replace(currentSelection!, outputText); });
+                    }
+                }
+            }
+            if (response.warning) { vscode.window.showWarningMessage(response.warning); }
+        } else if (response.status === 'error') {
+            vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
+            isExportingPdf = false;
+        }
+    } catch (e) { console.error("결과 처리 중 오류:", e); }
 }
 
 export async function deactivate() {
     await deactivateToggleMode();
-    if (pythonProcess) {
-        pythonProcess.kill();
+    if (pythonService) {
+        pythonService.stop();
     }
 }

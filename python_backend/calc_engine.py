@@ -853,9 +853,6 @@ def preprocess_matrix_latex(latex_str):
 
 def execute_calc(parsed_json_str):
     try:
-        from sympy.core.cache import clear_cache
-        clear_cache()
-        
         req = json.loads(parsed_json_str)
         main_cmd = req.get('mainCommand', '').strip()
         sub_cmds = req.get('subCommands', [])
