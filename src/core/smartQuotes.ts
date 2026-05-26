@@ -1,23 +1,10 @@
 import * as vscode from 'vscode';
+import { registerToggleFeature } from './toggleMode';
 
 export function registerSmartQuotes(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            const isEnabled = config.get('smartQuotes.enabled', true);
-            if (!isEnabled) {
-                return;
-            }
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document !== event.document) {
-                return;
-            }
-
-            if (editor.document.languageId !== 'latex') {
-                return;
-            }
-
+    registerToggleFeature({
+        name: 'smartQuotes',
+        onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // Check if the inserted text is exactly a double quote
                 if (change.text !== '"') {
@@ -64,8 +51,8 @@ export function registerSmartQuotes(context: vscode.ExtensionContext) {
                     editBuilder.replace(rangeToReplace, replacement);
                 }, { undoStopBefore: false, undoStopAfter: false });
             }
-        })
-    );
+        }
+    });
 }
 
 function isInsideVerbatim(document: vscode.TextDocument, position: vscode.Position): boolean {

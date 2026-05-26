@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { findMathAtPos } from './mathSplitter';
+import { registerToggleFeature } from './toggleMode';
 
 /**
  * [Auto \left \right]
@@ -20,23 +21,9 @@ const TALL_ELEMENTS = [
 ];
 
 export function registerAutoLeftRight(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            const isEnabled = config.get('autoLeftRight.enabled', true);
-            if (!isEnabled) {
-                return;
-            }
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document !== event.document) {
-                return;
-            }
-
-            if (editor.document.languageId !== 'latex') {
-                return;
-            }
-
+    registerToggleFeature({
+        name: 'autoLeftRight',
+        onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 const text = change.text;
                 if (!text || text.length < 2) {
@@ -57,13 +44,6 @@ export function registerAutoLeftRight(context: vscode.ExtensionContext) {
                 } else if (text.startsWith('\\{') && text.endsWith('\\}')) {
                     open = '\\{'; close = '\\}';
                     inner = text.substring(2, text.length - 2);
-                } else if (text.startsWith('{') && text.endsWith('}')) {
-                    // For grouping braces, we usually don't want \left\{ unless they are visible.
-                    // But in LaTeX, literal braces are \{ \}.
-                    // If the user uses a snippet that inserts {content}, we might not want to touch it
-                    // unless they specifically want visible braces.
-                    // Given the prompt " (, [, { ", it might mean visible ones.
-                    // Let's stick to literal ones for now.
                 }
 
                 if (open && isTall(inner)) {
@@ -71,18 +51,14 @@ export function registerAutoLeftRight(context: vscode.ExtensionContext) {
                     if (findMathAtPos(editor.document, change.range.start)) {
                         const newText = `\\left${open}${inner}\\right${close}`;
                         
-                        // Apply the change
-                        // We use a small delay or ensure we don't trigger recursively
-                        // In VS Code, edits from onDidChangeTextDocument are usually fine 
-                        // if they don't trigger the same pattern.
                         await editor.edit(editBuilder => {
                             editBuilder.replace(change.range, newText);
                         }, { undoStopBefore: false, undoStopAfter: false });
                     }
                 }
             }
-        })
-    );
+        }
+    });
 }
 
 function isTall(text: string): boolean {
@@ -90,10 +66,6 @@ function isTall(text: string): boolean {
     if (TALL_ELEMENTS.some(el => text.includes(el))) {
         return true;
     }
-    
-    // Check for superscripts or subscripts that might be tall (e.g. ^{...} with \frac)
-    // For simplicity, we just look for ^ or _ followed by {
-    // But maybe it's too aggressive. Let's stick to the macro list for now.
     
     return false;
 }

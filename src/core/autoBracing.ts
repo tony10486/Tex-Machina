@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { registerToggleFeature } from './toggleMode';
 
 let isEscaped = false;
 
@@ -7,32 +8,15 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-machina.escapeAutoBracing', () => {
             isEscaped = true;
-            // Note: We don't re-dispatch 'type' for Esc anymore to avoid side effects in tests.
-            // In a real environment, Esc will still trigger other built-in listeners unless we stop propagation.
         })
     );
 
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-            // Check if auto-bracing is enabled in configuration
+    registerToggleFeature({
+        name: 'autoBracing',
+        onTextChange: async (event, editor) => {
             const config = vscode.workspace.getConfiguration('tex-machina');
-            const isEnabled = config.get('autoBracing.enabled', true);
-            if (!isEnabled) {
-                return;
-            }
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document !== event.document) {
-                return;
-            }
-
-            // Only for LaTeX files
-            if (editor.document.languageId !== 'latex') {
-                return;
-            }
-
-            // Collect all edits to apply them at once if possible, 
-            // though for auto-bracing usually only the last one matters.
+            
+            // Collect all edits to apply them at once if possible
             for (const change of event.contentChanges) {
                 // Reset escape if user moves to a new word/line or deletes
                 if (change.text.includes(' ') || change.text.includes('\n') || change.text === '') {
@@ -49,11 +33,9 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                     continue;
                 }
 
-                // The character was inserted at change.range.start
                 const charOffsetAfter = change.range.start.character + change.text.length;
                 const line = change.range.start.line;
 
-                // Safety check for line bounds (in case of concurrent deletions)
                 if (line >= editor.document.lineCount) {
                     continue;
                 }
@@ -86,9 +68,6 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                             new vscode.Position(line, charOffsetAfter)
                         );
                         
-                        // Use insertSnippet for atomic operation and better cursor management
-                        // $0 ensures the cursor stays inside the braces
-                        // For common exponents defined in config, move cursor outside
                         const escapeExponents = config.get<string[]>('autoBracing.escapeExponents', ['-1']);
                         let snippet: vscode.SnippetString;
                         if (escapeExponents.includes(content)) {
@@ -100,6 +79,6 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                     }
                 }
             }
-        })
-    );
+        }
+    });
 }

@@ -1,23 +1,10 @@
 import * as vscode from 'vscode';
+import { registerToggleFeature } from './toggleMode';
 
 export function registerMarkdownLatex(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            const isEnabled = config.get('markdownLatex.enabled', true);
-            if (!isEnabled) {
-                return;
-            }
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document !== event.document) {
-                return;
-            }
-
-            if (editor.document.languageId !== 'latex') {
-                return;
-            }
-
+    registerToggleFeature({
+        name: 'markdownLatex',
+        onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // We are looking for space insertion
                 if (change.text !== ' ') {
@@ -141,6 +128,6 @@ export function registerMarkdownLatex(context: vscode.ExtensionContext) {
                     editor.selection = new vscode.Selection(newPosition, newPosition);
                 }
             }
-        })
-    );
+        }
+    });
 }

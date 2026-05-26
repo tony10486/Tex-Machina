@@ -1,10 +1,48 @@
 import * as vscode from 'vscode';
 
+export interface ToggleFeature {
+    name: string;
+    onTextChange?: (event: vscode.TextDocumentChangeEvent, editor: vscode.TextEditor) => Promise<void> | void;
+    onActivate?: () => Promise<void> | void;
+    onDeactivate?: () => Promise<void> | void;
+}
+
+const registeredFeatures: ToggleFeature[] = [];
+
+export function registerToggleFeature(feature: ToggleFeature) {
+    registeredFeatures.push(feature);
+}
+
 let isToggleActive = false;
+let activeProfile: string | null = null; // "unconditional" or a number string like "1", "2"
 let remainingTime = 0;
 let timerId: NodeJS.Timeout | undefined = undefined;
 let statusBarItem: vscode.StatusBarItem | undefined = undefined;
 let originalColorCustomizations: any = undefined;
+
+/**
+ * Checks if a feature should be active.
+ * A feature is active if:
+ * 1. It is globally enabled in settings (NOT checked here, checked in the feature itself)
+ * 2. OR Toggle Mode is active AND:
+ *    a. Profile is 'unconditional'
+ *    b. The current profile number is in the feature's 'toggleProfiles' setting.
+ */
+export function isFeatureActive(featureName: string): boolean {
+    if (!isToggleActive) {
+        return false;
+    }
+    if (activeProfile === 'unconditional') {
+        return true;
+    }
+    if (activeProfile) {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        const profileKey = `toggle.profile${activeProfile}`;
+        const enabledFeatures = config.get<string[]>(profileKey, []);
+        return enabledFeatures.includes(featureName);
+    }
+    return false;
+}
 
 // Export active state so other features can check it if needed
 export function isSubscriptToggleActive(): boolean {
@@ -24,10 +62,23 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
             if (isToggleActive) {
                 await deactivateToggleMode();
             } else {
-                await activateToggleMode();
+                await activateToggleMode('unconditional');
             }
         })
     );
+
+    const profiles = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+    for (const profile of profiles) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand(`tex-machina.toggleSubscriptModeProfile${profile}`, async () => {
+                if (isToggleActive) {
+                    await deactivateToggleMode();
+                } else {
+                    await activateToggleMode(`${profile}`);
+                }
+            })
+        );
+    }
 
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-machina.isSubscriptToggleActive', () => {
@@ -41,14 +92,9 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
         })
     );
 
-    // 3. Listen to text changes for implicit subscripts (Optimized: exits instantly if inactive)
+    // 3. Listen to text changes and delegate to registered features
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(async (event) => {
-            // Highly optimized fast-path check
-            if (!isToggleActive) {
-                return;
-            }
-
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.document !== event.document) {
                 return;
@@ -59,78 +105,31 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // Apply conversions for typed digits
-            for (const change of event.contentChanges) {
-                // Only trigger on typing a single digit to prevent lag on pasting or multi-character insertion
-                if (!/^\d$/.test(change.text)) {
+            // Execute all active registered toggle features
+            for (const feature of registeredFeatures) {
+                if (!feature.onTextChange) {
                     continue;
                 }
 
-                const line = change.range.start.line;
-                if (line >= editor.document.lineCount) {
-                    continue;
-                }
+                // A feature runs if it's globally enabled OR if it's active in the current toggle profile
+                const config = vscode.workspace.getConfiguration('tex-machina');
+                const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
 
-                const lineText = editor.document.lineAt(line).text;
-                // Index after the newly typed digit is inserted
-                const charOffsetAfter = change.range.start.character + 1;
-                if (charOffsetAfter <= 1) {
-                    continue;
-                }
-
-                const textBefore = lineText.substring(0, charOffsetAfter);
-
-                // Define transformation patterns (ordered from most specific to least specific)
-                const rule3 = /([a-zA-Z]|\\[a-zA-Z]+)_\{(\d+)\}(\d)$/; // x_{12}3 -> x_{123}
-                const rule2 = /([a-zA-Z]|\\[a-zA-Z]+)_(\d)(\d)$/;     // x_12 -> x_{12}
-                const rule1 = /([a-zA-Z]|\\[a-zA-Z]+)(\d)$/;          // x1 -> x_1
-
-                let match = rule3.exec(textBefore);
-                let replacement = '';
-                
-                if (match) {
-                    const variable = match[1];
-                    const existingDigits = match[2];
-                    const typedDigit = match[3];
-                    replacement = `${variable}_{${existingDigits}${typedDigit}}`;
-                } else {
-                    match = rule2.exec(textBefore);
-                    if (match) {
-                        const variable = match[1];
-                        const existingDigit = match[2];
-                        const typedDigit = match[3];
-                        replacement = `${variable}_{${existingDigit}${typedDigit}}`;
-                    } else {
-                        match = rule1.exec(textBefore);
-                        if (match) {
-                            const variable = match[1];
-                            const typedDigit = match[2];
-                            replacement = `${variable}_${typedDigit}`;
-                        }
+                if (isGloballyEnabled || isFeatureActive(feature.name)) {
+                    try {
+                        await feature.onTextChange(event, editor);
+                    } catch (e) {
+                        console.error(`Error in toggle feature ${feature.name}:`, e);
                     }
-                }
-
-                // If any rule matched, perform the replacement edit in the editor
-                if (match && replacement) {
-                    const matchLen = match[0].length;
-                    const startChar = charOffsetAfter - matchLen;
-                    const rangeToReplace = new vscode.Range(
-                        new vscode.Position(line, startChar),
-                        new vscode.Position(line, charOffsetAfter)
-                    );
-
-                    // Apply the edit asynchronously (without blocking typing)
-                    await editor.edit(editBuilder => {
-                        editBuilder.replace(rangeToReplace, replacement);
-                    });
                 }
             }
         })
     );
 }
 
-async function activateToggleMode() {
+async function activateToggleMode(profile: string) {
     isToggleActive = true;
+    activeProfile = profile;
 
     // Read configured duration in seconds (default 10)
     const config = vscode.workspace.getConfiguration('tex-machina');
@@ -144,6 +143,17 @@ async function activateToggleMode() {
     const changeColor = config.get<boolean>('toggle.changeStatusBarColor', true);
     if (changeColor) {
         await setStatusBarColorGreen();
+    }
+
+    // Notify all active features of activation
+    for (const feature of registeredFeatures) {
+        if (feature.onActivate && isFeatureActive(feature.name)) {
+            try {
+                await feature.onActivate();
+            } catch (e) {
+                console.error(`Error on activation of feature ${feature.name}:`, e);
+            }
+        }
     }
 
     // Start Timer
@@ -162,6 +172,7 @@ async function activateToggleMode() {
 
 export async function deactivateToggleMode() {
     isToggleActive = false;
+    activeProfile = null;
     remainingTime = 0;
 
     // Clear Timer
@@ -175,11 +186,23 @@ export async function deactivateToggleMode() {
 
     // Revert status bar background color
     await restoreStatusBarColor();
+
+    // Notify all features of deactivation
+    for (const feature of registeredFeatures) {
+        if (feature.onDeactivate) {
+            try {
+                await feature.onDeactivate();
+            } catch (e) {
+                console.error(`Error on deactivation of feature ${feature.name}:`, e);
+            }
+        }
+    }
 }
 
 function updateStatusBar() {
     if (statusBarItem) {
-        statusBarItem.text = `$(clock) [${remainingTime}s]`;
+        const profileDisplay = activeProfile === 'unconditional' ? 'ALL' : `#${activeProfile}`;
+        statusBarItem.text = `$(clock) [${profileDisplay} | ${remainingTime}s]`;
     }
 }
 

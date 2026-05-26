@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { registerToggleFeature, isFeatureActive } from './toggleMode';
 
 let isMathNavActive = false;
 let isSelectContentEnabled = true;
@@ -15,7 +16,11 @@ let boundaryBehavior: 'before' | 'after' | 'both' = 'both';
 export function registerNodeNavigation(context: vscode.ExtensionContext) {
     const updateLocalConfig = () => {
         const config = vscode.workspace.getConfiguration('tex-machina');
-        isMathNavActive = config.get<boolean>('mathNav.enabled', false);
+        
+        // A feature is active if it's globally enabled OR if it's active in the current toggle profile
+        const isEnabledGlobal = config.get<boolean>('mathNav.enabled', false);
+        isMathNavActive = isEnabledGlobal || isFeatureActive('mathNav');
+
         isSelectContentEnabled = config.get<boolean>('mathNav.selectContent.enabled', true);
         jumpSymbols = config.get<string[]>('mathNav.jumpSymbols', ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"]);
         selectBrackets = config.get<string[]>('mathNav.selectBrackets', ["{}", "[]", "()"]);
@@ -25,6 +30,17 @@ export function registerNodeNavigation(context: vscode.ExtensionContext) {
     };
 
     updateLocalConfig();
+
+    // Register as a toggle feature to listen for activation/deactivation events
+    registerToggleFeature({
+        name: 'mathNav',
+        onActivate: () => {
+            updateLocalConfig();
+        },
+        onDeactivate: () => {
+            updateLocalConfig();
+        }
+    });
 
     // Toggle Command: cmd+shift+' l
     let toggleCommand = vscode.commands.registerCommand('tex-machina.toggleMathNav', () => {

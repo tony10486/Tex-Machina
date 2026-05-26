@@ -17,9 +17,14 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
         await new Promise(resolve => setTimeout(resolve, 200));
     });
 
-    // Cleanup active editors and toggle state after each test
+    // Cleanup active editors, configurations, and toggle state after each test
     teardown(async () => {
         await deactivateToggle();
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        // Restore defaults
+        await config.update('toggle.profile1', ["implicitSubscripts"], vscode.ConfigurationTarget.Global);
+        await config.update('toggle.profile2', [], vscode.ConfigurationTarget.Global);
+        await config.update('implicitSubscripts.enabled', false, vscode.ConfigurationTarget.Global);
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
@@ -114,5 +119,99 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
 
         await new Promise(resolve => setTimeout(resolve, 300));
         assert.strictEqual(editor.document.lineAt(0).text, 'x1', "Should NOT transform since toggle mode is off");
+    });
+
+    test('Profile-based Toggle: Profile 1 has implicitSubscripts by default and should convert', async () => {
+        // Act: Activate Profile 1
+        await vscode.commands.executeCommand('tex-machina.toggleSubscriptModeProfile1');
+        assert.strictEqual(await isToggleActive(), true);
+
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor);
+
+        // Insert '1' after 'x'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), '1');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (editor.document.lineAt(0).text === 'x_1') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        assert.strictEqual(editor.document.lineAt(0).text, 'x_1', "Should convert because Profile 1 has implicitSubscripts by default");
+    });
+
+    test('Profile-based Toggle: Profile 2 does not have implicitSubscripts by default and should NOT convert', async () => {
+        // Act: Activate Profile 2
+        await vscode.commands.executeCommand('tex-machina.toggleSubscriptModeProfile2');
+        assert.strictEqual(await isToggleActive(), true);
+
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor);
+
+        // Insert '1' after 'x'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), '1');
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+        assert.strictEqual(editor.document.lineAt(0).text, 'x1', "Should NOT convert because Profile 2 is empty by default");
+    });
+
+    test('Profile-based Toggle: Should convert in Profile 2 if implicitSubscripts is customized and added to Profile 2', async () => {
+        // Customize Profile 2 to include implicitSubscripts
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        await config.update('toggle.profile2', ["implicitSubscripts"], vscode.ConfigurationTarget.Global);
+
+        // Act: Activate Profile 2
+        await vscode.commands.executeCommand('tex-machina.toggleSubscriptModeProfile2');
+        assert.strictEqual(await isToggleActive(), true);
+
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor);
+
+        // Insert '1' after 'x'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), '1');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (editor.document.lineAt(0).text === 'x_1') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        assert.strictEqual(editor.document.lineAt(0).text, 'x_1', "Should convert in Profile 2 after customization");
+    });
+
+    test('Profile-based Toggle: Unconditional toggle should still convert even if all profiles are empty', async () => {
+        // Make Profile 1 empty
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        await config.update('toggle.profile1', [], vscode.ConfigurationTarget.Global);
+
+        // Act: Activate in unconditional mode
+        await vscode.commands.executeCommand('tex-machina.toggleSubscriptMode');
+        assert.strictEqual(await isToggleActive(), true);
+
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor);
+
+        // Insert '1' after 'x'
+        await editor.edit(editBuilder => {
+            editBuilder.insert(new vscode.Position(0, 1), '1');
+        });
+
+        for (let i = 0; i < 20; i++) {
+            if (editor.document.lineAt(0).text === 'x_1') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        assert.strictEqual(editor.document.lineAt(0).text, 'x_1', "Should convert because unconditional toggle ignores profile configurations");
     });
 });

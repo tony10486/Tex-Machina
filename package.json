@@ -50,7 +50,10 @@
             },
             "angleUnit": {
               "type": "string",
-              "enum": ["deg", "rad"],
+              "enum": [
+                "deg",
+                "rad"
+              ],
               "default": "deg",
               "description": "각도 계산의 기본 단위 (도 또는 라디안)"
             },
@@ -63,7 +66,10 @@
             },
             "imaginaryUnit": {
               "type": "string",
-              "enum": ["i", "j"],
+              "enum": [
+                "i",
+                "j"
+              ],
               "default": "i",
               "description": "허수 단위 기호 (i 또는 j)"
             },
@@ -74,7 +80,10 @@
             },
             "defaultDomain": {
               "type": "string",
-              "enum": ["real", "complex"],
+              "enum": [
+                "real",
+                "complex"
+              ],
               "default": "real",
               "description": "변수의 기본 도메인 설정 (실수 또는 복소수). 복소수 설정 시 로그나 거듭제곱 계산 방식이 달라질 수 있습니다."
             },
@@ -110,9 +119,9 @@
         },
         "tex-machina.plot.yMultiplier": {
           "type": "number",
-          "default": 5.0,
-          "minimum": 1.0,
-          "maximum": 50.0,
+          "default": 5,
+          "minimum": 1,
+          "maximum": 50,
           "description": "2D 그래프 데이터(.dat) 생성 시 y축 표시 범위를 넘어서 계산할 배수 (Clipping Limit)"
         },
         "tex-machina.plot.lineColor": {
@@ -127,14 +136,18 @@
         },
         "tex-machina.autoBracing.escapeExponents": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["-1"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "-1"
+          ],
           "description": "중괄호 자동 완성 시 커서를 밖으로 이동시킬 지수(exponent) 목록입니다. (예: ['-1', '2'])"
         },
         "tex-machina.autoLeftRight.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "수식 모드 자동 \u005cleft \u005cright (Auto \u005cleft \u005cright) 기능을 활성화합니다. ( ) 등 입력 시 내부에 분수나 적분 같은 높은 요소가 있으면 자동으로 \u005cleft, \u005cright를 붙여줍니다."
+          "description": "수식 모드 자동 \\left \\right (Auto \\left \\right) 기능을 활성화합니다. ( ) 등 입력 시 내부에 분수나 적분 같은 높은 요소가 있으면 자동으로 \\left, \\right를 붙여줍니다."
         },
         "tex-machina.autoMathWrap.enabled": {
           "type": "boolean",
@@ -161,6 +174,11 @@
           "default": false,
           "description": "수식 계층별 점프 모드 (Math Navigation Mode) 기능을 활성화합니다. 활성화 시 Alt+방향키로 수식 내 주요 슬롯 사이를 점프할 수 있습니다."
         },
+        "tex-machina.implicitSubscripts.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "암시적 첨자 변환 (Implicit Subscripts) 기능을 활성화합니다. x1 입력 시 자동으로 x_1로 변환합니다."
+        },
         "tex-machina.mathNav.selectContent.enabled": {
           "type": "boolean",
           "default": true,
@@ -168,25 +186,70 @@
         },
         "tex-machina.mathNav.jumpSymbols": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["\\\\", "&", "=", "+", "-", "*", "/", "<", ">", ",", ";", ":"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\\\",
+            "&",
+            "=",
+            "+",
+            "-",
+            "*",
+            "/",
+            "<",
+            ">",
+            ",",
+            ";",
+            ":"
+          ],
           "description": "수식 점프 시 멈출 기호(연산자, 구분자 등)들의 목록입니다."
         },
         "tex-machina.mathNav.selectBrackets": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["{}", "[]", "()"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "{}",
+            "[]",
+            "()"
+          ],
           "description": "자동 선택(Auto-selection)을 적용할 괄호 쌍 목록입니다. (예: '{}')"
         },
         "tex-machina.mathNav.skipCommands": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["\\frac", "\\sqrt", "\\int", "\\sum", "\\prod", "\\lim", "\\vec", "\\bar", "\\hat", "\\tilde", "\\dot", "\\ddot", "\\sin", "\\cos", "\\tan", "\\log", "\\ln"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\frac",
+            "\\sqrt",
+            "\\int",
+            "\\sum",
+            "\\prod",
+            "\\lim",
+            "\\vec",
+            "\\bar",
+            "\\hat",
+            "\\tilde",
+            "\\dot",
+            "\\ddot",
+            "\\sin",
+            "\\cos",
+            "\\tan",
+            "\\log",
+            "\\ln"
+          ],
           "description": "점프 시 명령어를 건너뛰고 바로 내부 인자로 이동할 LaTeX 명령어 목록입니다."
         },
         "tex-machina.mathNav.boundaryBehavior": {
           "type": "string",
-          "enum": ["before", "after", "both"],
+          "enum": [
+            "before",
+            "after",
+            "both"
+          ],
           "default": "both",
           "description": "기호 주변에서 멈출 위치를 설정합니다. (before: 기호 앞, after: 기호 뒤, both: 양쪽 모두)"
         },
@@ -293,10 +356,332 @@
           "type": "boolean",
           "default": true,
           "description": "토글 모드가 활성화되었을 때 VS Code의 상태 표시줄(Status Bar) 배경색을 초록색으로 변경할지 여부입니다."
+        },
+        "tex-machina.toggle.profile1": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [
+            "implicitSubscripts"
+          ],
+          "description": "단축키 `cmd+' 1`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile2": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 2`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile3": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 3`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile4": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 4`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile5": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 5`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile6": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 6`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile7": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 7`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile8": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 8`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile9": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 9`으로 활성화할 토글 기능 목록입니다."
+        },
+        "tex-machina.toggle.profile0": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "implicitSubscripts",
+              "autoBracing",
+              "autoLeftRight",
+              "autoMathWrap",
+              "fractionShorthand",
+              "markdownLatex",
+              "smartQuotes",
+              "mathNav"
+            ],
+            "enumDescriptions": [
+              "암시적 첨자 (x1 -> x_1)",
+              "스마트 첨자 자동 괄호",
+              "자동 \\left \\right",
+              "수식 모드 자동 전환",
+              "분수 자동 변환",
+              "마크다운 스타일 변환",
+              "스마트 따옴표",
+              "수식 계층 점프"
+            ]
+          },
+          "default": [],
+          "description": "단축키 `cmd+' 0`으로 활성화할 토글 기능 목록입니다."
         }
       }
     },
     "commands": [
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile1",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 1)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile2",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 2)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile3",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 3)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile4",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 4)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile5",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 5)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile6",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 6)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile7",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 7)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile8",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 8)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile9",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 9)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile0",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 0)"
+      },
       {
         "command": "tex-machina.toggleSubscriptMode",
         "title": "LaTeX: Toggle Implicit Subscript Mode"
@@ -381,6 +766,66 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile1",
+        "key": "ctrl+' 1",
+        "mac": "cmd+' 1",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile2",
+        "key": "ctrl+' 2",
+        "mac": "cmd+' 2",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile3",
+        "key": "ctrl+' 3",
+        "mac": "cmd+' 3",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile4",
+        "key": "ctrl+' 4",
+        "mac": "cmd+' 4",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile5",
+        "key": "ctrl+' 5",
+        "mac": "cmd+' 5",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile6",
+        "key": "ctrl+' 6",
+        "mac": "cmd+' 6",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile7",
+        "key": "ctrl+' 7",
+        "mac": "cmd+' 7",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile8",
+        "key": "ctrl+' 8",
+        "mac": "cmd+' 8",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile9",
+        "key": "ctrl+' 9",
+        "mac": "cmd+' 9",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile0",
+        "key": "ctrl+' 0",
+        "mac": "cmd+' 0",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
       {
         "command": "tex-machina.toggleSubscriptMode",
         "key": "ctrl+'",

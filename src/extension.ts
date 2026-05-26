@@ -22,6 +22,7 @@ import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
 import { performSmartSearchInject } from './core/smartSearch';
 import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
+import { registerImplicitSubscripts } from './core/implicitSubscripts';
 
 let pythonProcess: ChildProcess | null = null;
 let currentEditor: vscode.TextEditor | undefined;
@@ -140,7 +141,10 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
 export function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
 
-    // [Toggle Subscript Mode] 토글 모드 및 숫자 첨자 자동화 등록
+    // [Toggle System] 토글 연동 기능들을 먼저 레지스트리에 등록 (리스너 등록 전에 완료되어야 함)
+    registerImplicitSubscripts();
+
+    // [Toggle Mode] 토글 모드 컨트롤러 등록 (이때부터 리스너가 활성화됨)
     registerToggleMode(context);
 
     macroManager = new MacroManager(context);

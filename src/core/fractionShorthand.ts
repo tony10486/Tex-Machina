@@ -1,17 +1,11 @@
 import * as vscode from 'vscode';
 import { findMathAtPos } from './mathSplitter';
+import { registerToggleFeature } from './toggleMode';
 
 export function registerFractionShorthand(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-            const config = vscode.workspace.getConfiguration('tex-machina');
-            const isEnabled = config.get('fractionShorthand.enabled', true);
-            if (!isEnabled) return;
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document !== event.document) return;
-            if (editor.document.languageId !== 'latex') return;
-
+    registerToggleFeature({
+        name: 'fractionShorthand',
+        onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 if (change.text !== ' ') continue;
 
@@ -53,6 +47,6 @@ export function registerFractionShorthand(context: vscode.ExtensionContext) {
                     }, { undoStopBefore: false, undoStopAfter: false });
                 }
             }
-        })
-    );
+        }
+    });
 }
