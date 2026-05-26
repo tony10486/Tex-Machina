@@ -190,6 +190,21 @@
           "default": false,
           "description": "암시적 첨자 변환 (Implicit Subscripts) 기능을 활성화합니다. x1 입력 시 자동으로 x_1로 변환합니다."
         },
+        "tex-machina.smartNewline.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "스마트 줄바꿈 (Smart Newline) 기능을 활성화합니다. 특정 환경에서 Enter 입력 시 \\\\나 & 등을 자동으로 삽입합니다."
+        },
+        "tex-machina.mathLigatures.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "수식 전용 리가처 (Mathematical Ligatures) 기능을 활성화합니다. <=, -> 같은 기호 조합을 LaTeX 명령어로 자동 변환합니다."
+        },
+        "tex-machina.linkedEditing.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "환경 이름 동기화 수정 (Linked Editing for Environments) 기능을 활성화합니다. \\begin{env}의 이름을 수정하면 \\end{env}도 자동으로 함께 바뀝니다."
+        },
         "tex-machina.mathNav.selectContent.enabled": {
           "type": "boolean",
           "default": true,
@@ -393,7 +408,10 @@
                     "markdownLatex",
                     "smartQuotes",
                     "mathNav",
-                    "ellipsis"
+                    "ellipsis",
+                    "smartNewline",
+                    "mathLigatures",
+                    "linkedEditing"
                   ],
                   "enumDescriptions": [
                     "암시적 첨자 (x1 -> x_1)",
@@ -404,7 +422,10 @@
                     "마크다운 스타일 변환",
                     "스마트 따옴표",
                     "수식 계층 점프",
-                    "말줄임표 (... -> \\dots/\\cdots)"
+                    "말줄임표 (... -> \\dots/\\cdots)",
+                    "스마트 줄바꿈",
+                    "수식 전용 리가처",
+                    "환경 이름 동기화"
                   ]
                 },
                 "description": "해당 프로필에서 활성화할 기능 목록"
@@ -522,6 +543,14 @@
       {
         "command": "tex-machina.mathNavLeft",
         "title": "LaTeX: Math Node Navigation Left"
+      },
+      {
+        "command": "tex-machina.smartNewline",
+        "title": "LaTeX: Smart Newline"
+      },
+      {
+        "command": "tex-machina.triggerRecentSymbols",
+        "title": "LaTeX: Show Recent Symbols"
       }
     ],
     "viewsContainers": {
@@ -666,6 +695,17 @@
         "command": "tex-machina.mathNavLeft",
         "key": "alt+left",
         "mac": "alt+left",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.smartNewline",
+        "key": "enter",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.triggerRecentSymbols",
+        "key": "alt+q",
+        "mac": "alt+q",
         "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
