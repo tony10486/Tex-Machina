@@ -169,6 +169,17 @@
           "default": true,
           "description": "LaTeX 스마트 따옴표 기능을 활성화합니다. \" 키를 누르면 상황에 맞게 `` 또는 ''로 변환됩니다."
         },
+        "tex-machina.ellipsis.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "... 입력 시 자동으로 LaTeX 말줄임표 매크로로 변환하는 기능을 활성화합니다."
+        },
+        "tex-machina.ellipsis.macro": {
+          "type": "string",
+          "enum": ["\\dots", "\\cdots"],
+          "default": "\\dots",
+          "description": "... 입력 시 변환할 LaTeX 매크로를 선택합니다."
+        },
         "tex-machina.mathNav.enabled": {
           "type": "boolean",
           "default": false,
@@ -357,287 +368,53 @@
           "default": true,
           "description": "토글 모드가 활성화되었을 때 VS Code의 상태 표시줄(Status Bar) 배경색을 초록색으로 변경할지 여부입니다."
         },
-        "tex-machina.toggle.profile1": {
+        "tex-machina.toggle.profiles": {
           "type": "array",
+          "title": "토글 프로필 설정",
+          "description": "각 프로필 번호(0-9)별로 활성화할 기능 목록을 설정합니다. (Settings JSON에서 직접 수정하는 것을 권장합니다)",
           "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "integer",
+                "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
+                "description": "프로필 번호"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "implicitSubscripts",
+                    "autoBracing",
+                    "autoLeftRight",
+                    "autoMathWrap",
+                    "fractionShorthand",
+                    "markdownLatex",
+                    "smartQuotes",
+                    "mathNav",
+                    "ellipsis"
+                  ],
+                  "enumDescriptions": [
+                    "암시적 첨자 (x1 -> x_1)",
+                    "스마트 첨자 자동 괄호",
+                    "자동 \\left \\right",
+                    "수식 모드 자동 전환",
+                    "분수 자동 변환",
+                    "마크다운 스타일 변환",
+                    "스마트 따옴표",
+                    "수식 계층 점프",
+                    "말줄임표 (... -> \\dots/\\cdots)"
+                  ]
+                },
+                "description": "해당 프로필에서 활성화할 기능 목록"
+              }
+            },
+            "required": ["profile", "features"]
           },
           "default": [
-            "implicitSubscripts"
-          ],
-          "description": "단축키 `cmd+' 1`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile2": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 2`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile3": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 3`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile4": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 4`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile5": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 5`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile6": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 6`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile7": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 7`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile8": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 8`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile9": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 9`으로 활성화할 토글 기능 목록입니다."
-        },
-        "tex-machina.toggle.profile0": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "implicitSubscripts",
-              "autoBracing",
-              "autoLeftRight",
-              "autoMathWrap",
-              "fractionShorthand",
-              "markdownLatex",
-              "smartQuotes",
-              "mathNav"
-            ],
-            "enumDescriptions": [
-              "암시적 첨자 (x1 -> x_1)",
-              "스마트 첨자 자동 괄호",
-              "자동 \\left \\right",
-              "수식 모드 자동 전환",
-              "분수 자동 변환",
-              "마크다운 스타일 변환",
-              "스마트 따옴표",
-              "수식 계층 점프"
-            ]
-          },
-          "default": [],
-          "description": "단축키 `cmd+' 0`으로 활성화할 토글 기능 목록입니다."
+            { "profile": 1, "features": ["implicitSubscripts"] }
+          ]
         }
       }
     },

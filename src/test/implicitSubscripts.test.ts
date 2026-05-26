@@ -22,8 +22,7 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
         await deactivateToggle();
         const config = vscode.workspace.getConfiguration('tex-machina');
         // Restore defaults
-        await config.update('toggle.profile1', ["implicitSubscripts"], vscode.ConfigurationTarget.Global);
-        await config.update('toggle.profile2', [], vscode.ConfigurationTarget.Global);
+        await config.update('toggle.profiles', [{ profile: 1, features: ["implicitSubscripts"] }], vscode.ConfigurationTarget.Global);
         await config.update('implicitSubscripts.enabled', false, vscode.ConfigurationTarget.Global);
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
@@ -164,7 +163,10 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
     test('Profile-based Toggle: Should convert in Profile 2 if implicitSubscripts is customized and added to Profile 2', async () => {
         // Customize Profile 2 to include implicitSubscripts
         const config = vscode.workspace.getConfiguration('tex-machina');
-        await config.update('toggle.profile2', ["implicitSubscripts"], vscode.ConfigurationTarget.Global);
+        await config.update('toggle.profiles', [
+            { profile: 1, features: ["implicitSubscripts"] },
+            { profile: 2, features: ["implicitSubscripts"] }
+        ], vscode.ConfigurationTarget.Global);
 
         // Act: Activate Profile 2
         await vscode.commands.executeCommand('tex-machina.toggleSubscriptModeProfile2');
@@ -191,7 +193,7 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
     test('Profile-based Toggle: Unconditional toggle should still convert even if all profiles are empty', async () => {
         // Make Profile 1 empty
         const config = vscode.workspace.getConfiguration('tex-machina');
-        await config.update('toggle.profile1', [], vscode.ConfigurationTarget.Global);
+        await config.update('toggle.profiles', [], vscode.ConfigurationTarget.Global);
 
         // Act: Activate in unconditional mode
         await vscode.commands.executeCommand('tex-machina.toggleSubscriptMode');

@@ -11,6 +11,7 @@ import { registerMathSplitter } from './core/mathSplitter';
 import { registerUnitExpander } from './core/unitExpander';
 import { registerMarkdownLatex } from './core/markdownLatex';
 import { registerSmartQuotes } from './core/smartQuotes';
+import { registerEllipsis } from './core/ellipsis';
 import { registerDiacritics } from './core/diacritics';
 import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
@@ -20,7 +21,6 @@ import { registerFractionShorthand } from './core/fractionShorthand';
 import { registerScanPrevention } from './core/scanPrevention';
 import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
-import { performSmartSearchInject } from './core/smartSearch';
 import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
 import { registerImplicitSubscripts } from './core/implicitSubscripts';
 
@@ -172,6 +172,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // [Smart Quotes] LaTeX 스마트 따옴표 기능 등록
     registerSmartQuotes(context);
+
+    // [Ellipsis] 말줄임표 자동 변환 기능 등록
+    registerEllipsis(context);
 
     // [Diacritics] 다이어크리틱 입력 기능 등록
     registerDiacritics(context);
@@ -759,18 +762,6 @@ export function activate(context: vscode.ExtensionContext) {
             quickPick.hide();
 
             if (!userInput) {return;}
-
-            // ✨ [추가] 스마트 검색 및 주입 (Smart Search & Inject)
-            // 'env > \cmd:not([attr])').inject('text') 형태인지 확인
-            if (userInput.includes(').inject(')) {
-                try {
-                    const count = await performSmartSearchInject(editor, userInput);
-                    vscode.window.showInformationMessage(`${count}개의 항목이 수정되었습니다.`);
-                } catch (err: any) {
-                    vscode.window.showErrorMessage(`스마트 검색 실패: ${err.message}`);
-                }
-                return;
-            }
 
             // ✨ [추가] 매크로 정의 (> define:...)
             const macroDef = macroManager.parseDefinition(userInput);

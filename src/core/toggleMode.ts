@@ -37,9 +37,13 @@ export function isFeatureActive(featureName: string): boolean {
     }
     if (activeProfile) {
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const profileKey = `toggle.profile${activeProfile}`;
-        const enabledFeatures = config.get<string[]>(profileKey, []);
-        return enabledFeatures.includes(featureName);
+        const profiles = config.get<any[]>('toggle.profiles', []);
+        const profileNum = parseInt(activeProfile);
+        const profileData = profiles.find(p => p.profile === profileNum);
+        
+        if (profileData && Array.isArray(profileData.features)) {
+            return profileData.features.includes(featureName);
+        }
     }
     return false;
 }
