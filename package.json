@@ -501,10 +501,6 @@
         "title": "Open TeX-Machina CLI"
       },
       {
-        "command": "tex-machina.analyzeWidth",
-        "title": "LaTeX: Analyze Formula Width"
-      },
-      {
         "command": "tex-machina.escapeAutoBracing",
         "title": "LaTeX: Escape Auto-bracing"
       },

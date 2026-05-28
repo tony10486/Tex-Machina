@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseUserCommand, splitChain } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
-import { performWidthAnalysis } from './core/widthAnalyzer';
 import { registerAutoBracing } from './core/autoBracing';
 import { registerAutoLeftRight } from './core/autoLeftRight';
 import { registerMathSplitter } from './core/mathSplitter';
@@ -352,7 +351,6 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "cite > Attention is all you need", description: "제목으로 논문 검색" }
             ],
             analyze: [
-                { label: "analyze > width", description: "수식 너비 분석 (문서 너비 초과 여부 확인)" },
                 { label: "analyze > split", description: "수식 자동 분할 (= 기준)" },
                 { label: "analyze > split / plus", description: "수식 자동 분할 (=, +, - 기준)" }
             ]
@@ -393,7 +391,6 @@ export function activate(context: vscode.ExtensionContext) {
                 provider.updateMacros(macroManager.getMacros());
                 return;
             }
-            if (userInput === "analyze > width") { vscode.commands.executeCommand('tex-machina.analyzeWidth'); return; }
             if (userInput.startsWith("analyze > split")) {
                 const splitAtPlus = userInput.includes("/ plus");
                 vscode.commands.executeCommand('tex-machina.splitMath', { splitAtPlus });
@@ -530,12 +527,6 @@ export function activate(context: vscode.ExtensionContext) {
             });
             vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
         } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
-    }));
-
-    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.analyzeWidth', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || !editor.document.fileName.endsWith('.tex')) { vscode.window.showErrorMessage("활성화된 LaTeX (.tex) 파일이 없습니다."); return; }
-        await performWidthAnalysis(editor.document);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.insertTable', async (options: TableOptions) => {
