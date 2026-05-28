@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export interface ToggleFeature {
     name: string;
     onTextChange?: (event: vscode.TextDocumentChangeEvent, editor: vscode.TextEditor) => Promise<void> | void;
+    onSelectionChange?: (event: vscode.TextEditorSelectionChangeEvent, editor: vscode.TextEditor) => Promise<void> | void;
     onActivate?: () => Promise<void> | void;
     onDeactivate?: () => Promise<void> | void;
 }
@@ -122,6 +123,33 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
                 if (isGloballyEnabled || isFeatureActive(feature.name)) {
                     try {
                         await feature.onTextChange(event, editor);
+                    } catch (e) {
+                        console.error(`Error in toggle feature ${feature.name}:`, e);
+                    }
+                }
+            }
+        })
+    );
+
+    // 4. Listen to selection changes and delegate to registered features
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection(async (event) => {
+            const editor = event.textEditor;
+            if (editor.document.languageId !== 'latex') {
+                return;
+            }
+
+            for (const feature of registeredFeatures) {
+                if (!feature.onSelectionChange) {
+                    continue;
+                }
+
+                const config = vscode.workspace.getConfiguration('tex-machina');
+                const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+
+                if (isGloballyEnabled || isFeatureActive(feature.name)) {
+                    try {
+                        await feature.onSelectionChange(event, editor);
                     } catch (e) {
                         console.error(`Error in toggle feature ${feature.name}:`, e);
                     }

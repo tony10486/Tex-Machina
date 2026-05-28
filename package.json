@@ -205,6 +205,11 @@
           "default": true,
           "description": "환경 이름 동기화 수정 (Linked Editing for Environments) 기능을 활성화합니다. \\begin{env}의 이름을 수정하면 \\end{env}도 자동으로 함께 바뀝니다."
         },
+        "tex-machina.mathRefactor.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "수학 변수 자동 멀티 커서 리팩토링 기능을 활성화합니다. Toggle Mode가 활성화된 상태에서 변수를 선택하면 수식 내 모든 동일 변수가 함께 선택됩니다."
+        },
         "tex-machina.mathNav.selectContent.enabled": {
           "type": "boolean",
           "default": true,
@@ -411,7 +416,8 @@
                     "ellipsis",
                     "smartNewline",
                     "mathLigatures",
-                    "linkedEditing"
+                    "linkedEditing",
+                    "mathRefactor"
                   ],
                   "enumDescriptions": [
                     "암시적 첨자 (x1 -> x_1)",
@@ -425,7 +431,8 @@
                     "말줄임표 (... -> \\dots/\\cdots)",
                     "스마트 줄바꿈",
                     "수식 전용 리가처",
-                    "환경 이름 동기화"
+                    "환경 이름 동기화",
+                    "수학 변수 리팩토링 (멀티 커서)"
                   ]
                 },
                 "description": "해당 프로필에서 활성화할 기능 목록"

@@ -30,6 +30,7 @@ import { registerSmartBackspace } from './core/smartBackspace';
 import { registerMathToggle } from './core/mathToggle';
 import { registerMatrixResizer } from './core/matrixResizer';
 import { registerSelectionWrap } from './core/selectionWrap';
+import { registerMathRefactor } from './core/mathRefactor';
 import { PythonService } from './services/pythonService';
 
 let pythonService: PythonService;
@@ -154,6 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
     registerMathToggle(context);
     registerMatrixResizer(context);
     registerSelectionWrap(context);
+    registerMathRefactor(context);
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;

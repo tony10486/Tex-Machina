@@ -6,6 +6,7 @@ export interface MathEnvironment {
     type: 'inline' | 'display' | 'equation';
     content: string;
     envName?: string;
+    prefixLen: number;
 }
 
 /**
@@ -26,9 +27,9 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     const text = document.getText(rangeToSearch);
     const searchStartOffset = document.offsetAt(rangeToSearch.start);
 
-    const boundaryRegex = /\\begin\{([a-zA-Z]+\*?)\}|\\end\{([a-zA-Z]+\*?)\}|\$\$|\$|\\\[|\\\]/g;
+    const boundaryRegex = /\\begin\{([a-zA-Z]+\*?)\}|\\end\{([a-zA-Z]+\*?)\}|\$\$|(?<!\\)\$|\\\[|\\\]/g;
     
-    const stack: { type: string, start: number, envName?: string }[] = [];
+    const stack: { type: string, start: number, envName?: string, tagLen: number }[] = [];
     const candidates: MathEnvironment[] = [];
 
     let match: RegExpExecArray | null;
@@ -37,7 +38,7 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
         const posInDoc = searchStartOffset + match.index;
 
         if (m.startsWith('\\begin')) {
-            stack.push({ type: 'begin', start: posInDoc, envName: match[1] });
+            stack.push({ type: 'begin', start: posInDoc, envName: match[1], tagLen: m.length });
         } else if (m.startsWith('\\end')) {
             const currentEndName = match[2];
             const lastIdx = stack.map(s => s.envName).lastIndexOf(currentEndName);
@@ -49,8 +50,9 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                         range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
                         text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
                         type: 'equation',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + m.length), document.positionAt(posInDoc))),
-                        envName: last.envName
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                        envName: last.envName,
+                        prefixLen: last.tagLen
                     });
                 }
             }
@@ -64,11 +66,12 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                         range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
                         text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
                         type: m === '$' ? 'inline' : 'display',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + m.length), document.positionAt(posInDoc)))
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                        prefixLen: last.tagLen
                     });
                 }
             } else {
-                stack.push({ type: m, start: posInDoc });
+                stack.push({ type: m, start: posInDoc, tagLen: m.length });
             }
         } else if (m === '\\]') {
             const lastIdx = stack.findIndex(s => s.type === '\\[');
@@ -80,7 +83,8 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                         range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
                         text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
                         type: 'display',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + 2), document.positionAt(posInDoc)))
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + 2), document.positionAt(posInDoc))),
+                        prefixLen: 2
                     });
                 }
             }
