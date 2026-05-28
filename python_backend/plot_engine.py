@@ -9,6 +9,12 @@ import sys
 import re
 from io import BytesIO
 from typing import Dict, Any, List, Tuple
+
+SAFE_SYMPY_DICT = {'__builtins__': {}}
+for k, v in sp.__dict__.items():
+    if not k.startswith('__'):
+        SAFE_SYMPY_DICT[k] = v
+
 try:
     from latex2sympy2 import latex2sympy
 except ImportError:
@@ -46,9 +52,10 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
             return expr.lhs - expr.rhs
         return expr
     except Exception as e:
-        # Fallback: parse_latex가 실패하면 sympify 시도 (간단한 수식용)
+        # Fallback: parse_latex가 실패하면 parse_expr 시도 (간단한 수식용)
         try:
-            return sp.sympify(raw_latex.replace('\\', ''))
+            from sympy.parsing.sympy_parser import parse_expr
+            return parse_expr(raw_latex.replace('\\', ''), evaluate=False, global_dict=SAFE_SYMPY_DICT)
         except:
             raise ValueError(f"LaTeX 파싱 실패: {raw_latex}. 상세: {str(e)}")
 
@@ -770,8 +777,9 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         for cmd in sub_cmds:
             if "," in cmd:
                 try:
+                    from sympy.parsing.sympy_parser import parse_expr
                     bounds = cmd.split(',')
-                    domain = (float(sp.sympify(bounds[0]).evalf()), float(sp.sympify(bounds[1]).evalf()))
+                    domain = (float(parse_expr(bounds[0], evaluate=False, global_dict=SAFE_SYMPY_DICT).evalf()), float(parse_expr(bounds[1], evaluate=False, global_dict=SAFE_SYMPY_DICT).evalf()))
                     break
                 except: pass
             

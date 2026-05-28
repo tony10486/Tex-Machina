@@ -1,8 +1,14 @@
 import sympy as sp
 from sympy.parsing.latex import parse_latex  # 공식 파서 사용
+from sympy.parsing.sympy_parser import parse_expr
 import json
 import re
 import os
+
+SAFE_SYMPY_DICT = {'__builtins__': {}}
+for k, v in sp.__dict__.items():
+    if not k.startswith('__'):
+        SAFE_SYMPY_DICT[k] = v
 
 def op_tensor_expand(expr, args, selection=None):
     """
@@ -297,7 +303,7 @@ def op_int(expr, args):
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
     if len(params) == 3:
-        return sp.integrate(expr, (var, sp.sympify(params[1]), sp.sympify(params[2])))
+        return sp.integrate(expr, (var, parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT), parse_expr(params[2], evaluate=False, global_dict=SAFE_SYMPY_DICT)))
     return sp.integrate(expr, var)
 
 def op_limit(expr, args):
@@ -310,7 +316,7 @@ def op_limit(expr, args):
         # 단, 명시된 변수와 대상이 이미 Limit의 정보와 같다면 redundant로 보고 doit()
         params = [p.strip() for p in args[0].split(',')]
         var = sp.Symbol(params[0])
-        target = sp.sympify(params[1]) if len(params) > 1 else 0
+        target = parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(params) > 1 else 0
         if var == expr.variables[0] and target == expr.z0:
             return expr.doit()
         expr = expr.doit()
@@ -318,7 +324,7 @@ def op_limit(expr, args):
     if not args: return expr
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
-    target = sp.sympify(params[1]) if len(params) > 1 else 0
+    target = parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(params) > 1 else 0
     direction = params[2] if len(params) > 2 else '+'
     return sp.limit(expr, var, target, dir=direction)
 
@@ -448,7 +454,7 @@ def parse_ics(ics_str, y, x):
         if ':' not in pair: continue
         lhs_str, rhs_str = pair.split(':')
         lhs_str = lhs_str.strip()
-        rhs = sp.sympify(rhs_str.strip())
+        rhs = parse_expr(rhs_str.strip(), evaluate=False, global_dict=SAFE_SYMPY_DICT)
         
         if lhs_str == 'y(0)':
             ics[y.subs(x, 0)] = rhs
@@ -772,7 +778,7 @@ def get_calc_operations():
         "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환 [cite: 41]
         
         # 6. 복소해석학 [cite: 29, 30]
-        "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), sp.sympify(v[1]) if len(v)>1 else 0),
+        "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), parse_expr(v[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(v)>1 else 0),
         "laurent": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]), 0, 4, dir='+').removeO(),
         "conjugate": lambda x, v, p, c, s: sp.conjugate(x),
         "re": lambda x, v, p, c, s: sp.re(x),
@@ -1001,7 +1007,7 @@ def execute_calc(parsed_json_str):
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
             if 'matrix' in selection:
                 processed_selection = preprocess_matrix_latex(selection)
-                # Matrix([...]) 형태는 parse_latex 대신 sympify 사용
+                # Matrix([...]) 형태는 parse_latex 대신 parse_expr 사용
                 # locals에 Matrix와 기본 함수들 추가
                 calc_locals = {
                     'Matrix': sp.Matrix,
@@ -1009,7 +1015,7 @@ def execute_calc(parsed_json_str):
                     'exp': sp.exp, 'log': sp.log, 'sqrt': sp.sqrt,
                     'pi': sp.pi, 'theta': sp.Symbol('theta'), 'phi': sp.Symbol('phi')
                 }
-                expr = sp.sympify(processed_selection, locals=calc_locals)
+                expr = parse_expr(processed_selection, local_dict=calc_locals, global_dict=SAFE_SYMPY_DICT, evaluate=False)
             else:
                 # [Pre-process for Gamma and other functions]
                 # \Gamma{\left(z \right)} -> \Gamma(z)

@@ -2,6 +2,11 @@ import json
 import sympy as sp
 import re
 
+SAFE_SYMPY_DICT = {'__builtins__': {}}
+for k, v in sp.__dict__.items():
+    if not k.startswith('__'):
+        SAFE_SYMPY_DICT[k] = v
+
 def handle_matrix(sub_cmds, parallels, config=None):
     """
     제안서의 행렬 입력 기능(matrix)을 처리하는 함수입니다.
@@ -84,8 +89,9 @@ def handle_matrix(sub_cmds, parallels, config=None):
                     
                     from sympy.parsing.latex import parse_latex
                     try:
+                        from sympy.parsing.sympy_parser import parse_expr
                         if re.match(r'^[a-zA-Z0-9\s\+\-\*\/\(\)\.]+$', s_expr_str):
-                            expr = sp.sympify(s_expr_str, locals=custom_locals)
+                            expr = parse_expr(s_expr_str, local_dict=custom_locals, global_dict=SAFE_SYMPY_DICT, evaluate=False)
                         else:
                             expr = parse_latex(expr_str)
                     except:

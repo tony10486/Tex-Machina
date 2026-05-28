@@ -1,0 +1,223 @@
+# TeX-Machina: 상용화 대비 심층 코드 오딧(Audit) 보고서
+
+본 보고서는 `tex-machina` VS Code 확장 프로그램의 소스 코드를 심층 분석하여 발견된 **보안 취약점(Security Vulnerability), 성능 병목(Performance Bottleneck), 그리고 아키텍처 설계 결함(Architectural Flaw)**을 정리한 문서입니다. 상용 프로그램으로서의 안정성 및 신뢰성 확보를 위해 아래 명시된 모든 항목에 대한 즉각적인 수정이 요구됩니다.
+
+---
+
+## 1. [Critical/Security] `sp.sympify` 사용으로 인한 임의 코드 실행 (RCE) 취약점
+
+*   **파일 위치:** `python_backend/calc_engine.py` (Line 440)
+*   **문제 코드:**
+    ```python
+    expr = sp.sympify(processed_selection, locals=calc_locals)
+    ```
+*   **문제점 및 잠재적 영향:**
+    `sympy.sympify`는 내부적으로 `eval()`을 사용하여 문자열을 파이썬 코드로 평가합니다. 악의적인 사용자가 교묘하게 조작된 LaTeX 문자열(예: OS 명령어 삽입 등)을 행렬 파싱 로직에 통과시킬 경우, 사용자의 로컬 환경에서 **원격/임의 코드 실행(Remote Code Execution)**이 발생할 수 있는 매우 치명적인 보안 취약점입니다.
+*   **해결 방안:**
+    `sympify` 사용을 중단하고 `sympy.parsing.sympy_parser.parse_expr` 함수를 사용하되, `evaluate=False` 파라미터를 명시해야 합니다. 안전한 로컬 딕셔너리만 허용하도록 변환 방식을 엄격하게 통제해야 합니다.
+
+## 2. [Critical/Performance] 동기식(Sync) 파일 I/O로 인한 VS Code UI 스레드 차단
+
+*   **파일 위치:** `src/extension.ts` (Line 527~642 주요 구간)
+*   **문제 코드:**
+    ```typescript
+    if (!fs.existsSync(imagesDir)) { fs.mkdirSync(imagesDir, { recursive: true }); }
+    fs.writeFileSync(exportPath, buffer);
+    let content = fs.existsSync(bibPath) ? fs.readFileSync(bibPath, 'utf8') : "";
+    fs.appendFileSync(bibPath, `\n\n${response.bibtex}`);
+    ```
+*   **문제점 및 잠재적 영향:**
+    Node.js의 `*Sync` 메서드는 메인 스레드를 블로킹(Blocking)합니다. VS Code 확장에서 메인 스레드는 에디터의 UI 응답(타이핑, 렌더링, 클릭 등)을 담당합니다. 네트워크 드라이브(NAS)를 사용하거나 파일 크기가 클 경우, 파이썬 서버로부터 응답을 받아 파일을 쓰는 동안 **VS Code 전체가 완전히 프리징(멈춤) 현상**을 겪게 됩니다. 이는 상용 확장 프로그램에서 절대 허용되지 않는 안티패턴입니다.
+*   **해결 방안:**
+    반드시 `fs.promises` (또는 `await vscode.workspace.fs`)를 사용한 비동기(Async) 처리로 전면 교체해야 합니다.
+    ```typescript
+    import { promises as fsPromises } from 'fs';
+    await fsPromises.mkdir(imagesDir, { recursive: true });
+    await fsPromises.writeFile(exportPath, buffer);
+    ```
+
+## 3. [Critical/Security] 정규표현식 서비스 거부 공격 (ReDoS) 취약점
+
+*   **파일 위치:** `src/core/latexParser.ts` (Line 118)
+*   **문제 코드:**
+    ```typescript
+    const commandRegex = /^\\[a-zA-Z]+\*?(?:\s*(?:\[[^\]]*\]|\{[^\}]*\}|_[^ \t\r\n{}]|_\s*\{[^\}]*\}|\^[^ \t\r\n{}]|\^\s*\{[^\}]*\}))*/;
+    ```
+*   **문제점 및 잠재적 영향:**
+    정규표현식 내부에 `(?: ... )*` 형태의 중첩된 수량자(Nested Quantifiers)가 존재합니다. 닫히지 않은 괄호나 기형적인 LaTeX 매크로가 수만 자 입력되었을 때, 정규식 엔진의 백트래킹(Backtracking)이 기하급수적으로 증가하여 확장의 CPU 점유율이 100%로 치솟고 영구적으로 멈추는 **Catastrophic Backtracking**을 유발합니다.
+*   **해결 방안:**
+    중첩 수량자를 제거하도록 정규식을 단순화하거나, 정규식을 사용하지 않고 단순한 문자열 인덱스 스캔(State Machine)을 통해 명령어와 인자(`{}`, `[]`)를 파싱하는 함수형 로직으로 대체해야 합니다.
+
+## 5. [Major/Performance] 무거운 파싱 로직 내 불필요한 메모리 할당 (GC 부하)
+
+*   **파일 위치:** `src/core/latexParser.ts` (Line 44, 50, 60, 68)
+*   **문제 코드:**
+    ```typescript
+    candidates.push({
+        // ...
+        content: document.getText(new vscode.Range(...))
+    });
+    ```
+*   **문제점 및 잠재적 영향:**
+    `findInnermostEnvAtPos` 함수는 커서가 이동할 때마다(`onDidChangeTextEditorSelection`) 토글 모드에서 빈번하게 호출됩니다. 이 함수 내의 `while` 루프 안에서 매번 `document.getText(new Range(...))`를 호출하여 새로운 문자열 객체를 할당합니다. 이미 상단에서 `const text = document.getText(rangeToSearch);`로 해당 블록의 텍스트를 모두 가져왔음에도 불구하고, VS Code API 브릿지를 거쳐 텍스트를 계속 재요청하므로, 극심한 가비지 컬렉션(GC) 부하와 에디터 렉을 유발합니다.
+*   **해결 방안:**
+    미리 가져온 `text` 변수에 대해 순수 자바스크립트의 `text.substring(start, end)` 메서드를 사용하여 부분 문자열을 추출해야 합니다. 
+
+## 4. [Major/Architecture] Python IPC 통신에서의 Race Condition (응답 유실)
+
+*   **파일 위치:** `src/services/pythonService.ts` (Line 67)
+*   **문제 코드:**
+    ```typescript
+    public sendAndWait(payload: any): Promise<any> {
+        return new Promise((resolve) => {
+            // ...
+            this.responseResolver = resolve;
+            this.pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
+        });
+    }
+    ```
+*   **문제점 및 잠재적 영향:**
+    여러 개의 비동기 명령이 거의 동시에 실행될 경우(예: 사용자의 계산 명령 + 백그라운드 라벨 검색), 단일 변수인 `this.responseResolver`가 마지막 명령의 `resolve`로 덮어씌워집니다. 이로 인해 앞선 명령들은 영원히 Pending 상태로 남게 되며(메모리 누수), 응답이 엉뚱한 요청으로 전달되어 수식이 망가질 수 있습니다.
+*   **해결 방안:**
+    각 요청 객체에 고유한 `uuid`를 발급하고, Python 백엔드도 응답 시 해당 `uuid`를 포함하여 반환하도록 설계해야 합니다. TypeScript에서는 `Map<string, Function>` 형태로 Resolver를 관리하여 매칭시켜야 합니다.
+
+
+
+## 6. [Major/Performance] 설정(Configuration) 기반 동적 RegExp 컴파일 병목
+
+*   **파일 위치:** `src/core/macroManager.ts` (Line 52)
+*   **문제 코드:**
+    ```typescript
+    for (const ctx of customContexts) {
+        const regex = new RegExp(ctx.regex);
+        if (regex.test(checkText)) { ... }
+    }
+    ```
+*   **문제점 및 잠재적 영향:**
+    사용자가 텍스트를 입력하여 매크로를 확장할 때(`expand` 호출 시), 루프 내부에서 매번 `new RegExp()` 객체를 동적으로 생성합니다. 정규식 컴파일은 비용이 큰 작업이며, 타이핑 중에 매번 발생하면 성능을 갉아먹습니다.
+*   **해결 방안:**
+    `MacroManager`의 생성자 또는 설정이 변경될 때(`onDidChangeConfiguration`) 미리 `RegExp` 객체를 생성하여 배열이나 맵에 캐싱(Caching)해 두고 재사용해야 합니다.
+
+## 7. [Major/Performance] 이벤트 리스너 내 디바운싱(Debouncing) 부재
+
+*   **파일 위치:** `src/core/toggleMode.ts` (Line 132), `src/core/linkedEditing.ts`
+*   **문제점 및 잠재적 영향:**
+    `onDidChangeTextEditorSelection` (커서 이동 이벤트)가 발생할 때마다, 토글 모드에 등록된 `mathRefactor` 및 `linkedEditing`의 무거운 AST/정규식 파싱 로직이 즉각적으로 실행됩니다. 사용자가 키보드 방향키를 꾹 누르고 있어 커서가 빠르게 이동할 경우, 초당 수십~수백 번의 파싱 작업이 스택에 쌓여 심각한 프레임 드랍(UI Lag)을 일으킵니다.
+*   **해결 방안:**
+    이벤트 리스너 콜백 래퍼(Wrapper)에 `lodash.debounce` 혹은 `setTimeout`을 이용한 50ms ~ 100ms 가량의 디바운스 로직을 추가하여, 연속된 커서 이동이 끝난 직후에만 파싱 로직이 실행되도록 제한해야 합니다.
+
+## 8. [Major/Architecture] 무분별한 전체 텍스트 읽기와 설정 오염
+
+*   이전 분석에서도 지적했듯, `labelTracker`의 1000ms 간격 전체 파일 재파싱(`syncWorkspaceRefs`)과 `ToggleMode`의 `workbench.colorCustomizations` 강제 수정은 상용 프로그램에서 결코 허용되지 않는 구조입니다.
+*   반드시 증분(Incremental) 파싱 혹은 Language Server Protocol(LSP) 구조를 도입하여 파일의 변경점(Delta)만 추적하도록 변경하고, 상태바의 색상은 Theme API를 통해 우회 적용해야 합니다.
+
+---
+**총평**: 현재 코드는 기능 구현(PoC) 수준을 넘어 상용 배포를 앞두기에는 너무나 많은 구조적, 보안적 헛점이 존재합니다. **파일 I/O 비동기화**, **Python-TypeScript 통신 안정화(UUID 도입)**, **정규식 및 파서 최적화**, **임의 코드 실행 원천 차단(`sympify` 제거)** 작업을 배포 전 필수(Must-fix) 마일스톤으로 설정하여 즉시 리팩토링할 것을 강력히 권고합니다.
+
+# TeX-Machina: 상용화 대비 최종 심층 감사(Audit) 및 기능 평가 보고서
+
+본 보고서는 `tex-machina` 확장 프로그램의 상용 출시를 앞두고, 소스 코드 전체를 심도 있게 분석하여 발견된 **보안 취약점, 성능 병목, 기능적 결함, 그리고 사용자 환경(UX) 저해 요소**를 정리한 최종 점검 문서입니다.
+
+---
+
+## 1. [Critical] 보안 및 시스템 안정성 (Security & Stability)
+
+### 1.1 `sp.sympify` 사용으로 인한 임의 코드 실행 (RCE)
+*   **위치:** `python_backend/calc_engine.py` (Line 440)
+*   **내용:** 행렬 연산 처리 중 사용자 입력을 `sympy.sympify()`로 평가합니다.
+*   **위험성:** 악성 LaTeX 코드를 통해 사용자의 PC에서 파이썬 명령어를 실행할 수 있습니다. 상용 프로그램으로서 치명적인 보안 결격 사유입니다.
+*   **해결:** `parse_expr`과 `evaluate=False` 옵션을 사용하고, 허용할 심볼 목록을 엄격히 제한하십시오.
+
+### 1.2 Python 통신 Race Condition (응답 섞임)
+*   **위치:** `src/services/pythonService.ts` (Line 67)
+*   **내용:** 비동기 요청 시 `responseResolver` 단일 변수에 콜백을 저장합니다.
+*   **위험성:** 백그라운드 작업(라벨 스캔 등)과 사용자 명령이 겹치면 응답이 유실되거나 엉뚱한 수식에 결과가 삽입됩니다.
+*   **해결:** 요청마다 `UUID`를 발급하고 `Map`을 통해 응답을 매칭하는 프로토콜을 도입하십시오.
+
+### 1.3 정규표현식 서비스 거부 공격 (ReDoS)
+*   **위치:** `src/core/latexParser.ts` (Line 118, `commandRegex`)
+*   **내용:** 중첩 수량자를 포함한 복잡한 정규식을 사용합니다.
+*   **위험성:** 특정 패턴의 입력 시 백트래킹 폭주로 CPU 점유율이 100%가 되며 에디터가 영구적으로 멈춥니다.
+*   **해결:** 정규식을 단순화하거나, 상태 머신(State Machine) 기반의 수동 파서로 교체하십시오.
+
+---
+
+## 2. [High] 성능 및 자원 관리 (Performance)
+
+### 2.1 동기식(Sync) 파일 I/O로 인한 UI 프리징
+*   **위치:** `src/extension.ts` (Line 527, 603, 642 등)
+*   **내용:** 이미지 저장, `.bib` 읽기 등에 `fs.mkdirSync`, `fs.readFileSync` 등을 사용합니다.
+*   **위험성:** 파일 작업 중 VS Code 전체 UI가 멈춥니다. 특히 대용량 파일이나 네트워크 드라이브 환경에서 심각합니다.
+*   **해결:** `vscode.workspace.fs` 또는 `fs.promises`를 사용한 비동기 로직으로 전면 수정하십시오.
+
+### 2.2 반복적인 전체 텍스트 스캔 및 메모리 낭비
+*   **위치:** `src/core/selectionExpansion.ts`, `src/core/recentSymbols.ts`, `src/core/labelDetection.ts`
+*   **내용:** 이벤트 발생 시마다 `document.getText()`를 호출하고 전체 문서에 정규식을 실행합니다.
+*   **위험성:** 문서가 수만 라인이 될 경우, 커서 이동이나 타이핑 시마다 극심한 렉을 유발합니다.
+*   **해결:** 증분(Incremental) 업데이트 방식을 도입하고, 필요한 부분(View Port)만 스캔하도록 최적화하십시오.
+
+### 2.3 `Recent Symbols`의 성능 한계
+*   **위치:** `src/core/recentSymbols.ts` (Line 23)
+*   **내용:** 기호를 추천할 때마다 문서 전체의 모든 매크로 빈도를 계산합니다.
+*   **위험성:** `Alt+Q`를 누를 때마다 수초간 에디터가 응답하지 않을 수 있습니다.
+*   **해결:** 문서 변경 시 백그라운드에서 빈도 맵을 업데이트해 두는 캐싱 방식을 사용하십시오.
+
+---
+
+## 3. [Major] 기능적 결함 및 논리 오류 (Functional Defects)
+
+### 3.1 `Smart Newline`의 LaTeX 컴파일 에러 유발
+*   **위치:** `src/core/smartNewline.ts` (Line 24)
+*   **내용:** `equation` 환경에서 Enter 입력 시 `\\`를 자동 삽입합니다.
+*   **문제:** LaTeX의 `equation` 환경은 단일행 환경으로, `\\`를 허용하지 않습니다. 자동 완성 기능이 오히려 컴파일 에러를 만드는 결과를 초래합니다.
+*   **해결:** 단일행 환경 리스트를 분리하고, 해당 환경에서는 `\\`를 삽입하지 않도록 수정하십시오.
+
+### 3.2 하드코딩된 들여쓰기 (Indentation Hardcoding)
+*   **위치:** `src/core/smartNewline.ts`, `src/core/matrixResizer.ts`
+*   **내용:** `\n    `와 같이 4개의 공백으로 들여쓰기를 강제합니다.
+*   **문제:** 사용자의 에디터 설정(Tab Size, Spaces vs Tabs)을 무시하여 문서의 포맷팅을 망가뜨립니다.
+*   **해결:** `editor.options.tabSize`와 `insertSpaces` 설정을 읽어 동적으로 들여쓰기를 생성하십시오.
+
+### 3.3 `Matrix Resizer`의 파괴적 편집 및 데이터 유실
+*   **위치:** `src/core/matrixResizer.ts` (Line 104)
+*   **내용:** 열/행 삭제 시 단순히 마지막 요소를 제거합니다.
+*   **문제:** 사용자가 의도치 않게 중요한 데이터가 있는 마지막 열을 날려버릴 수 있으며, 포맷을 엄격하게 재구성하여 사용자의 기존 주석이나 스타일을 모두 삭제합니다.
+*   **해결:** 삭제 전 사용자 확인을 거치거나, 삭제될 영역의 데이터를 임시 보존하는 기능을 추가하십시오.
+
+---
+
+## 4. [Medium] 사용성 및 UX 저해 요소 (Usability & UX)
+
+### 4.1 주석 및 문맥 미인지 (Context Unawareness)
+*   **대상:** `implicitSubscripts`, `autoMathWrap`, `markdownLatex` 등
+*   **내용:** `%` 뒤의 주석 영역이나 `verbatim` 환경 내부에서도 기능을 실행합니다.
+*   **문제:** 주석에 쓴 "Step 1"이 `Step_1`으로 바뀌거나, 코드 블록 내의 `#`이 `\section`으로 바뀌는 등 사용자를 매우 짜증나게 할 수 있습니다.
+*   **해결:** 기능을 수행하기 전 반드시 현재 위치가 주석이나 텍스트 전용 환경인지 검사하는 로직을 추가하십시오.
+
+### 4.2 `Implicit Subscripts`의 공격적인 변환
+*   **위치:** `src/core/implicitSubscripts.ts`
+*   **문제:** `x1`을 무조건 `x_1`으로 바꿉니다. 라벨(`\label{fig1}`), 파일 경로, 또는 일반 문장에서도 작동하여 의도치 않은 변환을 수시로 일으킵니다.
+*   **해결:** 수식 모드 내부에서만 작동하도록 제한하거나, 숫자가 나타나기 전의 문맥을 더 정교하게 분석하십시오.
+
+### 4.3 `Fraction Shorthand`의 비논리적 트리거 조건
+*   **위치:** `src/core/fractionShorthand.ts` (Line 18)
+*   **내용:** `findMathAtPos`가 `true`이면 실행을 중단합니다.
+*   **문제:** 즉, 수식 모드 **외부**에서만 분수 변환이 작동합니다. 사용자는 보통 수식 모드 **내부**에서 `1/2`을 `\frac{1}{2}`로 바꾸길 원합니다. 현재는 정반대로 구현되어 있습니다.
+*   **해결:** 수식 모드 내부에서만 작동하도록 조건을 반전시키십시오.
+
+### 4.4 설정 오염 및 글로벌 상태 관리 부실
+*   **위치:** `src/core/toggleMode.ts`
+*   **내용:** 상태바 색상을 위해 사용자 설정을 직접 수정하고, `isEscaped` 같은 변수를 전역적으로(Global) 관리합니다.
+*   **문제:** 멀티 탭 에디터 사용 시 한 쪽에서의 취소가 다른 쪽에도 영향을 미치며, `settings.json`이 불필요하게 수정됩니다.
+*   **해결:** `ThemeColor` API를 사용하여 설정을 건드리지 않고 상태바 색상을 바꾸고, 상태 변수는 에디터 인스턴스별로 관리하십시오.
+
+---
+
+## 최종 권고 사항
+
+`tex-machina`는 매우 혁신적인 기능을 담고 있으나, 현재 상태로 출시할 경우 **보안 사고**와 **사용자 불만(렉, 의도치 않은 자동 완성, 컴파일 에러)**이 속출할 가능성이 매우 높습니다. 
+
+특히 **`sp.sympify` 제거**, **비동기 I/O 전환**, **수식 모드/주석 문맥 인식 강화**는 상용 프로그램으로서 필수적으로 해결해야 할 과제입니다. 본 보고서에 명시된 해결 방안을 토대로 전반적인 리팩토링을 거친 후 최종 릴리즈를 진행하시기를 강력히 권장합니다.
+
+
+
