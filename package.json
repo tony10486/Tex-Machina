@@ -436,6 +436,15 @@
           "default": [
             { "profile": 1, "features": ["implicitSubscripts"] }
           ]
+        },
+        "tex-machina.mathToggle.sequence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["inline", "display", "equation", "align", "gather", "multline"]
+          },
+          "default": ["inline", "display", "equation"],
+          "description": "수식 모드 전환(Math Mode Toggle) 시 순환할 환경의 순서를 설정합니다. (inline: $$, display: \\[ \\], equation/align/gather 등)"
         }
       }
     },
@@ -706,6 +715,17 @@
         "command": "tex-machina.triggerRecentSymbols",
         "key": "alt+q",
         "mac": "alt+q",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.smartBackspace",
+        "key": "backspace",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.toggleMathMode",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
         "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]

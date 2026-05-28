@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findMathAtPos } from './mathSplitter';
+import { findMathAtPos } from './latexParser';
 
 /**
  * [Smart Newline]

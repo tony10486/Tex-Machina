@@ -27,6 +27,8 @@ import { registerMathLigatures } from './core/mathLigatures';
 import { registerRecentSymbols } from './core/recentSymbols';
 import { registerSelectionExpansion } from './core/selectionExpansion';
 import { registerLinkedEditing } from './core/linkedEditing';
+import { registerSmartBackspace } from './core/smartBackspace';
+import { registerMathToggle } from './core/mathToggle';
 import { PythonService } from './services/pythonService';
 
 let pythonService: PythonService;
@@ -147,6 +149,8 @@ export function activate(context: vscode.ExtensionContext) {
     registerRecentSymbols(context);
     registerSelectionExpansion(context);
     registerLinkedEditing(context);
+    registerSmartBackspace(context);
+    registerMathToggle(context);
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;

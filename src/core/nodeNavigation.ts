@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { registerToggleFeature, isFeatureActive } from './toggleMode';
+import { findMathAtPos } from './latexParser';
 
 let isMathNavActive = false;
 let isSelectContentEnabled = true;
@@ -178,36 +179,8 @@ function findMatchingBracket(text: string, startIdx: number, open: string, close
 }
 
 /**
- * Finds the math environment ($...$, $$...$$, \[...\]) at the given position.
- * Optimized to look only at nearby text for better responsiveness.
- */
-export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
-    const lookDistance = 5000;
-    const offset = document.offsetAt(pos);
-    const docText = document.getText();
-    const startOffset = Math.max(0, offset - lookDistance);
-    const endOffset = Math.min(docText.length, offset + lookDistance);
-    
-    const rangeText = docText.substring(startOffset, endOffset);
-
-    // Regex for various math environments including nested and multi-line
-    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\]|\\\(.*?\\\)|\\begin\{([a-zA-Z]+\*?)\}[\s\S]*?\\end\{\2\})/g;
-    let match;
-    while ((match = mathRegex.exec(rangeText)) !== null) {
-        const start = startOffset + match.index;
-        const end = start + match[0].length;
-        if (offset >= start && offset <= end) {
-            return {
-                range: new vscode.Range(document.positionAt(start), document.positionAt(end)),
-                text: match[0]
-            };
-        }
-    }
-    return null;
-}
-
-/**
- * Generates a list of "jump points" based on mathematical hierarchy.
+ * Generates a list of "jump points"
+ based on mathematical hierarchy.
  * Focuses on semantic "slots" (inside braces, after script markers, etc.)
  */
 export function getJumpPoints(text: string): number[] {

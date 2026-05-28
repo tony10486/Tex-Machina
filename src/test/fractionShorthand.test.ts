@@ -11,7 +11,6 @@ suite('Fraction Shorthand Test Suite', () => {
             editBuilder.insert(new vscode.Position(0, 3), ' ');
         });
 
-        // Use a more reliable waiting mechanism
         await new Promise<void>((resolve) => {
             const disposable = vscode.workspace.onDidChangeTextDocument(() => {
                 if (document.lineAt(0).text.includes('\\frac{1}{2}')) {
@@ -22,7 +21,7 @@ suite('Fraction Shorthand Test Suite', () => {
             setTimeout(() => { disposable.dispose(); resolve(); }, 1000);
         });
 
-        assert.ok(document.lineAt(0).text.includes('\\frac{1}{2}'), "Text should be converted to \\frac{1}{2}");
+        assert.ok(document.lineAt(0).text.includes('\\frac{1}{2}'));
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
@@ -35,7 +34,6 @@ suite('Fraction Shorthand Test Suite', () => {
             editBuilder.insert(new vscode.Position(0, 7), ' ');
         });
 
-        // Use a more reliable waiting mechanism
         await new Promise<void>((resolve) => {
             const disposable = vscode.workspace.onDidChangeTextDocument(() => {
                 if (document.lineAt(0).text.includes('\\frac{a+b}{c}')) {
@@ -46,7 +44,7 @@ suite('Fraction Shorthand Test Suite', () => {
             setTimeout(() => { disposable.dispose(); resolve(); }, 1000);
         });
 
-        assert.ok(document.lineAt(0).text.includes('\\frac{a+b}{c}'), "Text should be converted to \\frac{a+b}{c}");
+        assert.ok(document.lineAt(0).text.includes('\\frac{a+b}{c}'));
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 });

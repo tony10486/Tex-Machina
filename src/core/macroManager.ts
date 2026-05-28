@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findMathAtPos } from './mathSplitter';
+import { findMathAtPos } from './latexParser';
 
 export class MacroManager {
     private static readonly STORAGE_KEY = 'tex-machina.macros';
