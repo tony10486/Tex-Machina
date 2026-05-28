@@ -24,10 +24,16 @@
 | **매크로 관리** | `src/core/macroManager.ts` | 컨텍스트 인지 매크로 정의 및 실행. |
 | **스캔 방지** | `src/core/scanPrevention.ts` | 보안용 스캔 방지 패턴 삽입. |
 | **다이어크리틱** | `src/core/diacritics.ts` | `\hat`, `\tilde` 등 상단 기호 입력 명령. |
+| **스마트 줄바꿈** | `src/core/smartNewline.ts` | 수식 환경 내 `Enter` 입력 시 `\\` 및 `&` 자동 삽입. |
+| **수식 전용 리가처** | `src/core/mathLigatures.ts` | `<=`, `->` 등 기호 조합의 LaTeX 명령어 즉시 변환. |
+| **최근 기호 추천** | `src/core/recentSymbols.ts` | `Alt+Q` 시 문서 내 빈도 기반 기호 자동완성 제공. |
+| **스마트 선택 확장** | `src/core/selectionExpansion.ts` | 수학적 계층 구조에 따른 단계별 선택 영역 확장. |
+| **환경 이름 동기화** | `src/core/linkedEditing.ts` | `\begin`과 `\end` 사이의 환경 이름 실시간 동기화. |
 
 ## Extension Entry & UI
 
 - **진입점 (`src/extension.ts`)**: 확장 프로그램의 활성화(`activate`) 및 모든 기능 등록/초기화가 이루어지는 곳입니다.
+- **Python 서비스 (`src/services/pythonService.ts`)**: 파이썬 프로세스 생명주기 관리 및 비동기 통신 전담.
 - **웹뷰 프로바이더 (`src/ui/webviewProvider.ts`)**: 우측 패널의 UI 구성, 표 생성기 인터페이스, 라벨 그래프 시각화 등을 담당합니다.
 - **설정 정의 (`package.json`)**: 모든 설정 항목(Configuration), 명령어(Commands), 단축키(Keybindings)가 정의되어 있습니다.
 
