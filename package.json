@@ -555,6 +555,18 @@
       {
         "command": "tex-machina.triggerRecentSymbols",
         "title": "LaTeX: Show Recent Symbols"
+      },
+      {
+        "command": "tex-machina.matrix.resizeMenu",
+        "title": "LaTeX: Matrix Resizer Menu"
+      },
+      {
+        "command": "tex-machina.wrapSubscript",
+        "title": "LaTeX: Wrap Selection with Subscript (_)"
+      },
+      {
+        "command": "tex-machina.wrapSuperscript",
+        "title": "LaTeX: Wrap Selection with Superscript (^)"
       }
     ],
     "viewsContainers": {
@@ -718,10 +730,28 @@
         "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
       },
       {
-        "command": "tex-machina.toggleMathMode",
-        "key": "ctrl+alt+m",
-        "mac": "cmd+alt+m",
+        "command": "tex-machina.matrix.resizeMenu",
+        "key": "alt+l alt+m",
+        "mac": "alt+l alt+m",
         "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleMathMode",
+        "key": "alt+l alt+t",
+        "mac": "alt+l alt+t",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.wrapSubscript",
+        "key": "_",
+        "mac": "_",
+        "when": "editorTextFocus && editorLangId == 'latex' && editorHasSelection"
+      },
+      {
+        "command": "tex-machina.wrapSuperscript",
+        "key": "^",
+        "mac": "^",
+        "when": "editorTextFocus && editorLangId == 'latex' && editorHasSelection"
       }
     ]
   },

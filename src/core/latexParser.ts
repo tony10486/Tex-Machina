@@ -5,16 +5,17 @@ export interface MathEnvironment {
     text: string;
     type: 'inline' | 'display' | 'equation';
     content: string;
+    envName?: string;
 }
 
 /**
- * Finds the math environment ($...$, $$...$$, \[...\], \begin{equation}...\end{equation}, etc.) at the given position.
+ * Finds the innermost LaTeX environment at the given position.
+ * Handles nested environments correctly by finding the tightest pair of \begin and \end.
  */
-export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): MathEnvironment | null {
+export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode.Position): MathEnvironment | null {
     const offset = document.offsetAt(pos);
     const lineCount = document.lineCount;
     
-    // Scan up to 100 lines above and below to find the environment
     const startLine = Math.max(0, pos.line - 100);
     const endLine = Math.min(lineCount - 1, pos.line + 100);
     
@@ -25,47 +26,107 @@ export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Positio
     const text = document.getText(rangeToSearch);
     const searchStartOffset = document.offsetAt(rangeToSearch.start);
 
-    // Math environment regex
-    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$]+\$|\\\[[\s\S]*?\\\]|\\begin\{(equation|align|gather|multline|flalign|alignat)\*?\}[\s\S]*?\\end\{\2\*?\})/g;
-    let match;
-    while ((match = mathRegex.exec(text)) !== null) {
-        const start = searchStartOffset + match.index;
-        const end = start + match[0].length;
-        if (offset >= start && offset <= end) {
-            const matchedText = match[0];
-            let type: 'inline' | 'display' | 'equation' = 'inline';
-            let content = '';
+    const boundaryRegex = /\\begin\{([a-zA-Z]+\*?)\}|\\end\{([a-zA-Z]+\*?)\}|\$\$|\$|\\\[|\\\]/g;
+    
+    const stack: { type: string, start: number, envName?: string }[] = [];
+    const candidates: MathEnvironment[] = [];
 
-            if (matchedText.startsWith('$$')) {
-                type = 'display';
-                content = matchedText.substring(2, matchedText.length - 2);
-            } else if (matchedText.startsWith('\\[')) {
-                type = 'display';
-                content = matchedText.substring(2, matchedText.length - 2);
-            } else if (matchedText.startsWith('$')) {
-                type = 'inline';
-                content = matchedText.substring(1, matchedText.length - 1);
-            } else if (matchedText.startsWith('\\begin{equation')) {
-                type = 'equation';
-                const innerMatch = matchedText.match(/\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/);
-                content = innerMatch ? innerMatch[1] : '';
-            } else {
-                // Other environments like align, gather etc.
-                type = 'equation';
-                const envName = match[2];
-                const innerMatch = matchedText.match(new RegExp(`\\\\begin\\{${envName}\\*?\\}([\\s\\S]*?)\\\\end\\{${envName}\\*?\\}`));
-                content = innerMatch ? innerMatch[1] : '';
+    let match: RegExpExecArray | null;
+    while ((match = boundaryRegex.exec(text)) !== null) {
+        const m = match[0];
+        const posInDoc = searchStartOffset + match.index;
+
+        if (m.startsWith('\\begin')) {
+            stack.push({ type: 'begin', start: posInDoc, envName: match[1] });
+        } else if (m.startsWith('\\end')) {
+            const currentEndName = match[2];
+            const lastIdx = stack.map(s => s.envName).lastIndexOf(currentEndName);
+            if (lastIdx !== -1) {
+                const last = stack.splice(lastIdx, 1)[0];
+                const endPos = posInDoc + m.length;
+                if (offset >= last.start && offset <= endPos) {
+                    candidates.push({
+                        range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
+                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                        type: 'equation',
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + m.length), document.positionAt(posInDoc))),
+                        envName: last.envName
+                    });
+                }
             }
-
-            return {
-                range: new vscode.Range(document.positionAt(start), document.positionAt(end)),
-                text: matchedText,
-                type: type,
-                content: content.trim()
-            };
+        } else if (m === '$$' || m === '\\[' || m === '$') {
+            const existingIdx = stack.findIndex(s => s.type === m);
+            if (existingIdx !== -1) {
+                const last = stack.splice(existingIdx, 1)[0];
+                const endPos = posInDoc + m.length;
+                if (offset >= last.start && offset <= endPos) {
+                    candidates.push({
+                        range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
+                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                        type: m === '$' ? 'inline' : 'display',
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + m.length), document.positionAt(posInDoc)))
+                    });
+                }
+            } else {
+                stack.push({ type: m, start: posInDoc });
+            }
+        } else if (m === '\\]') {
+            const lastIdx = stack.findIndex(s => s.type === '\\[');
+            if (lastIdx !== -1) {
+                const last = stack.splice(lastIdx, 1)[0];
+                const endPos = posInDoc + m.length;
+                if (offset >= last.start && offset <= endPos) {
+                    candidates.push({
+                        range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
+                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                        type: 'display',
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + 2), document.positionAt(posInDoc)))
+                    });
+                }
+            }
         }
     }
-    return null;
+
+    if (candidates.length === 0) return null;
+
+    return candidates.reduce((prev, curr) => {
+        const prevLen = document.offsetAt(prev.range.end) - document.offsetAt(prev.range.start);
+        const currLen = document.offsetAt(curr.range.end) - document.offsetAt(curr.range.start);
+        return currLen < prevLen ? curr : prev;
+    });
+}
+
+/**
+ * Finds the math environment ($...$, $$...$$, \[...\], \begin{equation}...\end{equation}, etc.) at the given position.
+ */
+export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Position): MathEnvironment | null {
+    // Re-use innermost for consistency
+    return findInnermostEnvAtPos(document, pos);
+}
+
+/**
+ * Splits a string by a delimiter only at the top level of bracket nesting.
+ */
+export function splitTopLevel(text: string, delimiter: string): string[] {
+    const result: string[] = [];
+    let start = 0;
+    let depth = 0;
+    const delimLen = delimiter.length;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '{' || char === '[' || char === '(') {
+            depth++;
+        } else if (char === '}' || char === ']' || char === ')') {
+            depth--;
+        } else if (depth === 0 && text.substring(i, i + delimLen) === delimiter) {
+            result.push(text.substring(start, i));
+            start = i + delimLen;
+            i += delimLen - 1;
+        }
+    }
+    result.push(text.substring(start));
+    return result;
 }
 
 /**
@@ -77,7 +138,6 @@ export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.P
     const restOfLine = lineText.substring(pos.character);
 
     // Match \command followed by optional arguments like [], {}, _{}, ^{}
-    // Supports spaces between command and arguments
     const commandRegex = /^\\[a-zA-Z]+\*?(?:\s*(?:\[[^\]]*\]|\{[^\}]*\}|_[^ \t\r\n{}]|_\s*\{[^\}]*\}|\^[^ \t\r\n{}]|\^\s*\{[^\}]*\}))*/;
     const match = restOfLine.match(commandRegex);
 
@@ -94,14 +154,10 @@ export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.P
  * Checks if a LaTeX command structure is "empty" (only whitespace or delimiters in arguments).
  */
 export function isCommandEmpty(commandText: string): boolean {
-    // Extract everything after the command name (\cmd or \cmd*)
     const argsMatch = commandText.match(/^\\[a-zA-Z]+\*?\s*([\s\S]*)$/);
-    if (!argsMatch || !argsMatch[1]) return false; // Symbols like \alpha are not "structures" to be smart-deleted
+    if (!argsMatch || !argsMatch[1]) return false;
 
     const argsPart = argsMatch[1];
-    
-    // Check if there's any non-whitespace character that is NOT a delimiter ({ } [ ] _ ^)
-    // If it only contains delimiters and whitespace, it's considered empty.
     const contentRegex = /[^{}[\]_^\s]/;
     return !contentRegex.test(argsPart);
 }

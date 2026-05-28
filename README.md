@@ -99,6 +99,15 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 - 첨가 행렬 (`/ aug=n`): 특정 열 뒤에 수직선(`|`)을 추가하여 첨가 행렬(Augmented Matrix)을 만듭니다.
   - 예: `matrix > 1,0,5 / 0,1,2 / aug=2` (2열 뒤에 구분선 추가)
 
+#### 4. 인터랙티브 행렬 리사이저 (Matrix Resizer)
+작성된 행렬의 구조를 직관적으로 변경할 수 있습니다.
+- 실행 방식: 행렬 코드 내부에 커서를 두고 `Alt + L M` (macOS: `Option + L M`)을 입력하거나, `Ctrl + .` (Quick Fix) 메뉴를 엽니다.
+- 제공 기능:
+  - `➕ 행 추가` / `➖ 행 삭제`
+  - `➕ 열 추가` / `➖ 열 삭제`
+- 지원 환경: `matrix`, `pmatrix`, `bmatrix`, `vmatrix`, `cases`, `align`, `array`, `smallmatrix`, `subarray` 등.
+- 특징: 중첩된 행렬을 정확히 감지하며, 분수(`\frac`) 등 복잡한 수식이 포함된 셀 내용도 안전하게 보존합니다.
+
 ### 고급 시각화 (`plot >`)
 수식의 그래프를 생성합니다.
 
@@ -157,7 +166,7 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 > *   단축키: `Alt + Q`
 
 ### 수식 환경 변경
-인라인 수식(`$$`)을 `\[ \]` 환경, 또는 `\begin(equation)` 환경으로 한번에 변경하는 기능을 지원합니다. 커서를 수식 내에 두고, 윈도우 기준 `Ctrl+Alt+M`, 맥 기준 `Cmd + Option + M` 을 눌러 전환이 가능합니다. 
+인라인 수식(`$`)을 `\[ \]` 환경, 또는 `\begin{equation}` 환경으로 한번에 변경하는 기능을 지원합니다. 커서를 수식 내에 두고, **`Alt + L T`** (Windows/macOS 공통, Option 키 유지 가능)를 눌러 순환 전환이 가능합니다. 전환 순서는 설정(`mathToggle.sequence`)에서 커스터마이징할 수 있습니다.
 
 ### 수식 자동 분할 (`split`)
 긴 한 줄 수식을 여러 줄로 나누고 `=` 기호를 기준으로 정렬된 `align` 환경으로 자동 변환합니다.
@@ -214,8 +223,10 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
   - `> 내용` + 스페이스 → \begin{gather} 내용 \end{gather}
   - `- ...` + 스페이스 → \begin{itemize} \item ... \end{itemize}
 - 수식 모드 자동 전환 (Auto Math Wrap): 일반 텍스트 모드에서 `\alpha`나 `\sum` 같은 수학 전용 매크로를 입력하고 스페이스를 누르면 자동으로 `$ $`를 씌워줍니다. (예: `\alpha` → `$\alpha$`)
+- 수식 구조 통째로 삭제 (Smart Backspace): 커서가 비어 있는 `\frac{}{}` 등의 명령어 시작 부분(`\` 앞/뒤)에 있을 때 백스페이스를 누르면 구조 전체를 한 번에 삭제합니다.
 - 암시적 첨자 변환 (Implicit Subscripts): `x1`과 같이 변수 뒤에 숫자를 입력하면 자동으로 `x_1`으로 변환합니다. `x_12`는 `x_{12}`로 자동 확장됩니다.
 - 분수 자동 변환 (Fraction Shorthand): `1/2` 또는 `(a+b)/c` 입력 후 스페이스를 누르면 자동으로 `\frac{1}{2}` 또는 `\frac{a+b}{c}`로 변환됩니다.
+- 선택 영역 자동 씌우기 (Wrap Selection with Scripts): 특정 텍스트를 블록 지정한 상태에서 `_`나 `^`를 누르면, 선택 영역이 자동으로 `_{...}` 또는 `^{...}`로 감싸집니다. 이미 작성된 수식을 첨자로 만들 때 유용합니다.
 - 자동 중괄호 (Auto-bracing) : `_` 또는 `^` 입력 후 두 글자 이상을 치면 자동으로 `{ }`를 씌워줍니다. `-1`과 같이 자주 쓰이는 지수는 입력 후 커서가 자동으로 중괄호 밖으로 이동합니다.
 - 스마트 줄바꿈 (Smart Newline): 수식 환경(`align`, `gather` 등) 내부에서 `Enter` 입력 시 `\\`와 `&` 정렬 기호를 상황에 맞게 자동으로 삽입합니다.
 - 수식 전용 리가처 (Mathematical Ligatures): `!=`, `<=`, `->`, `&&` 등 익숙한 기호 조합을 입력하면 즉시 `\neq`, `\le`, `\to`, `\land` 등 LaTeX 명령어로 변환합니다.
@@ -238,6 +249,8 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 | 최근 기호 팝업 | `Alt + Q` | `Alt + Q` | 자주 쓰는 기호 자동완성 띄움 |
 | 선택 영역 확장 | `Shift + Alt + →` | `Shift + Alt + →` | 수학적 계층 단위로 선택 확장 |
 | 선택 영역 축소 | `Shift + Alt + ←` | `Shift + Alt + ←` | 수학적 계층 단위로 선택 축소 |
+| 행렬 리사이저 메뉴 | `Alt + L M` | `Option + L M` | 행/열 추가 삭제 메뉴 호출 |
+| 수식 환경 전환 | `Alt + L T` | `Option + L T` | 인라인/디스플레이 등 모드 전환 |
 | 스마트 줄바꿈 | `Enter` | `Enter` | (수식 내) `\\` 및 `&` 자동 삽입 |
 | CLI 열기 | `Ctrl + Shift + ;` | `Cmd + Shift + ;` | TeX-Machina 통합 명령줄 실행 |
 | 수식 분할 | `Ctrl + Shift + L` | `Cmd + Shift + L` | 수식 자동 분할 (`align` 변환) |
@@ -251,6 +264,8 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 | Hat 삽입 | `Alt + Shift + 6` | `Alt + Shift + 6` | 커서 앞 글자에 `\hat{}` 씌움 |
 | Tilde 삽입 | `Alt + Shift + ~` | `Alt + Shift + ~` | 커서 앞 글자에 `\tilde{}` 씌움 |
 | Dot 삽입 | `Alt + .` | `Alt + .` | 커서 앞 글자에 `\dot{}` 씌움 |
+| 선택 영역 첨자화 | `_` / `^` | `_` / `^` | 선택 영역을 `_{}` / `^{}`로 감쌈 |
+| Smart Backspace | `Backspace` | `Backspace` | 명령어 시작점(\)에서 빈 구조 삭제 |
 
 ## Installation & Setup (설치 및 설정)
 
