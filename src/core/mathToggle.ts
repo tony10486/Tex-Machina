@@ -13,31 +13,45 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
         }
 
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const sequence = config.get<string[]>('mathToggle.sequence', ['inline', 'display', 'equation']);
+        const sequence = config.get<string[]>('mathToggle.sequence', ['$', '\\[', 'equation']);
         
         if (sequence.length === 0) return;
 
-        // Determine current type in terms of sequence elements
-        let currentType = mathEnv.type;
-        // If it's 'equation' type in mathEnv, it might be 'align', 'gather' etc. in sequence
-        if (currentType === 'equation') {
+        // Map internal types to user-friendly sequence names
+        let currentType = '';
+        if (mathEnv.type === 'inline') {
+            currentType = '$';
+        } else if (mathEnv.type === 'display') {
+            // Note: Parser treats both $$ and \[ as 'display'. 
+            // We'll check the actual text to be precise if the user has both in their sequence.
+            currentType = mathEnv.text.startsWith('$$') ? '$$' : '\\[';
+        } else {
+            // equation or other \begin{env}
             const envMatch = mathEnv.text.match(/\\begin\{([a-zA-Z]+\*?)\}/);
-            if (envMatch && sequence.includes(envMatch[1])) {
-                currentType = envMatch[1] as any;
-            }
+            currentType = envMatch ? envMatch[1] : 'equation';
         }
 
-        const currentIndex = sequence.indexOf(currentType);
+        let currentIndex = sequence.indexOf(currentType);
+        
+        // Fallback: if current environment is not in sequence, try to find a close match
+        if (currentIndex === -1) {
+            if (mathEnv.type === 'inline') currentIndex = sequence.indexOf('$');
+            else if (mathEnv.type === 'display') currentIndex = sequence.indexOf('\\[') !== -1 ? sequence.indexOf('\\[') : sequence.indexOf('$$');
+            else currentIndex = sequence.indexOf('equation');
+        }
+
         const nextIndex = (currentIndex + 1) % sequence.length;
         const nextType = sequence[nextIndex];
 
         const content = mathEnv.content;
         let newText = '';
 
-        if (nextType === 'inline') {
+        if (nextType === '$') {
             const singleLineContent = content.replace(/\s+/g, ' ').trim();
             newText = `$${singleLineContent}$`;
-        } else if (nextType === 'display') {
+        } else if (nextType === '$$') {
+            newText = `$$\n    ${content}\n$$`;
+        } else if (nextType === '\\[') {
             newText = `\\[\n    ${content}\n\\]`;
         } else {
             // Environment types (equation, align, gather, etc.)

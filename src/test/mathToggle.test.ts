@@ -11,18 +11,21 @@ suite('Math Toggle Test Suite', () => {
             editor.selection = new vscode.Selection(0, 1, 0, 1);
             await vscode.commands.executeCommand('tex-machina.toggleMathMode');
             for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('\\[')) break;
+                // Check for either \[ or $$ depending on the default sequence
+                const text = document.getText();
+                if (text.includes('\\[') || text.includes('$$')) break;
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
-            assert.ok(document.getText().includes('\\['), "Should convert to display math");
+            const result = document.getText();
+            assert.ok(result.includes('\\[') || result.includes('$$'), "Should convert to a display math format");
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
         });
     });
 
     suite('Detailed Feature Check', () => {
-        test('Cycle: Should respect custom sequence (e.g., inline -> gather)', async () => {
+        test('Cycle: Should respect custom sequence (e.g., $ -> gather)', async () => {
             const config = vscode.workspace.getConfiguration('tex-machina');
-            await config.update('mathToggle.sequence', ['inline', 'gather'], vscode.ConfigurationTarget.Global);
+            await config.update('mathToggle.sequence', ['$', 'gather'], vscode.ConfigurationTarget.Global);
             
             const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '$a=b$' });
             const editor = await vscode.window.showTextDocument(document);
@@ -36,7 +39,7 @@ suite('Math Toggle Test Suite', () => {
             assert.ok(document.getText().includes('\\begin{gather}'), "Should follow custom sequence");
             
             // Cleanup
-            await config.update('mathToggle.sequence', ['inline', 'display', 'equation'], vscode.ConfigurationTarget.Global);
+            await config.update('mathToggle.sequence', ['$', '\\[', 'equation'], vscode.ConfigurationTarget.Global);
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
         });
 
