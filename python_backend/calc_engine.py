@@ -22,23 +22,24 @@ def op_tensor_expand(expr, args, parallels=[], selection=None):
     아인슈타인 합 규약(Einstein summation) 해석 모듈
     문자열 레벨에서 위/아래 반복되는 인덱스를 찾아 Sum 연산으로 치환합니다.
     """
-    # SymPy 객체로 넘어오기 전 원시 LaTeX 문자열을 받아 처리
-    raw_str = selection if selection else (args[0] if args else str(expr))
+    raw_str = selection if selection else str(expr)
     
-    # 1. 아랫첨자(_)와 윗첨자(^) 추출 (그리스 문자 및 중괄호 내 다중 인덱스 대응)
+    # 1. 아랫첨자(_)와 윗첨자(^) 추출
+    GREEK_LIST = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'phi', 'chi', 'psi', 'omega']
+    GREEK_PATTERN = '|'.join(GREEK_LIST)
+
     def extract_indices(text, prefix):
-        # prefix: '_' 또는 '\^'
         pattern = prefix + r'(?:\{([a-zA-Z0-9\\\s]+)\}|(\\[a-zA-Z]+)|([a-zA-Z0-9]))'
         matches = re.findall(pattern, text)
         indices = []
         for m in matches:
             content = m[0] or m[1] or m[2]
             if not content: continue
-            # 그리스 문자(\mu 등) 및 단일 문자를 정규화(백슬래시 제거)하여 수집
             if content.startswith('\\'):
                 indices.append(content.lstrip('\\'))
-            elif m[0]: # 중괄호 {ik} 형태
-                parts = re.findall(r'\\[a-zA-Z]+|[a-zA-Z0-9]', content)
+            elif m[0]:
+                # 그리스 문자 및 단일 문자들을 개별 토큰으로 추출
+                parts = re.findall(r'\\(?:' + GREEK_PATTERN + r')|[a-zA-Z0-9]', content)
                 indices.extend([p.lstrip('\\') for p in parts])
             else:
                 indices.append(content)
@@ -46,54 +47,51 @@ def op_tensor_expand(expr, args, parallels=[], selection=None):
 
     lower_indices = extract_indices(raw_str, '_')
     upper_indices = extract_indices(raw_str, r'\^')
-    
-    # 2. 반복되는 인덱스 (더미 인덱스) 찾기
     dummy_indices = set(lower_indices).intersection(set(upper_indices))
     
     if not dummy_indices:
-        return sp.simplify(expr) # 반복 인덱스가 없으면 단순화만 수행
+        return sp.simplify(expr)
         
-    # 3. 차원 결정 (기본값 3, parallels에서 dim=N 으로 확장 가능)
     dim = 3
     for p in parallels:
         if p.startswith('dim='):
-            try:
-                dim = int(p.split('=')[1])
-            except (ValueError, IndexError):
-                pass
+            try: dim = int(p.split('=')[1])
+            except: pass
 
-    # 4. Sum 객체로 감싸기
-    result = expr
-    for idx in dummy_indices:
-        # Indexed Symbol 처리: A_i 형태의 심볼들을 찾아 교체용 딕셔너리 생성
-        def expand_sum(e, i_name, start, end):
-            sum_res = 0
-            for val in range(start, end + 1):
-                term = e
-                # i_name: mu, k 등 (백슬래시 없음)
-                # s.name: A_{mu}, mu, R_{ik} 등 (백슬래시 있을 수도 있음)
-                for s in term.free_symbols:
-                    s_name = s.name
-                    clean_s_name = s_name.lstrip('\\')
-                    
-                    # 케이스 1: 심볼 자체가 인덱스인 경우 (B^mu 에서 mu)
-                    if clean_s_name == i_name:
-                        term = term.subs(s, val)
-                    # 케이스 2: 심볼 이름의 일부로 인덱스가 포함된 경우 (A_{mu}, R_{ik})
-                    elif i_name in clean_s_name:
-                        # 다양한 패턴으로 교체 시도
-                        new_name = s_name
-                        for target in [f"{{{i_name}}}", f"\\{{{i_name}}}", i_name, f"\\{i_name}"]:
-                            new_name = new_name.replace(target, str(val))
-                        
-                        if new_name != s_name:
-                            term = term.subs(s, sp.Symbol(new_name))
-                sum_res += term
-            return sum_res
-
-        result = expand_sum(result, idx, 1, dim)
+    # 3. 문자열 레벨에서 확장 수행
+    expanded_terms = []
+    from itertools import product
+    dummy_list = list(dummy_indices)
+    
+    for values in product(range(1, dim + 1), repeat=len(dummy_list)):
+        term_str = raw_str
+        for idx_name, val in zip(dummy_list, values):
+            def repl_idx(m):
+                prefix = m.group(1)
+                content = m.group(2)
+                if idx_name in GREEK_LIST:
+                    pattern = r'\\' + re.escape(idx_name) + r'(?![a-zA-Z])'
+                else:
+                    pattern = r'(?<!\\)\b' + re.escape(idx_name) + r'\b'
+                new_content = re.sub(pattern, str(val), content)
+                return prefix + "{" + new_content + "}"
+            
+            term_str = re.sub(r'([_^])\{([^}]*)\}', repl_idx, term_str)
+            if idx_name in GREEK_LIST:
+                term_str = re.sub(r'([_^])\\' + re.escape(idx_name) + r'(?![a-zA-Z])', r'\g<1>' + str(val), term_str)
+            else:
+                term_str = re.sub(r'([_^])' + re.escape(idx_name) + r'\b', r'\g<1>' + str(val), term_str)
+        expanded_terms.append(term_str)
         
-    return result
+    final_latex_str = " + ".join(expanded_terms)
+    try:
+        return parse_latex(final_latex_str)
+    except:
+        res_expr = 0
+        for t in expanded_terms:
+            try: res_expr += parse_latex(t)
+            except: pass
+        return res_expr
 
 # ==========================================
 # 1. 특수 연산 및 단계별 풀이 (Step-by-Step)
@@ -981,20 +979,31 @@ def strip_latex_delimiters(text):
 def preprocess_matrix_latex(latex_str):
     r"""
     \begin{bmatrix} ... \end{bmatrix} 형태를 SymPy Matrix 문자열로 변환합니다.
-    또한 행렬 간 연산 기호(\times, ^T, ^-1 등)를 SymPy 형식으로 변환합니다.
     """
     # 1. 행렬 환경을 먼저 Matrix()로 변환
     def repl(match):
         content = match.group(1).strip()
-        raw_parts = content.split('\\')
+        # [Fix] 단일 백슬래시가 아닌 \\ (줄바꿈)으로 분리
+        raw_parts = re.split(r'\\\\|\\cr', content)
         matrix_rows = []
         for part in raw_parts:
             part = part.strip()
-            part = re.sub(r'^cr|^\[.*?\]', '', part).strip()
+            part = re.sub(r'^\[.*?\]', '', part).strip()
             if not part: continue
             cells = [c.strip() for c in part.split('&')]
             if any(cells):
-                matrix_rows.append("[" + ", ".join(cells) + "]")
+                processed_cells = []
+                for cell in cells:
+                    try:
+                        # parse_latex를 사용하여 각 셀을 SymPy 객체로 변환 후 문자열화
+                        # 이렇게 하면 e^{ax} 등이 자동으로 exp(a*x) 등으로 변환됨
+                        processed_cells.append(str(parse_latex(cell)))
+                    except:
+                        # 실패 시 수동 보정 폴백
+                        cell = re.sub(r'\\([a-zA-Z]+)', r'\1', cell)
+                        cell = re.sub(r'\^\{(.*?)\}', r'**(\1)', cell)
+                        processed_cells.append(cell)
+                matrix_rows.append("[" + ", ".join(processed_cells) + "]")
         return "Matrix([" + ", ".join(matrix_rows) + "])"
 
     pattern = r'\\begin\{[bpvVB]matrix\}(.*?)\\end\{[bpvVB]matrix\}'
@@ -1004,21 +1013,15 @@ def preprocess_matrix_latex(latex_str):
     if 'Matrix' in processed:
         # 역행렬: ^{-1} -> .inv()
         processed = re.sub(r'\^\{\s*-\s*1\s*\}', '.inv()', processed)
-        # 전치행렬: ^T, ^\top, ^\intercal -> .T (백슬래시 유무와 상관없이 매칭)
+        # 전치행렬: ^T, ^\top, ^\intercal -> .T
         processed = re.sub(r'\^\{\s*\\*(?:T|top|intercal)\s*\}|\^\\*(?:T|top|intercal)', '.T', processed)
-        # 거듭제곱: ^{n} -> **n
-        processed = re.sub(r'\^\{\s*(\d+)\s*\}|\^(\d+)', lambda m: '**' + (m.group(1) or m.group(2)), processed)
         
-        # 곱셈 및 기타 LaTeX 명령어 처리
-        # 모든 \command 형태에서 \를 제거하고 times/cdot은 *로 교환
-        processed = re.sub(r'\\+(times|cdot)', '*', processed)
+        # [Fix] Greedy match for Matrix(...) to handle nested parentheses
+        for func in ['det', 'tr', 'trace', 'inv', 'rank', 'transpose']:
+            processed = re.sub(r'\\*' + func + r'\s*(Matrix\(.*\))', func + r'(\1)', processed)
+            
         processed = re.sub(r'\\+([a-zA-Z]+)', r'\1', processed)
-        
-        # 특정 명령어들을 연산자로 변환 (이미 \ 가 제거된 경우 대비)
         processed = processed.replace('times', '*').replace('cdot', '*')
-        
-        # 중괄호 제거 및 일반화
-        processed = processed.replace('{', '(').replace('}', ')')
         
     return processed
 
@@ -1260,7 +1263,9 @@ def execute_calc(parsed_json_str):
                     'Matrix': sp.Matrix,
                     'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
                     'exp': sp.exp, 'log': sp.log, 'sqrt': sp.sqrt,
-                    'pi': sp.pi, 'theta': sp.Symbol('theta'), 'phi': sp.Symbol('phi')
+                    'pi': sp.pi, 'theta': sp.Symbol('theta'), 'phi': sp.Symbol('phi'),
+                    'det': sp.det, 'tr': sp.trace, 'transpose': lambda m: m.T, 'inv': lambda m: m.inv(),
+                    'diff': sp.diff, 'integrate': sp.integrate, 'limit': sp.limit
                 }
                 expr = parse_expr(processed_selection, local_dict=calc_locals, global_dict=SAFE_SYMPY_DICT, evaluate=False)
             else:

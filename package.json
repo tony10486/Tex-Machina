@@ -779,6 +779,7 @@
     "test:integration": "vscode-test --run out/test/autoBracing.test.js out/test/markdown.test.js out/test/smartQuotes.test.js out/test/diacritics.test.js out/test/labelDetection.test.js out/test/labelDiscovery.test.js out/test/nodeNavigation.test.js out/test/mathAutoWrap.test.js out/test/fractionShorthand.test.js",
     "test:webview": "vscode-test --run out/test/webview.test.js",
     "test:perf": "vscode-test --run out/test/performance.test.js out/test/extreme.test.js",
+    "test:calc": "vscode-test --run out/test/calc_engine_high_difficulty.test.js out/test/calc_engine_extreme.test.js",
     "test:only": "vscode-test --run"
   },
   "dependencies": {
