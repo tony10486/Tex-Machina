@@ -9,7 +9,18 @@ export class PythonService {
     constructor(private context: vscode.ExtensionContext) {}
 
     public start(): void {
-        const pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
+        const isWindows = process.platform === 'win32';
+        const venvPath = isWindows 
+            ? this.context.asAbsolutePath('venv/Scripts/python.exe')
+            : this.context.asAbsolutePath('venv/bin/python3');
+        
+        // venv가 존재하면 우선적으로 사용하고, 아니면 시스템 python 사용
+        const fs = require('fs');
+        let pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
+        if (fs.existsSync(venvPath)) {
+            pythonCommand = venvPath;
+        }
+
         const serverPath = this.context.asAbsolutePath('python_backend/server.py');
         
         this.pythonProcess = spawn(pythonCommand, [serverPath]);

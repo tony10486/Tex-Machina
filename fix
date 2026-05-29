@@ -1,20 +1,10 @@
-# TeX-Machina: 상용화 대비 심층 코드 오딧(Audit) 보고서
 
-본 보고서는 `tex-machina` VS Code 확장 프로그램의 소스 코드를 심층 분석하여 발견된 **보안 취약점(Security Vulnerability), 성능 병목(Performance Bottleneck), 그리고 아키텍처 설계 결함(Architectural Flaw)**을 정리한 문서입니다. 상용 프로그램으로서의 안정성 및 신뢰성 확보를 위해 아래 명시된 모든 항목에 대한 즉각적인 수정이 요구됩니다.
 
----
+calc_engine.py 에서 하드코딩 되어 있는, 즉 ad hoc 의 상황을 대비하는 코드를 찾고, 이를 개선해서, 더 일반화 된 상황에서도 올바른 결과를 반환할 수 있도록 코드를 수정해 줘.
+그리고 코드에 불필요한 주석, 또는 더 이상 사용되지 않는 코드, 또는 여러 자질구레한 몇 가지 코드 등이 있는데, 이를 찾아서, 개선 제안서를 markdown 문서로 작성한 뒤, 파일로 저장해 줘. 
+그러면 내가 그 문서를 앍어보고 피드백을 해 줄게. 
 
-## 1. [Critical/Security] `sp.sympify` 사용으로 인한 임의 코드 실행 (RCE) 취약점
-
-*   **파일 위치:** `python_backend/calc_engine.py` (Line 440)
-*   **문제 코드:**
-    ```python
-    expr = sp.sympify(processed_selection, locals=calc_locals)
-    ```
-*   **문제점 및 잠재적 영향:**
-    `sympy.sympify`는 내부적으로 `eval()`을 사용하여 문자열을 파이썬 코드로 평가합니다. 악의적인 사용자가 교묘하게 조작된 LaTeX 문자열(예: OS 명령어 삽입 등)을 행렬 파싱 로직에 통과시킬 경우, 사용자의 로컬 환경에서 **원격/임의 코드 실행(Remote Code Execution)**이 발생할 수 있는 매우 치명적인 보안 취약점입니다.
-*   **해결 방안:**
-    `sympify` 사용을 중단하고 `sympy.parsing.sympy_parser.parse_expr` 함수를 사용하되, `evaluate=False` 파라미터를 명시해야 합니다. 안전한 로컬 딕셔너리만 허용하도록 변환 방식을 엄격하게 통제해야 합니다.
+현재 개발중인 latex를 위한 vscode 확장프로그램의 개발에서 다음 취약점이 발견되었어. 이를 수정해 줘. 본 확장프로그램은 상용 프로그램으로 런칭될 예정이니, 기능의 완성도를 1순위로 하여 잘 구현되었는지를 확인해 줘
 
 ## 2. [Critical/Performance] 동기식(Sync) 파일 I/O로 인한 VS Code UI 스레드 차단
 

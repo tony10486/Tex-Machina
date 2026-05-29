@@ -4,6 +4,13 @@ from sympy.parsing.sympy_parser import parse_expr
 import json
 import re
 import os
+from functools import lru_cache
+
+try:
+    import symengine
+    HAS_SYMENGINE = True
+except ImportError:
+    HAS_SYMENGINE = False
 
 SAFE_SYMPY_DICT = {'__builtins__': {}}
 for k, v in sp.__dict__.items():
@@ -333,13 +340,20 @@ def preprocess_latex_ode(latex_str):
     indep = None
     
     # 그리스 문자 목록 (백슬래시 포함 여부와 상관없이)
-    greek_pattern = r'\\?(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)'
+    greek_list = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'phi', 'chi', 'psi', 'omega']
+    greek_pattern = r'\\?(?:' + '|'.join(greek_list) + r'|omicron|upsilon)'
+    
+    # 독립 변수 감지 (f(t) 형태에서 추출)
+    m_indep = re.search(r"(?:[a-zA-Z]|\\(?:" + '|'.join(greek_list) + r"))'*\((\s*[a-zA-Z]\s*)\)", latex_str)
+    if m_indep:
+        indep = m_indep.group(1).strip()
+
     # 단일 알파벳 또는 그리스 문자 (캡처 그룹 포함)
     var_pattern = r'([a-zA-Z]|' + greek_pattern + r')'
 
     # 1. 점(dot) 표기법 처리 (보통 t를 독립변수로 함)
     if r'\ddot' in latex_str or r'\dot' in latex_str:
-        indep = 't'
+        if not indep: indep = 't'
         # \ddot{theta} 또는 \ddot theta 처리
         latex_str = re.sub(r'\\ddot\{' + var_pattern + r'\}', r"\1''", latex_str)
         latex_str = re.sub(r'\\ddot\s+' + var_pattern, r"\1''", latex_str)
@@ -368,9 +382,15 @@ def preprocess_latex_ode(latex_str):
         
     latex_str = re.sub(r'\\frac\{d' + var_pattern + r'\}\{d' + var_pattern + r'\}', repl_1, latex_str)
     
-    # 5. 백슬래시 기호 정리 (파서가 theta''를 인식하도록)
-    latex_str = latex_str.replace('\\theta', 'theta').replace('\\phi', 'phi').replace('\\psi', 'psi').replace('\\omega', 'omega')
-    
+    # 5. 프라임 기호가 붙은 그리스 문자 처리 (개선됨: 부분 매칭 및 중복 (t) 방지)
+    target_indep = indep if indep else 'x'
+    greek_pattern_combined = '|'.join(greek_list)
+    # ('+(?!')) 가 전체 프라임 시퀀스를 매칭하도록 보장함
+    # (?!\s*\() 는 뒤에 공백을 포함하여 괄호가 오는지 확인하여 중복 (t) 추가 방지
+    latex_str = re.sub(r'\\(' + greek_pattern_combined + r")('+(?!'))(?!\s*\()", 
+                       r'\\\1\2(' + target_indep + r')', 
+                       latex_str)
+
     return latex_str, indep
 
 def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
@@ -443,23 +463,61 @@ def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     
     return fixed_expr, y, x
 
-def parse_ics(ics_str, y, x):
-    """ic=y(0):1,y'(0):0 형태의 초기조건을 파싱합니다."""
+def parse_ics(ics_str, funcs, x):
+    """ic=y(0):1,z(0):0 형태의 초기조건을 파싱합니다. 임의의 지점 x0 및 여러 함수를 지원합니다."""
     ics = {}
     if not ics_str:
         return ics
         
+    # funcs가 단일 객체인 경우 리스트로 변환
+    if not isinstance(funcs, (list, tuple)):
+        funcs_list = [funcs]
+    else:
+        funcs_list = funcs
+        
+    # 함수 이름 매핑 생성
+    func_map = {}
+    for f in funcs_list:
+        if hasattr(f, 'func'):
+            func_map[f.func.__name__] = f
+        elif hasattr(f, 'name'):
+            func_map[f.name] = f
+
     pairs = ics_str.split(',')
     for pair in pairs:
-        if ':' not in pair: continue
-        lhs_str, rhs_str = pair.split(':')
+        pair = pair.strip()
+        if not pair: continue
+        
+        if '=' in pair:
+            lhs_str, rhs_str = pair.split('=', 1)
+        elif ':' in pair:
+            lhs_str, rhs_str = pair.split(':', 1)
+        else:
+            continue
+            
         lhs_str = lhs_str.strip()
         rhs = parse_expr(rhs_str.strip(), evaluate=False, global_dict=SAFE_SYMPY_DICT)
         
-        if lhs_str == 'y(0)':
-            ics[y.subs(x, 0)] = rhs
-        elif lhs_str == "y'(0)":
-            ics[y.diff(x).subs(x, 0)] = rhs
+        # 정규화하여 감지 (f(x0) 또는 f'(x0) 형태)
+        clean_lhs = lhs_str.replace('\\', '').replace('{', '').replace('}', '').replace(' ', '')
+        m = re.match(r"([a-zA-Z]+)('*)\((.*?)\)", clean_lhs)
+        
+        if m:
+            func_name = m.group(1)
+            primes = m.group(2)
+            x0_str = m.group(3)
+            
+            if func_name in func_map:
+                try:
+                    target_func = func_map[func_name]
+                    x0 = parse_expr(x0_str, evaluate=False, global_dict=SAFE_SYMPY_DICT)
+                    order = len(primes)
+                    
+                    if order == 0:
+                        ics[target_func.subs(x, x0)] = rhs
+                    else:
+                        ics[target_func.diff(x, order).subs(x, x0)] = rhs
+                except: pass
             
     return ics
 
@@ -481,6 +539,12 @@ def fix_system_ode(exprs, dep_var_names, indep_var_name='t'):
                     substitutions[sym] = funcs[base_name]
                 else:
                     substitutions[sym] = funcs[base_name].diff(t, order)
+        for f in expr.atoms(sp.Function):
+            f_name = getattr(f.func, 'name', None)
+            if f_name:
+                if f_name in funcs:
+                    substitutions[f] = funcs[f_name]
+
         fixed_exprs.append(expr.subs(substitutions))
         
     return fixed_exprs, list(funcs.values()), t
@@ -519,11 +583,15 @@ def op_ode(expr, args, indep_var_name=None):
     
     ics = {}
     if args:
+        all_ic_parts = []
         for arg in args:
             if 'ic=' in arg:
-                ics_str = arg.replace('ic=', '').strip()
-                ics = parse_ics(ics_str, y, x)
-                break
+                all_ic_parts.append(arg.replace('ic=', '').strip())
+        
+        if all_ic_parts:
+            # 여러 개의 ic= 인자를 콤마로 연결하여 한 번에 처리
+            combined_ics_str = ",".join(all_ic_parts)
+            ics = parse_ics(combined_ics_str, [y], x)
                 
     try:
         # Eq 객체가 아니면 = 0으로 간주
@@ -725,6 +793,37 @@ from label_engine import LabelEngine
 # 2. 메인 계산 라우터 (Command Dictionary)
 # ==========================================
 
+def run_fast_op(op_name, expr, *args):
+    """SymEngine을 사용하여 연산을 가속합니다. 지원하지 않는 경우 SymPy로 폴백합니다."""
+    if not HAS_SYMENGINE:
+        return None
+    
+    try:
+        # SymPy 객체를 SymEngine 객체로 변환
+        se_expr = symengine.sympify(expr)
+        
+        if op_name == "diff":
+            # args[0] is the variable
+            var = symengine.Symbol(str(args[0]))
+            res = se_expr.diff(var)
+            return sp.sympify(res) # 다시 SymPy로 변환하여 후속 처리(latex 등) 호환성 유지
+        elif op_name == "expand":
+            res = se_expr.expand()
+            return sp.sympify(res)
+        elif op_name == "simplify":
+            # SymEngine의 simplify는 기능이 제한적일 수 있음
+            if hasattr(se_expr, 'simplify'):
+                res = se_expr.simplify()
+                return sp.sympify(res)
+        elif op_name == "det":
+            # Matrix인 경우
+            se_mtx = symengine.Matrix(expr.tolist())
+            res = se_mtx.det()
+            return sp.sympify(res)
+    except Exception:
+        pass # 실패 시 None 반환하여 SymPy 폴백 유도
+    return None
+
 def get_calc_operations():
     """제안서에 명시된 모든 연산자를 매핑하는 딕셔너리 """
     return {
@@ -736,8 +835,8 @@ def get_calc_operations():
         # 1. 기본 대수 및 해석 
         "calc": lambda x, v, p, c, s: x.doit(),
         "evaluate": lambda x, v, p, c, s: x.doit(),
-        "simplify": lambda x, v, p, c, s: sp.simplify(x.doit()),
-        "expand": lambda x, v, p, c, s: sp.expand(x),
+        "simplify": lambda x, v, p, c, s: run_fast_op("simplify", x) or sp.simplify(x.doit()),
+        "expand": lambda x, v, p, c, s: run_fast_op("expand", x) or sp.expand(x),
         "factor": lambda x, v, p, c, s: sp.factor(x),
         "solve": lambda x, v, p, c, s: sp.solve(x),
         "eval": lambda x, v, p, c, s: x.evalf(),
@@ -749,14 +848,14 @@ def get_calc_operations():
         "expand_trig": lambda x, v, p, c, s: sp.expand_trig(x),
         
         # 3. 미적분 계층 [cite: 25, 32]
-        "diff": lambda x, v, p, c, s: op_diff(x, v),
+        "diff": lambda x, v, p, c, s: run_fast_op("diff", x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0] if x.free_symbols else sp.Symbol('x')) or op_diff(x, v),
         "int": lambda x, v, p, c, s: op_int(x, v),
         "limit": lambda x, v, p, c, s: op_limit(x, v),
         "taylor": lambda x, v, p, c, s: op_taylor(x, v, p),
         "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개 [cite: 40]
         
         # 4. 선형대수 행렬 연산 [cite: 26, 27, 35]
-        "det": lambda x, v, p, c, s: sp.Matrix(x).det(),
+        "det": lambda x, v, p, c, s: run_fast_op("det", x) or sp.Matrix(x).det(),
         "inv": lambda x, v, p, c, s: sp.Matrix(x).inv(),
         "eigen": lambda x, v, p, c, s: sp.Matrix(x).eigenvals(),
         "rref": lambda x, v, p, c, s: sp.Matrix(x).rref()[0],
@@ -857,6 +956,7 @@ def preprocess_matrix_latex(latex_str):
         
     return processed
 
+@lru_cache(maxsize=1024)
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
@@ -953,17 +1053,38 @@ def execute_calc(parsed_json_str):
             exprs = []
             ode_args = sub_cmds.copy()
             detected_indeps = []
+            
+            # 초기 조건(IC)들을 수집하여 하나의 문자열로 합침
+            found_ics = []
             for p in parts:
                 p_strip = p.strip()
                 if not p_strip: continue
-                if 'ic=' in p_strip:
-                    ode_args.append(p_strip)
+                
+                # y(0)=1, y'(0)=0 등의 패턴 감지 (LaTeX 및 일반 텍스트 대응)
+                # 정규화하여 체크 (백슬래시, 중괄호 제거)
+                norm_p = p_strip.replace('\\', '').replace('{', '').replace('}', '').replace(' ', '')
+                is_explicit_ic = 'ic=' in p_strip
+                # 패턴을 더 엄격하게 수정: '함수(숫자)=값' 또는 '함수'(숫자)=값' 형태만 허용
+                # ^[a-zA-Z]+'*\(.*?\)[=:] 는 "alphatheta''(t)+betaphi'(t)=0" 전체를 IC로 오인할 수 있음
+                # 따라서 '=' 앞부분이 순수하게 함수와 인자만 있는지 확인
+                is_pattern_ic = False
+                if '=' in norm_p or ':' in norm_p:
+                    lhs = re.split(r'[=:]', norm_p)[0]
+                    if re.match(r"^[a-zA-Z]+'*\([\d\.]+\)$", lhs):
+                        is_pattern_ic = True
+                
+                if is_explicit_ic or is_pattern_ic:
+                    ic_part = p_strip.replace('ic=', '').strip()
+                    found_ics.append(ic_part)
                 else:
                     preprocessed, indep = preprocess_latex_ode(p_strip)
                     if indep: detected_indeps.append(indep)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', preprocessed)
                     preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
                     exprs.append(parse_latex(preprocessed))
+            
+            if found_ics:
+                ode_args.append("ic=" + ",".join(found_ics))
             
             if not exprs:
                 return json.dumps({"status": "error", "message": "No ODE expression found"})
@@ -983,25 +1104,82 @@ def execute_calc(parsed_json_str):
             
             # 종속 변수 감지: 프라임 붙은 변수 + y, u, v, w, z + 주요 그리스 문자
             potential_dep_vars = {'y', 'u', 'v', 'w', 'z', 'theta', 'phi', 'psi', 'eta', 'xi', 'omega'}
-            found_vars = {sym.name.rstrip("'").replace('\\', '') for sym in all_symbols if sym.name.endswith("'")}
-            found_vars.update(all_funcs)
+            found_vars = set()
+            for sym in all_symbols:
+                name = sym.name.replace('\\', '')
+                if "'" in name:
+                    found_vars.add(name.split("'")[0])
+            
+            for f_name in all_funcs:
+                # f_name은 이미 백슬래시가 제거된 상태
+                if "'" in f_name:
+                    found_vars.add(f_name.split("'")[0])
+                else:
+                    found_vars.add(f_name)
+            
+            # [추가] atoms(sp.Function)에서 직접 이름 추출 (f_name 매핑이 안된 경우 대비)
+            for e in exprs:
+                for f in e.atoms(sp.Function):
+                    f_func_name = getattr(f.func, 'name', None)
+                    if f_func_name:
+                        clean_f_name = f_func_name.replace('\\', '')
+                        if "'" in clean_f_name:
+                            found_vars.add(clean_f_name.split("'")[0])
+                        elif isinstance(f.func, sp.core.function.UndefinedFunction):
+                            found_vars.add(clean_f_name)
+
             # 만약 위에서 아무것도 발견되지 않았다면 기본 후보군에서 검색
             if not found_vars:
                 found_vars.update({sym.name.replace('\\', '') for sym in all_symbols if sym.name.replace('\\', '') in potential_dep_vars})
             
+            # [Final Safety] 여전히 비어있다면 y를 기본값으로 사용
+            if not found_vars:
+                found_vars = {'y'}
+            
             # 주 독립 변수 결정 (가장 먼저 감지된 것 우선)
-            main_indep = detected_indeps[0] if detected_indeps else None
+            # detected_indeps 가 비어있을 경우를 대비하여 안전하게 처리
+            main_indep = None
+            if detected_indeps:
+                main_indep = detected_indeps[0]
+            
+            # 만약 detected_indeps가 없다면 자유 변수 중에서 t, x 순으로 찾음
+            if not main_indep:
+                names = {s.name for s in all_symbols}
+                # t, x 뿐만 아니라 함수의 인자에서도 찾음
+                for e in exprs:
+                    for f in e.atoms(sp.Function):
+                        if isinstance(f.func, sp.core.function.UndefinedFunction) and f.args:
+                            arg_name = str(f.args[0])
+                            if arg_name in ['t', 'x', 's', 'z']:
+                                main_indep = arg_name
+                                break
+                    if main_indep: break
+                
+                if not main_indep:
+                    if 't' in names: main_indep = 't'
+                    elif 'x' in names: main_indep = 'x'
 
-            if len(exprs) > 1 or len(found_vars) > 1:
-                # 연립 미분방정식 처리
-                if not found_vars: found_vars = {'y'}
-                fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars), main_indep or 't')
-                while len(fixed_exprs) < len(funcs):
-                    fixed_exprs.append(sp.Eq(0, 0))
-                result = sp.dsolve(fixed_exprs, funcs)
+            if exprs: # [Fix] found_vars 여부와 상관없이 exprs가 있으면 시도
+                if len(exprs) > 1 or len(found_vars) > 1:
+                    # 연립 미분방정식 처리
+                    if not found_vars: found_vars = {'y'}
+                    fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars), main_indep or 't')
+                    while len(fixed_exprs) < len(funcs):
+                        fixed_exprs.append(sp.Eq(0, 0))
+                    
+                    # 초기 조건 수집
+                    ics = {}
+                    for arg in ode_args:
+                        if 'ic=' in arg:
+                            ics.update(parse_ics(arg.replace('ic=', '').strip(), funcs, t))
+                    
+                    result = sp.dsolve(fixed_exprs, funcs, ics=ics if ics else None)
+                else:
+                    # 단일 미분방정식 처리
+                    if not found_vars: found_vars = {'y'}
+                    result = op_ode(exprs[0], ode_args, indep_var_name=main_indep)
             else:
-                # 단일 미분방정식 처리
-                result = op_ode(exprs[0], ode_args, indep_var_name=main_indep)
+                return json.dumps({"status": "error", "message": "No ODE expression found"})
         else:
             # 2. 일반 수식 파싱
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
