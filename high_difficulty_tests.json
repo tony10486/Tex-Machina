@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Generalized Tensor Expand (4D Minkowski-like)",
+    "rawSelection": "A_\mu B^\mu",
+    "mainCommand": "calc",
+    "subCommands": ["tensor_expand"],
+    "parallelOptions": ["dim=4"],
+    "expected_note": "Should expand from index 1 to 4 instead of the default 3."
+  },
+  {
+    "name": "Taylor Expansion at non-zero point",
+    "rawSelection": "\ln(x)",
+    "mainCommand": "taylor",
+    "subCommands": ["x", "3", "1"],
+    "parallelOptions": [],
+    "expected_note": "Should expand around x=1. Result should start with (x-1) terms."
+  },
+  {
+    "name": "Numerical ODE with custom span and precision",
+    "rawSelection": "y' = -2 y t",
+    "mainCommand": "num_solve",
+    "subCommands": ["ic=y(0):1", "t_span=0,2", "points=200"],
+    "parallelOptions": [],
+    "expected_note": "Should solve numerically for a Gaussian decay."
+  },
+  {
+    "name": "Complex Einstein Summation with different indices",
+    "rawSelection": "R_{ik} g^{kj}",
+    "mainCommand": "calc",
+    "subCommands": ["tensor_expand"],
+    "parallelOptions": ["dim=2"],
+    "expected_note": "Should correctly identify 'k' as dummy index and sum over it (1 to 2)."
+  },
+  {
+    "name": "Taylor with explicit order parameter",
+    "rawSelection": "\sin(x)",
+    "mainCommand": "taylor",
+    "subCommands": ["x"],
+    "parallelOptions": ["order=6", "at=pi/2"],
+    "expected_note": "Should handle symbolic expansion point and explicit order in parallel options."
+  }
+]

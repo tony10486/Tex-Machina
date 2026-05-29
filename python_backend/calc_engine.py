@@ -17,7 +17,7 @@ for k, v in sp.__dict__.items():
     if not k.startswith('__'):
         SAFE_SYMPY_DICT[k] = v
 
-def op_tensor_expand(expr, args, selection=None):
+def op_tensor_expand(expr, args, parallels=[], selection=None):
     """
     아인슈타인 합 규약(Einstein summation) 해석 모듈
     문자열 레벨에서 위/아래 반복되는 인덱스를 찾아 Sum 연산으로 치환합니다.
@@ -25,9 +25,27 @@ def op_tensor_expand(expr, args, selection=None):
     # SymPy 객체로 넘어오기 전 원시 LaTeX 문자열을 받아 처리
     raw_str = selection if selection else (args[0] if args else str(expr))
     
-    # 1. 아랫첨자(_)와 윗첨자(^) 추출
-    lower_indices = re.findall(r'_([a-zA-Z\d])', raw_str)
-    upper_indices = re.findall(r'\^([a-zA-Z\d])', raw_str)
+    # 1. 아랫첨자(_)와 윗첨자(^) 추출 (그리스 문자 및 중괄호 내 다중 인덱스 대응)
+    def extract_indices(text, prefix):
+        # prefix: '_' 또는 '\^'
+        pattern = prefix + r'(?:\{([a-zA-Z0-9\\\s]+)\}|(\\[a-zA-Z]+)|([a-zA-Z0-9]))'
+        matches = re.findall(pattern, text)
+        indices = []
+        for m in matches:
+            content = m[0] or m[1] or m[2]
+            if not content: continue
+            # 그리스 문자(\mu 등) 및 단일 문자를 정규화(백슬래시 제거)하여 수집
+            if content.startswith('\\'):
+                indices.append(content.lstrip('\\'))
+            elif m[0]: # 중괄호 {ik} 형태
+                parts = re.findall(r'\\[a-zA-Z]+|[a-zA-Z0-9]', content)
+                indices.extend([p.lstrip('\\') for p in parts])
+            else:
+                indices.append(content)
+        return indices
+
+    lower_indices = extract_indices(raw_str, '_')
+    upper_indices = extract_indices(raw_str, r'\^')
     
     # 2. 반복되는 인덱스 (더미 인덱스) 찾기
     dummy_indices = set(lower_indices).intersection(set(upper_indices))
@@ -35,30 +53,45 @@ def op_tensor_expand(expr, args, selection=None):
     if not dummy_indices:
         return sp.simplify(expr) # 반복 인덱스가 없으면 단순화만 수행
         
-    # 3. Sum 객체로 감싸기 (차원은 기본 3차원(1~3)으로 가정, 필요시 옵션 확장)
+    # 3. 차원 결정 (기본값 3, parallels에서 dim=N 으로 확장 가능)
+    dim = 3
+    for p in parallels:
+        if p.startswith('dim='):
+            try:
+                dim = int(p.split('=')[1])
+            except (ValueError, IndexError):
+                pass
+
+    # 4. Sum 객체로 감싸기
     result = expr
     for idx in dummy_indices:
-        idx_sym = sp.Symbol(idx)
         # Indexed Symbol 처리: A_i 형태의 심볼들을 찾아 교체용 딕셔너리 생성
-        # SymPy의 Sum은 Symbol('A_i') 내부의 i를 자동으로 인식하지 못하므로 수동 교체 필요
-        def expand_sum(e, i_sym, start, end):
+        def expand_sum(e, i_name, start, end):
             sum_res = 0
             for val in range(start, end + 1):
-                # 1. 일반 변수 i 교체
-                term = e.subs(i_sym, val)
-                # 2. A_i, B_i, A_{i}, B^{i} 형태의 심볼 교체
+                term = e
+                # i_name: mu, k 등 (백슬래시 없음)
+                # s.name: A_{mu}, mu, R_{ik} 등 (백슬래시 있을 수도 있음)
                 for s in term.free_symbols:
-                    # A_{i} 또는 A_i 형태 매칭
-                    if s.name.endswith('_{' + i_sym.name + '}') or s.name.endswith('_' + i_sym.name):
-                        base = s.name.split('_')[0]
-                        # 교체할 심볼 이름도 일관성 있게 생성
-                        term = term.subs(s, sp.Symbol(f"{base}_{{{val}}}"))
-                    elif s.name == i_sym.name:
+                    s_name = s.name
+                    clean_s_name = s_name.lstrip('\\')
+                    
+                    # 케이스 1: 심볼 자체가 인덱스인 경우 (B^mu 에서 mu)
+                    if clean_s_name == i_name:
                         term = term.subs(s, val)
+                    # 케이스 2: 심볼 이름의 일부로 인덱스가 포함된 경우 (A_{mu}, R_{ik})
+                    elif i_name in clean_s_name:
+                        # 다양한 패턴으로 교체 시도
+                        new_name = s_name
+                        for target in [f"{{{i_name}}}", f"\\{{{i_name}}}", i_name, f"\\{i_name}"]:
+                            new_name = new_name.replace(target, str(val))
+                        
+                        if new_name != s_name:
+                            term = term.subs(s, sp.Symbol(new_name))
                 sum_res += term
             return sum_res
 
-        result = expand_sum(result, idx_sym, 1, 3)
+        result = expand_sum(result, idx, 1, dim)
         
     return result
 
@@ -221,7 +254,7 @@ def get_diff_steps(expr, var, level):
     return steps
 
 def op_diff(expr, args):
-    """다변수 편미분 및 일반 미분 처리 [cite: 32]"""
+    """다변수 편미분 및 일반 미분 처리"""
     # 이미 Derivative 객체인 경우 (LaTeX에 \frac{d}{dx} 등이 포함됨)
     if isinstance(expr, sp.Derivative):
         if not args:
@@ -234,49 +267,72 @@ def op_diff(expr, args):
         # 그 외의 경우 (예: d/dx 를 선택하고 diff > y 를 호출) doit() 후 새로 미분
         expr = expr.doit()
 
-    # 변수가 명시되지 않으면 첫 번째 자유 변수(알파벳 순)로 미분 [cite: 139]
+    # 변수가 명시되지 않으면 첫 번째 자유 변수(알파벳 순)로 미분
     if not args:
         symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
         if not symbols:
             return 0
         return sp.diff(expr, symbols[0])
     
-    # diff > x, y 형태의 다변수 편미분 지원 [cite: 32]
+    # diff > x, y 형태의 다변수 편미분 지원
     vars_to_diff = [sp.Symbol(v.strip()) for v in args[0].split(',')]
     return sp.diff(expr, *vars_to_diff)
 
 def op_taylor(expr, args, parallels):
-    """테일러 급수 전개: taylor / [차수] 또는 taylor > [변수], [차수]"""
+    """테일러 급수 전개: taylor / [차수] 또는 taylor > [변수], [차수], [지점]"""
     # 1. 대상 변수 결정
     symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
     var = sp.Symbol(args[0]) if args else (symbols[0] if symbols else sp.Symbol('x'))
     
-    # 2. 차수 결정 (parallels에서 숫자 찾기 우선, 없으면 args, 기본값 4)
+    # 2. 차수 결정 (parallels에서 order=N 또는 숫자 찾기, 없으면 args[1], 기본값 4)
     n = 4
     for p in parallels:
-        if p.isdigit():
+        if p.startswith('order='):
+            try:
+                n = int(p.split('=')[1])
+                break
+            except: pass
+        elif p.isdigit():
             n = int(p)
             break
+            
     if len(args) > 1 and args[1].isdigit():
         n = int(args[1])
         
-    # 3. 테일러 전개 실행
-    # e^x 같은 경우를 위해 수식 내의 'e'를 sp.E로 교체 시도 (필요시)
+    # 3. 전개 지점 결정 (parallels에서 at=N, 없으면 args[2], 기본값 0)
+    at = 0
+    for p in parallels:
+        if p.startswith('at='):
+            try:
+                at = parse_expr(p.split('=')[1], evaluate=True, global_dict=SAFE_SYMPY_DICT)
+                break
+            except: pass
+    
+    if len(args) > 2:
+        try:
+            at = parse_expr(args[2], evaluate=True, global_dict=SAFE_SYMPY_DICT)
+        except: pass
+
+    # 4. 테일러 전개 실행
     calc_expr = expr
     if sp.Symbol('e') in expr.free_symbols:
         calc_expr = expr.subs(sp.Symbol('e'), sp.E)
         
-    series_poly = sp.series(calc_expr, var, 0, n).removeO()
+    series_poly = sp.series(calc_expr, var, at, n).removeO()
     
-    # 4. 낮은 차수부터 정렬하여 수동으로 LaTeX 생성
-    terms = sp.Add.make_args(series_poly.expand())
+    # 5. 낮은 차수부터 정렬하여 수동으로 LaTeX 생성
+    # [Fix] expand()를 제거하여 (x-a)^n 형태의 멱급수 꼴을 유지함
+    terms = sp.Add.make_args(series_poly)
     def get_degree(term):
-        d = sp.degree(term, var)
-        return int(d) if d.is_integer else 0
+        # (x-a)**n 형태에서 차수 추출
+        try:
+            d = sp.degree(term, var)
+            return int(d) if d.is_integer else 0
+        except: return 0
             
     sorted_terms = sorted(terms, key=get_degree)
     
-    # 5. 수동 LaTeX 조립 (정렬 유지)
+    # 6. 수동 LaTeX 조립 (정렬 유지)
     latex_parts = []
     for i, term in enumerate(sorted_terms):
         term_latex = sp.latex(term)
@@ -289,7 +345,7 @@ def op_taylor(expr, args, parallels):
     return "".join(latex_parts)
 
 def op_int(expr, args):
-    """부정적분 및 정적분 처리 [cite: 32]"""
+    """부정적분 및 정적분 처리"""
     # 이미 Integral 객체인 경우 (LaTeX에 \int 가 포함됨)
     if isinstance(expr, sp.Integral):
         if not args:
@@ -306,7 +362,7 @@ def op_int(expr, args):
         symbols = list(expr.free_symbols)
         return sp.integrate(expr, symbols[0]) if symbols else expr
     
-    # int > x, a, b 형태의 구간 입력 [cite: 32, 139]
+    # int > x, a, b 형태의 구간 입력
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
     if len(params) == 3:
@@ -550,7 +606,7 @@ def fix_system_ode(exprs, dep_var_names, indep_var_name='t'):
     return fixed_exprs, list(funcs.values()), t
 
 def op_ode(expr, args, indep_var_name=None):
-    """상미분방정식(단일/연립) 해 도출 및 초기조건(ic) 부여 [cite: 33]"""
+    """상미분방정식(단일/연립) 해 도출 및 초기조건(ic) 부여"""
     # 1. 종속 변수 감지: 프라임(')이 붙은 변수 우선, 그 외 y, u, v, w 등
     symbols_with_primes = [sym for sym in expr.free_symbols if sym.name.endswith("'")]
     if symbols_with_primes:
@@ -604,7 +660,7 @@ def op_ode(expr, args, indep_var_name=None):
         return f"\\text{{The ODE solver failed for }} {expr_latex}: {sp.latex(err_msg)}. \\\\ \\text{{This non-linear ODE may not have a closed-form solution.}} \\\\ \\text{{Recommendation: Use 'calc > num_solve' for numerical results.}}"
 
 def op_dimcheck_wrapper(expr, args, parallels, selection):
-    """차원 및 단위 검사기 (Dimensional Analysis Check) [cite: 100]"""
+    """차원 및 단위 검사기 (Dimensional Analysis Check)"""
     # selection: 원본 LaTeX 수식
     # parallels: 병렬 옵션 (예: set=v:L/T)
     params = {
@@ -618,8 +674,8 @@ def op_dimcheck_wrapper(expr, args, parallels, selection):
     return res["latex"]
 
 def op_error_prop(expr, args, parallels):
-    """실험물리학자를 위한 오차 전파 계산기 [cite: 114, 115]"""
-    # parallels에서 err=x:0.1,y:0.2 파싱 [cite: 143]
+    """실험물리학자를 위한 오차 전파 계산기"""
+    # parallels에서 err=x:0.1,y:0.2 파싱
     err_dict = {}
     for p in parallels:
         if p.startswith('err='):
@@ -632,7 +688,7 @@ def op_error_prop(expr, args, parallels):
     symbols = list(expr.free_symbols)
     for sym in symbols:
         if sym in err_dict:
-            # (∂V/∂I * ΔI)^2 형태의 편미분 제곱합 조립 [cite: 115, 116]
+            # (∂V/∂I * ΔI)^2 형태의 편미분 제곱합 조립
             partial_diff = sp.diff(expr, sym)
             variance += (partial_diff * err_dict[sym])**2
             
@@ -681,6 +737,7 @@ def op_num_solve(expr, args):
     # 1. 초기 조건 및 범위 파싱
     ics_dict = {}
     t_span = [0, 10]
+    num_points = 100
     show_plot = False
     
     if args:
@@ -694,7 +751,13 @@ def op_num_solve(expr, args):
             elif 't_span=' in arg:
                 parts = arg.replace('t_span=', '').split(',')
                 if len(parts) == 2:
-                    t_span = [float(parts[0]), float(parts[1])]
+                    try:
+                        t_span = [float(parts[0]), float(parts[1])]
+                    except: pass
+            elif 'points=' in arg:
+                try:
+                    num_points = int(arg.replace('points=', ''))
+                except: pass
             elif 'plot=true' in arg:
                 show_plot = True
                     
@@ -711,14 +774,13 @@ def op_num_solve(expr, args):
         return "Error: Could not solve for y' explicitly."
     
     # t_var(독립 변수)를 t로, y_func를 y로 lambdify
-    # 수식 내의 t_var를 실제 t_var Symbol로 치환 (가끔 parse_latex가 x, t 혼용할 때 대비)
     f_np = sp.lambdify((t_var, y_func), sol_expr[0], 'numpy')
     def odefun(t, y): return f_np(t, y[0])
     
     # 3. 수치적 통합
     t0_val = list(ics_dict.keys())[0]
     y0 = [ics_dict[t0_val]]
-    t_eval = np.linspace(t_span[0], t_span[1], 100)
+    t_eval = np.linspace(t_span[0], t_span[1], num_points)
     
     try:
         sol = solve_ivp(odefun, t_span, y0, t_eval=t_eval)
@@ -742,8 +804,12 @@ def op_num_solve(expr, args):
         # JSON 형태로 반환하여 웹뷰에서 안전하게 처리
         return json.dumps({"type": "plot", "data": f"data:image/png;base64,{img_base64}"})
     else:
-        # 결과값만 반환 (샘플 포인트 5개)
-        indices = [0, 24, 49, 74, 99] # 시작, 1/4, 중간, 3/4, 끝
+        # 결과값만 반환 (유동적으로 샘플 포인트 선택)
+        if len(sol.t) <= 5:
+            indices = list(range(len(sol.t)))
+        else:
+            indices = [0, len(sol.t)//4, len(sol.t)//2, 3*len(sol.t)//4, len(sol.t)-1]
+            
         res_parts = []
         for idx in indices:
             t_val = round(sol.t[idx], 2)
@@ -753,7 +819,7 @@ def op_num_solve(expr, args):
         return " \\\\ ".join(res_parts)
 
 def op_pde(expr, args):
-    """편미분방정식(PDE) 해 도출 [cite: 33]"""
+    """편미분방정식(PDE) 해 도출"""
     dep_var_name = 'u'
     for sym in expr.free_symbols:
         if sym.name in ['u', 'v', 'w']:
@@ -841,20 +907,20 @@ def get_calc_operations():
         "solve": lambda x, v, p, c, s: sp.solve(x),
         "eval": lambda x, v, p, c, s: x.evalf(),
         
-        # 2. 분수 및 삼각함수 [cite: 25]
+        # 2. 분수 및 삼각함수
         "apart": lambda x, v, p, c, s: sp.apart(x),
         "together": lambda x, v, p, c, s: sp.together(x),
         "trigsimp": lambda x, v, p, c, s: sp.trigsimp(x),
         "expand_trig": lambda x, v, p, c, s: sp.expand_trig(x),
         
-        # 3. 미적분 계층 [cite: 25, 32]
+        # 3. 미적분 계층
         "diff": lambda x, v, p, c, s: run_fast_op("diff", x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0] if x.free_symbols else sp.Symbol('x')) or op_diff(x, v),
         "int": lambda x, v, p, c, s: op_int(x, v),
         "limit": lambda x, v, p, c, s: op_limit(x, v),
         "taylor": lambda x, v, p, c, s: op_taylor(x, v, p),
-        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개 [cite: 40]
+        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개
         
-        # 4. 선형대수 행렬 연산 [cite: 26, 27, 35]
+        # 4. 선형대수 행렬 연산
         "det": lambda x, v, p, c, s: run_fast_op("det", x) or sp.Matrix(x).det(),
         "inv": lambda x, v, p, c, s: sp.Matrix(x).inv(),
         "eigen": lambda x, v, p, c, s: sp.Matrix(x).eigenvals(),
@@ -863,10 +929,10 @@ def get_calc_operations():
         "trace": lambda x, v, p, c, s: sp.Matrix(x).trace(),
         "transpose": lambda x, v, p, c, s: sp.Matrix(x).T,
         "nullspace": lambda x, v, p, c, s: sp.Matrix(x).nullspace(),
-        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x, # 야코비 행렬 [cite: 35]
-        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)), # 헤세 행렬 [cite: 35]
+        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x, # 야코비 행렬
+        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)), # 헤세 행렬
         
-        # 5. 미분방정식 및 변환 [cite: 28, 41]
+        # 5. 미분방정식 및 변환
         "ode": lambda x, v, p, c, s: op_ode(x, v),
         "num_solve": lambda x, v, p, c, s: op_num_solve(x, v),
         "pde": lambda x, v, p, c, s: op_pde(x, v),
@@ -874,24 +940,24 @@ def get_calc_operations():
         "ilaplace": lambda x, v, p, c, s: sp.inverse_laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('s'), sp.Symbol('t'), noconds=True),
         "fourier": lambda x, v, p, c, s: sp.fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('x'), sp.Symbol('k')),
         "ifourier": lambda x, v, p, c, s: sp.inverse_fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('k'), sp.Symbol('x')),
-        "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환 [cite: 41]
+        "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환
         
-        # 6. 복소해석학 [cite: 29, 30]
+        # 6. 복소해석학
         "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), parse_expr(v[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(v)>1 else 0),
         "laurent": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]), 0, 4, dir='+').removeO(),
         "conjugate": lambda x, v, p, c, s: sp.conjugate(x),
         "re": lambda x, v, p, c, s: sp.re(x),
         "im": lambda x, v, p, c, s: sp.im(x),
 
-        # 7. 정수론 및 이산수학 [cite: 30, 31, 39]
+        # 7. 정수론 및 이산수학
         "prime": lambda x, v, p, c, s: sp.isprime(int(sp.simplify(x))),
         "factorint": lambda x, v, p, c, s: sp.factorint(int(sp.simplify(x))),
-        "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'), # 복잡한 논리식 최소화 [cite: 39]
+        "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'), # 복잡한 논리식 최소화
         
-        # 8. 물리 / 공학 유틸리티 [cite: 100, 115]
+        # 8. 물리 / 공학 유틸리티
         "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
         "error_prop": lambda x, v, p, c, s: op_error_prop(x, v, p),
-        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v, s),
+        "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v, p, s),
 
         # 9. 시각화 (Plotting)
         "plot": lambda x, v, p, c, s: handle_plot(s, v, p, c, os.getcwd())
@@ -1081,7 +1147,10 @@ def execute_calc(parsed_json_str):
                     if indep: detected_indeps.append(indep)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', preprocessed)
                     preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
-                    exprs.append(parse_latex(preprocessed))
+                    expr = parse_latex(preprocessed)
+                    if sp.Symbol('e') in expr.free_symbols:
+                        expr = expr.subs(sp.Symbol('e'), sp.E)
+                    exprs.append(expr)
             
             if found_ics:
                 ode_args.append("ic=" + ",".join(found_ics))
@@ -1215,7 +1284,7 @@ def execute_calc(parsed_json_str):
         # 4. 결과 포맷팅
         final_latex = result if isinstance(result, str) else sp.latex(result)
             
-        # 5. 단계별 풀이 (Step-by-Step) [cite: 43, 144]
+        # 5. 단계별 풀이 (Step-by-Step)
         steps = []
         step_level = next((int(p.split('=')[1]) for p in parallels if p.startswith('step=')), 0)
         
@@ -1237,7 +1306,7 @@ def execute_calc(parsed_json_str):
             vars_list = [str(s) for s in expr.free_symbols]
 
         if step_level > 0:
-            # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공) [cite: 46, 145]
+            # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공)
             if action == "solve":
                 var = sp.Symbol(vars_list[0]) if vars_list else sp.Symbol('x')
                 steps = get_solve_steps(expr, var, step_level)
@@ -1263,7 +1332,7 @@ def execute_calc(parsed_json_str):
 
 # 단독 실행 테스트용
 if __name__ == "__main__":
-    # 테스트 1: 다변수 편미분 [cite: 32]
+    # 테스트 1: 다변수 편미분
     test_json = json.dumps({
         "rawSelection": r"x^2 y + y^3 \sin(x)",
         "subCommands": ["diff", "x, y"],
