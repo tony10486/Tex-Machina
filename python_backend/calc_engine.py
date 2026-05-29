@@ -1118,6 +1118,10 @@ def execute_calc(parsed_json_str):
             return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
 
         if action == "ode":
+            # [Add] \begin{cases} ... \end{cases} 환경 전처리
+            selection = re.sub(r'\\begin\{cases\}(.*?)\\end\{cases\}', r'\1', selection, flags=re.DOTALL)
+            selection = selection.replace(r'\\', '\n') # cases 내부 줄바꿈을 개행으로 변환
+            
             parts = re.split(r'[,;]|\r?\n', selection)
             exprs = []
             ode_args = sub_cmds.copy()
@@ -1257,6 +1261,11 @@ def execute_calc(parsed_json_str):
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
             if 'matrix' in selection:
                 processed_selection = preprocess_matrix_latex(selection)
+                # [Fix] Python 예약어인 lambda가 포함되어 있으면 구문 오류가 발생하므로 lamda로 치환
+                processed_selection = re.sub(r'\blambda\b', 'lamda', processed_selection)
+                # [Fix] = 을 == 로 치환하여 방정식 파싱 허용
+                processed_selection = processed_selection.replace('=', '==')
+                
                 # Matrix([...]) 형태는 parse_latex 대신 parse_expr 사용
                 # locals에 Matrix와 기본 함수들 추가
                 calc_locals = {
@@ -1264,6 +1273,7 @@ def execute_calc(parsed_json_str):
                     'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
                     'exp': sp.exp, 'log': sp.log, 'sqrt': sp.sqrt,
                     'pi': sp.pi, 'theta': sp.Symbol('theta'), 'phi': sp.Symbol('phi'),
+                    'lamda': sp.Symbol('lambda'), # lambda -> lamda 매핑
                     'det': sp.det, 'tr': sp.trace, 'transpose': lambda m: m.T, 'inv': lambda m: m.inv(),
                     'diff': sp.diff, 'integrate': sp.integrate, 'limit': sp.limit
                 }

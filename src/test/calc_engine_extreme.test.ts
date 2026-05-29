@@ -406,4 +406,79 @@ suite('Calc Engine Extreme Stress Tests', function() {
         assert.strictEqual(result.status, 'success');
         assert.ok(result.latex.length > 0, `Got result: ${result.latex}`);
     });
+
+    // --- EVEN MORE EXTREME MATRIX & ODE TESTS ---
+
+    test('Wronskian Determinant with Complex Functions', async () => {
+        const payload = {
+            rawSelection: "\\det \\begin{pmatrix} x & e^{fx} & \\sin(x^2) \\\\ 1 & f e^{fx} & 2x \\cos(x^2) \\\\ 0 & f^2 e^{fx} & 2 \\cos(x^2) - 4x^2 \\sin(x^2) \\end{pmatrix}",
+            mainCommand: "simplify",
+            subCommands: [],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        assert.ok(result.latex.length > 0);
+    });
+
+    test('Eigenvalues / Characteristic Equation with Parameters', async () => {
+        const payload = {
+            rawSelection: "\\det \\begin{pmatrix} a - \\lambda & b & 0 \\\\ b & c - \\lambda & b \\\\ 0 & b & a - \\lambda \\end{pmatrix} = 0",
+            mainCommand: "solve",
+            subCommands: ["\\lambda"],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        assert.ok(result.latex.includes('a') || result.latex.includes('c'));
+    });
+
+    test('4x4 Symbolic Matrix Inverse', async () => {
+        const payload = {
+            rawSelection: "\\begin{pmatrix} x & 1 & 0 & a \\\\ 0 & y & 1 & 0 \\\\ 0 & 0 & z & 1 \\\\ a & 0 & 0 & w \\end{pmatrix}^{-1}",
+            mainCommand: "calc",
+            subCommands: [],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        assert.ok(result.latex.includes('matrix'));
+    });
+
+    test('Non-linear Bernoulli ODE with forcing', async () => {
+        const payload = {
+            rawSelection: "\\frac{dy}{dx} + y = x y^3 \\sin(x)",
+            mainCommand: "ode",
+            subCommands: [],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        assert.ok(result.latex.length > 0);
+    });
+
+    test('Bessel Differential Equation with variable coefficients', async () => {
+        const payload = {
+            rawSelection: "x^2 \\frac{d^2y}{dx^2} + x \\frac{dy}{dx} + (x^2 - \\nu^2)y = 0",
+            mainCommand: "ode",
+            subCommands: [],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        // Solution should involve Bessel functions J and Y
+        assert.ok(result.latex.includes('J') || result.latex.includes('Y') || result.latex.includes('bessel'));
+    });
+
+    test('Coupled Variable-Coefficient ODE System with cases', async () => {
+        const payload = {
+            rawSelection: "\\begin{cases} \\frac{dx}{dt} = t x + y \\\\ \\frac{dy}{dt} = -x + t y \\end{cases}",
+            mainCommand: "ode",
+            subCommands: [],
+            parallelOptions: []
+        };
+        const result = await runPythonCalc(payload);
+        assert.strictEqual(result.status, 'success');
+        assert.ok(result.latex.includes('x') && result.latex.includes('y'));
+    });
 });
