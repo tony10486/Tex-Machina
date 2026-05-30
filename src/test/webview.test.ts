@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { TeXMachinaWebviewProvider } from '../ui/webviewProvider';
 
 suite('Webview UI Test Suite', () => {
-    test('Webview HTML should contain Table and Macro UI elements', () => {
+    test('Webview HTML should contain Macro UI elements', () => {
         const extensionUri = vscode.Uri.file('.');
         const provider = new TeXMachinaWebviewProvider(extensionUri);
         
@@ -29,8 +29,6 @@ suite('Webview UI Test Suite', () => {
 
         assert.ok(capturedHtml.includes('id="details-m"'));
         assert.ok(capturedHtml.includes('id="macro-list"'));
-        assert.ok(capturedHtml.includes('id="details-t"'));
-        assert.ok(capturedHtml.includes('id="table-grid-container"'));
     });
 
     test('Webview should forward macro messages to VS Code commands', (done) => {

@@ -11,7 +11,6 @@ import { registerMarkdownLatex } from './core/markdownLatex';
 import { registerSmartQuotes } from './core/smartQuotes';
 import { registerEllipsis } from './core/ellipsis';
 import { registerDiacritics } from './core/diacritics';
-import { generateLatexTable, TableOptions } from './core/tableGenerator';
 import { registerLabelDetection, findLabels } from './core/labelDetection';
 import { registerNodeNavigation } from './core/nodeNavigation';
 import { registerMathAutoWrap } from './core/mathAutoWrap';
@@ -558,13 +557,6 @@ export async function activate(context: vscode.ExtensionContext) {
             });
             vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
         } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
-    }));
-
-    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.insertTable', async (options: TableOptions) => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) { vscode.window.showErrorMessage("활성화된 에디터가 없습니다."); return; }
-        const tableLatex = generateLatexTable(options);
-        await editor.edit(editBuilder => { editBuilder.insert(editor.selection.active, tableLatex); });
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addContextShortcut', async () => {
