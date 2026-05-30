@@ -1,0 +1,16 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+to-do_list.md
+tmp
+tmp2
+recommend.md
+fix.md
+*.pyc
+1.md
+change_log.md
+/venv/
+map.md
+todo

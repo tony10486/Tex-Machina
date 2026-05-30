@@ -1,0 +1,126 @@
+export interface ParsedCommand {
+    mainCommand: string;
+    subCommands: string[];
+    parallelOptions: string[];
+    rawSelection: string;
+}
+
+/**
+ * 명령어 체인을 설정된 구분자로 개별 명령어 문자열 배열로 분리합니다.
+ * @param input 전체 명령어 (예: cmd1 && cmd2)
+ * @param delimiter 체이닝 구분자 (기본값: &&)
+ */
+export function splitChain(input: string, delimiter: string = "&&"): string[] {
+    const parts: string[] = [];
+    let buffer = "";
+    let isEscaped = false;
+
+    for (let i = 0; i < input.length; i++) {
+        const char = input[i];
+        if (isEscaped) {
+            buffer += char;
+            isEscaped = false;
+            continue;
+        }
+        if (char === '\\') {
+            isEscaped = true;
+            buffer += char;
+            continue;
+        }
+
+        // 구분자 매칭 확인
+        let isMatch = true;
+        for (let j = 0; j < delimiter.length; j++) {
+            if (input[i + j] !== delimiter[j]) {
+                isMatch = false;
+                break;
+            }
+        }
+
+        if (isMatch) {
+            parts.push(buffer.trim());
+            buffer = "";
+            i += delimiter.length - 1; // 구분자 길이만큼 건너뜀 (루프 i++ 고려)
+            continue;
+        }
+        buffer += char;
+    }
+    const finalTrimmed = buffer.trim();
+    if (finalTrimmed) {
+        parts.push(finalTrimmed);
+    }
+    return parts;
+}
+
+export function parseUserCommand(input: string, selection: string): ParsedCommand {
+    let mainCmd = "";
+    const subCmds: string[] = [];
+    const parallels: string[] = [];
+    let buffer = "";
+    let isEscaped = false;
+    let isParallelSection = false;
+    let isMainCmdParsed = false;
+
+    // Detect query to prevent '>' splitting conflict
+    /*
+    const isQuery = input.trim().startsWith('?');
+    let startIdx = 0;
+    if (isQuery) {
+        mainCmd = "?";
+        isMainCmdParsed = true;
+        startIdx = input.indexOf('?') + 1;
+    }
+    */
+    const isQuery = false;
+    let startIdx = 0;
+
+    // 제안서 준수: O(N) 시간 복잡도의 단일 루프 [cite: 132]
+    for (let i = startIdx; i < input.length; i++) {
+        const char = input[i];
+        if (isEscaped) { buffer += char; isEscaped = false; continue; }
+        if (char === '\\') { isEscaped = true; continue; } // 이스케이프 처리 [cite: 128]
+
+        // 개선: 앞에 공백이 있는 '/'만 옵션 섹션 시작으로 인식
+        if (char === '/' && !isParallelSection && i > 0 && input[i-1] === ' ') {
+            pushToCmds();
+            isParallelSection = true;
+            continue;
+        }
+        if (char === '>' && !isParallelSection && !isQuery) {
+            pushToCmds();
+            continue;
+        }
+        // 개선: 앞에 공백이 있는 '/'만 새로운 옵션 구분자로 인식
+        if (char === '/' && isParallelSection && i > 0 && input[i-1] === ' ') {
+            parallels.push(buffer.trim());
+            buffer = "";
+            continue;
+        }
+        buffer += char;
+    }
+
+    function pushToCmds() {
+        const trimmed = buffer.trim();
+        if (trimmed) {
+            if (!isMainCmdParsed) {
+                mainCmd = trimmed;
+                isMainCmdParsed = true;
+            } else {
+                subCmds.push(trimmed);
+            }
+        }
+        buffer = "";
+    }
+
+    // 최종 정리: 마지막 조각 처리
+    if (isParallelSection) {
+        const trimmed = buffer.trim();
+        if (trimmed) {
+            parallels.push(trimmed);
+        }
+    } else {
+        pushToCmds();
+    }
+
+    return { mainCommand: mainCmd, subCommands: subCmds, parallelOptions: parallels, rawSelection: selection };
+}

@@ -1,0 +1,992 @@
+{
+  "name": "tex-machina",
+  "publisher": "Tony29028",
+  "displayName": "TeX-Machina",
+  "description": "Interactive LaTeX assistant with symbolic computation, plotting, and bibliography management.",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tony10486/Tex-Machina"
+  },
+  "license": "MIT",
+  "keywords": [
+    "latex",
+    "math",
+    "sympy",
+    "plotting",
+    "bibtex",
+    "oeis"
+  ],
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:latex"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "TeX-Machina",
+      "properties": {
+        "tex-machina.calc.settings": {
+          "type": "object",
+          "title": "계산 및 변환 설정",
+          "description": "수학 연산(calc) 및 변환(Laplace 등)에 필요한 전역 설정을 관리합니다.",
+          "properties": {
+            "laplaceSource": {
+              "type": "string",
+              "default": "t",
+              "description": "라플라스 변환의 기본 소스 변수 (예: t)"
+            },
+            "laplaceTarget": {
+              "type": "string",
+              "default": "s",
+              "description": "라플라스 변환의 결과 대상 변수 (예: s)"
+            },
+            "angleUnit": {
+              "type": "string",
+              "enum": [
+                "deg",
+                "rad"
+              ],
+              "default": "deg",
+              "description": "각도 계산의 기본 단위 (도 또는 라디안)"
+            },
+            "precision": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 50,
+              "description": "수치 계산 시 표시할 유효 숫자의 개수"
+            },
+            "imaginaryUnit": {
+              "type": "string",
+              "enum": [
+                "i",
+                "j"
+              ],
+              "default": "i",
+              "description": "허수 단위 기호 (i 또는 j)"
+            },
+            "simplifyResult": {
+              "type": "boolean",
+              "default": true,
+              "description": "\uacc4\uc0b0 \uacb0\uacfc\ub97c \ud56d\uc0c1 \uc790\ub3d9\uc73c\ub85c \ub2e8\uc21c\ud654(Simplify)\ud560\uc9c0 \uc5ec\ubd80"
+            },
+            "defaultDomain": {
+              "type": "string",
+              "enum": [
+                "real",
+                "complex"
+              ],
+              "default": "real",
+              "description": "\ubcc0\uc218\uc758 \uae30\ubcf8 \ub3c4\uba54\uc778 \uc124\uc815 (\uc2e4\uc218 \ub610\ub294 \ubcf5\uc18c\uc218). \ubcf5\uc18c\uc218 \uc124\uc815 \uc2dc \ub85c\uadf8\ub098 \uac70\ub4ed\uc81c\uacf1 \uacc4\uc0b0 \ubc29\uc2dd\uc774 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+            },
+            "rationalNotation": {
+              "type": "boolean",
+              "default": true,
+              "description": "\uacb0\uacfc\ub97c \uac00\ub2a5\ud55c \uacbd\uc6b0 \ubd84\uc218(Rational) \ud615\ud0dc\ub85c \uc720\uc9c0\ud560\uc9c0 \uc5ec\ubd80. \ube44\ud65c\uc131\ud654 \uc2dc \uc18c\uc218\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+            },
+            "autoFactor": {
+              "type": "boolean",
+              "default": false,
+              "description": "\uacc4\uc0b0 \ud6c4 \uacb0\uacfc\ub97c \uc790\ub3d9\uc73c\ub85c \uc778\uc218\ubd84\ud574(Factor)\ud558\uc5ec \ud45c\uc2dc\ud560\uc9c0 \uc5ec\ubd80"
+            }
+          },
+          "default": {
+            "laplaceSource": "t",
+            "laplaceTarget": "s",
+            "angleUnit": "deg",
+            "precision": 10,
+            "imaginaryUnit": "i",
+            "simplifyResult": true,
+            "defaultDomain": "real",
+            "rationalNotation": true,
+            "autoFactor": false
+          }
+        },
+        "tex-machina.plot.datDensity": {
+          "type": "integer",
+          "default": 500,
+          "minimum": 10,
+          "maximum": 5000,
+          "description": "2D PGFPlots .dat \ud30c\uc77c \uc0dd\uc131 \uc2dc \uacc4\uc0b0\ud560 \uc810\uc758 \uac1c\uc218 (\ubc00\ub3c4)"
+        },
+        "tex-machina.plot.yMultiplier": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "2D \uadf8\ub798\ud504 \ub370\uc774\ud130(.dat) \uc0dd\uc131 \uc2dc y\ucd95 \ud45c\uc2dc \ubc94\uc704\ub97c \ub118\uc5b4\uc11c \uacc4\uc0b0\ud560 \ubc30\uc218 (Clipping Limit)"
+        },
+        "tex-machina.plot.lineColor": {
+          "type": "string",
+          "default": "blue",
+          "description": "2D PGFPlots \uadf8\ub798\ud504\uc758 \uae30\ubcf8 \uc120 \uc0c9\uc0c1 (\uc608: blue, red, black, cyan!50!blue)"
+        },
+        "tex-machina.autoBracing.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\uc2a4\ub9c8\ud2b8 \ucca8\uc790 \uc790\ub3d9 \uad04\ud638 (Auto-bracing for Sub/Superscripts) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. _\ub098 ^ \ub4a4\uc5d0 \ub450 \uae00\uc790 \uc774\uc0c1 \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c {}\ub85c \ubb36\uc5b4\uc90d\ub2c8\ub2e4."
+        },
+        "tex-machina.autoBracing.escapeExponents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "-1"
+          ],
+          "description": "\uc911\uad04\ud638 \uc790\ub3d9 \uc644\uc131 \uc2dc \ucee4\uc11c\ub97c \ubc16\uc73c\ub85c \uc774\ub3d9\uc2dc\ud0ac \uc9c0\uc218(exponent) \ubaa9\ub85d\uc785\ub2c8\ub2e4. (\uc608: ['-1', '2'])"
+        },
+        "tex-machina.autoLeftRight.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "수식 모드 자동 \\left \\right (Auto \\left \\right) 기능을 활성화합니다. ( ) 안에 \\int, \\frac 등 높은 요소가 있으면 자동으로 \\left( ... \\right)로 변환합니다."
+        },
+        "tex-machina.autoMathWrap.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\uc218\uc2dd \ubaa8\ub4dc \uc790\ub3d9 \uc804\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \uc77c\ubc18 \ud14d\uc2a4\ud2b8 \ubaa8\ub4dc\uc5d0\uc11c \\alpha\ub098 \\sum \uac19\uc740 \uc218\ud559 \uc804\uc6a9 \ub9e4\ud06c\ub85c\ub97c \ud0c0\uc774\ud551\ud558\uba74 \uc790\ub3d9\uc73c\ub85c $ $\ub97c \uc50c\uc6cc\uc90d\ub2c8\ub2e4."
+        },
+        "tex-machina.fractionShorthand.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\ubd84\uc218 \uc790\ub3d9 \ubcc0\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. '1/2' \ub610\ub294 '(a+b)/c' \uc785\ub825 \ud6c4 \uc2a4\ud398\uc774\uc2a4\ub97c \ub204\ub974\uba74 \uc790\ub3d9\uc73c\ub85c \\frac{}{}\uc73c\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+        },
+        "tex-machina.markdownLatex.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\ub9c8\ud06c\ub2e4\uc6b4 \uc2a4\ud0c0\uc77c \uc790\ub3d9 \ubcc0\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. **\ud14d\uc2a4\ud2b8** + \uc2a4\ud398\uc774\uc2a4\ub294 \\textbf{\ud14d\uc2a4\ud2b8}\ub85c, - + \uc2a4\ud398\uc774\uc2a4\ub294 itemize \ud658\uacbd\uc73c\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+        },
+        "tex-machina.smartQuotes.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "LaTeX \uc2a4\ub9c8\ud2b8 \ub530\uc634\ud45c \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \" \ud0a4\ub97c \ub204\ub974\uba74 \uc0c1\ud669\uc5d0 \ub9de\uac8c `` \ub610\ub294 ''\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+        },
+        "tex-machina.ellipsis.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "... \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c LaTeX \ub9d0\uc904\uc784\ud45c \ub9e4\ud06c\ub85c\ub85c \ubcc0\ud658\ud558\ub294 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.ellipsis.macro": {
+          "type": "string",
+          "enum": [
+            "\\dots",
+            "\\cdots"
+          ],
+          "default": "\\dots",
+          "description": "... \uc785\ub825 \uc2dc \ubcc0\ud658\ud560 LaTeX \ub9e4\ud06c\ub85c\ub97c \uc120\ud0dd\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.mathNav.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "\uc218\uc2dd \uacc4\uce35\ubcc4 \uc810\ud504 \ubaa8\ub4dc (Math Navigation Mode) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \ud65c\uc131\ud654 \uc2dc Alt+\ubc29\ud5a5\ud0a4\ub85c \uc218\uc2dd \ub0b4 \uc8fc\uc694 \uc2ac\ub86f \uc0ac\uc774\ub97c \uc810\ud504\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+        },
+        "tex-machina.implicitSubscripts.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "\uc554\uc2dc\uc801 \ucca8\uc790 \ubcc0\ud658 (Implicit Subscripts) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. x1 \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c x_1\ub85c \ubcc0\ud658\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.smartNewline.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\uc2a4\ub9c8\ud2b8 \uc904\ubc14\uafc8 (Smart Newline) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \ud2b9\uc815 \ud658\uacbd\uc5d0\uc11c Enter \uc785\ub825 \uc2dc \\\\\ub098 & \ub4f1\uc744 \uc790\ub3d9\uc73c\ub85c \uc0bd\uc785\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.mathLigatures.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\uc218\uc2dd \uc804\uc6a9 \ub9ac\uac00\ucc98 (Mathematical Ligatures) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. <=, -> \uac19\uc740 \uae30\ud638 \uc870\ud569\uc744 LaTeX \uba85\ub839\uc5b4\ub85c \uc790\ub3d9 \ubcc0\ud658\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.linkedEditing.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\ud658\uacbd \uc774\ub984 \ub3d9\uae30\ud654 \uc218\uc815 (Linked Editing for Environments) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \\begin{env}\uc758 \uc774\ub984\uc744 \uc218\uc815\ud558\uba74 \\end{env}\ub3c4 \uc790\ub3d9\uc73c\ub85c \ud568\uaed8 \ubc14\ub01d\ub2c8\ub2e4."
+        },
+        "tex-machina.mathRefactor.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "\uc218\ud559 \ubcc0\uc218 \uc790\ub3d9 \uba40\ud2f0 \ucee4\uc11c \ub9ac\ud329\ud1a0\ub9c1 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. Toggle Mode\uac00 \ud65c\uc131\ud654\ub41c \uc0c1\ud0dc\uc5d0\uc11c \ubcc0\uc218\ub97c \uc120\ud0dd\ud558\uba74 \uc218\uc2dd \ub0b4 \ubaa8\ub4e0 \ub3d9\uc77c \ubcc0\uc218\uac00 \ud568\uaed8 \uc120\ud0dd\ub429\ub2c8\ub2e4."
+        },
+        "tex-machina.mathNav.selectContent.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "\uc218\uc2dd \uc810\ud504 \uc2dc \uc2ac\ub86f(\uad04\ud638) \ub0b4 \ub0b4\uc6a9\uc774 \uc788\ub2e4\uba74 \uc790\ub3d9\uc73c\ub85c \uc120\ud0dd(Selection)\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.mathNav.jumpSymbols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\\\",
+            "&",
+            "=",
+            "+",
+            "-",
+            "*",
+            "/",
+            "<",
+            ">",
+            ",",
+            ";",
+            ":"
+          ],
+          "description": "\uc218\uc2dd \uc810\ud504 \uc2dc \uba48\ucd9c \uae30\ud638(\uc5f0\uc0b0\uc790, \uad6c\ubd84\uc790 \ub4f1)\ub4e4\uc758 \ubaa9\ub85d\uc785\ub2c8\ub2e4."
+        },
+        "tex-machina.mathNav.selectBrackets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "{}",
+            "[]",
+            "()"
+          ],
+          "description": "\uc790\ub3d9 \uc120\ud0dd(Auto-selection)\uc744 \uc801\uc6a9\ud560 \uad04\ud638 \uc30d \ubaa9\ub85d\uc785\ub2c8\ub2e4. (\uc608: '{}')"
+        },
+        "tex-machina.mathNav.skipCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "\\frac",
+            "\\sqrt",
+            "\\int",
+            "\\sum",
+            "\\prod",
+            "\\lim",
+            "\\vec",
+            "\\bar",
+            "\\hat",
+            "\\tilde",
+            "\\dot",
+            "\\ddot",
+            "\\sin",
+            "\\cos",
+            "\\tan",
+            "\\log",
+            "\\ln"
+          ],
+          "description": "\uc810\ud504 \uc2dc \uba85\ub839\uc5b4\ub97c \uac74\ub108\ub6f0\uace0 \ubc14\ub85c \ub0b4\ubd80 \uc778\uc790\ub85c \uc774\ub3d9\ud560 LaTeX \uba85\ub839\uc5b4 \ubaa9\ub85d\uc785\ub2c8\ub2e4."
+        },
+        "tex-machina.mathNav.boundaryBehavior": {
+          "type": "string",
+          "enum": [
+            "before",
+            "after",
+            "both"
+          ],
+          "default": "both",
+          "description": "\uae30\ud638 \uc8fc\ubcc0\uc5d0\uc11c \uba48\ucd9c \uc704\uce58\ub97c \uc124\uc815\ud569\ub2c8\ub2e4. (before: \uae30\ud638 \uc55e, after: \uae30\ud638 \ub4a4, both: \uc591\ucabd \ubaa8\ub450)"
+        },
+        "tex-machina.splitMath.atPlus": {
+          "type": "boolean",
+          "default": false,
+          "description": "\uc218\uc2dd \uc790\ub3d9 \ubd84\ud560 \uc2dc \ub4f1\ud638(=) \ubfd0\ub9cc \uc544\ub2c8\ub77c \ub367\uc148/\ube84\uc148(+, -) \uae30\ud638\uc5d0\uc11c\ub3c4 \uc904\ubc14\uafc8\uc744 \ud5c8\uc6a9\ud569\ub2c8\ub2e4."
+        },
+        "tex-machina.cli.chainDelimiter": {
+          "type": "string",
+          "enum": [
+            "&&",
+            "//",
+            "|",
+            "&"
+          ],
+          "default": "&&",
+          "description": "\uba85\ub839\uc5b4 \uccb4\uc774\ub2dd\uc744 \uc704\ud55c \uad6c\ubd84\uc790\ub97c \uc124\uc815\ud569\ub2c8\ub2e4. (\uae30\ubcf8\uac12: &&)"
+        },
+        "tex-machina.labelVisualization.settings": {
+          "type": "object",
+          "title": "\ub77c\ubca8 \uc2dc\uac01\ud654 \uc124\uc815",
+          "description": "\ub77c\ubca8 \ub514\ud39c\ub358\uc2dc \uc2dc\uac01\ud654 \uadf8\ub798\ud504\uc758 \ubb3c\ub9ac \uc5d4\uc9c4 \ubc0f \ub178\ub4dc \uc2a4\ud0c0\uc77c\uc744 \uc124\uc815\ud569\ub2c8\ub2e4.",
+          "properties": {
+            "physicsEnabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "\ubb3c\ub9ac \uc5d4\uc9c4 \uc560\ub2c8\uba54\uc774\uc158 \ud65c\uc131\ud654 \uc5ec\ubd80"
+            },
+            "solver": {
+              "type": "string",
+              "enum": [
+                "barnesHut",
+                "forceAtlas2Based",
+                "repulsion",
+                "hierarchicalRepulsion"
+              ],
+              "default": "forceAtlas2Based",
+              "description": "\ubb3c\ub9ac \uc5d4\uc9c4 \uc194\ubc84"
+            },
+            "gravitationalConstant": {
+              "type": "number",
+              "default": -80,
+              "description": "\uc911\ub825 \uc0c1\uc218 (\ucc99\ub825 \uac15\ub3c4)"
+            },
+            "springLength": {
+              "type": "number",
+              "default": 80,
+              "description": "\ub178\ub4dc \uac04 \uae30\ubcf8 \uac70\ub9ac (\uc2a4\ud504\ub9c1 \uae38\uc774)"
+            },
+            "springConstant": {
+              "type": "number",
+              "default": 0.04,
+              "description": "\uc2a4\ud504\ub9c1 \uac15\uc131"
+            },
+            "avoidOverlap": {
+              "type": "number",
+              "default": 1,
+              "minimum": 0,
+              "maximum": 1,
+              "description": "\ub178\ub4dc \uacb9\uce68 \ubc29\uc9c0 \uac15\ub3c4"
+            },
+            "stabilizationIterations": {
+              "type": "integer",
+              "default": 150,
+              "description": "\ucd08\uae30 \uc548\uc815\ud654 \ubc18\ubcf5 \ud69f\uc218"
+            },
+            "baseSize": {
+              "type": "number",
+              "default": 12,
+              "description": "\ub178\ub4dc\uc758 \uae30\ubcf8 \ud06c\uae30"
+            },
+            "stabilizationFinish": {
+              "type": "string",
+              "enum": [
+                "none",
+                "fit",
+                "disablePhysics"
+              ],
+              "default": "none",
+              "description": "\uc548\uc815\ud654 \uc885\ub8cc \ud6c4 \ucc98\ub9ac \ubc29\uc2dd"
+            }
+          },
+          "default": {
+            "physicsEnabled": true,
+            "solver": "forceAtlas2Based",
+            "gravitationalConstant": -80,
+            "springLength": 80,
+            "springConstant": 0.04,
+            "avoidOverlap": 1,
+            "stabilizationIterations": 150,
+            "baseSize": 12,
+            "stabilizationFinish": "none"
+          }
+        },
+        "tex-machina.toggle.duration": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 3600,
+          "description": "\ud1a0\uae00 \ubaa8\ub4dc\uac00 \ud65c\uc131\ud654\ub418\uc5b4 \uc720\uc9c0\ub418\ub294 \uc2dc\uac04(\ucd08)\uc785\ub2c8\ub2e4."
+        },
+        "tex-machina.toggle.changeStatusBarColor": {
+          "type": "boolean",
+          "default": true,
+          "description": "\ud1a0\uae00 \ubaa8\ub4dc\uac00 \ud65c\uc131\ud654\ub418\uc5c8\uc744 \ub54c VS Code\uc758 \uc0c1\ud0dc \ud45c\uc2dc\uc904(Status Bar) \ubc30\uacbd\uc0c9\uc744 \ucd08\ub85d\uc0c9\uc73c\ub85c \ubcc0\uacbd\ud560\uc9c0 \uc5ec\ubd80\uc785\ub2c8\ub2e4."
+        },
+        "tex-machina.toggle.profiles": {
+          "type": "array",
+          "title": "\ud1a0\uae00 \ud504\ub85c\ud544 \uc124\uc815",
+          "description": "\uac01 \ud504\ub85c\ud544 \ubc88\ud638(0-9)\ubcc4\ub85c \ud65c\uc131\ud654\ud560 \uae30\ub2a5 \ubaa9\ub85d\uc744 \uc124\uc815\ud569\ub2c8\ub2e4. (Settings JSON\uc5d0\uc11c \uc9c1\uc811 \uc218\uc815\ud558\ub294 \uac83\uc744 \uad8c\uc7a5\ud569\ub2c8\ub2e4)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "integer",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  0
+                ],
+                "description": "\ud504\ub85c\ud544 \ubc88\ud638"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "implicitSubscripts",
+                    "autoBracing",
+                    "autoLeftRight",
+                    "autoMathWrap",
+                    "fractionShorthand",
+                    "markdownLatex",
+                    "smartQuotes",
+                    "mathNav",
+                    "ellipsis",
+                    "smartNewline",
+                    "mathLigatures",
+                    "linkedEditing",
+                    "mathRefactor",
+                    "extendedInput"
+                  ],
+                  "enumDescriptions": [
+                    "암시적 첨자 (x1 -> x_1)",
+                    "스마트 첨자 자동 괄호",
+                    "자동 \\left \\right",
+                    "수식 모드 자동 전환",
+                    "분수 자동 변환",
+                    "마크다운 스타일 변환",
+                    "스마트 따옴표",
+                    "수식 계층 점프",
+                    "말줄임표 (... -> \\dots/\\cdots)",
+                    "스마트 줄바꿈",
+                    "수식 전용 리가처",
+                    "환경 이름 동기화",
+                    "수학 변수 리팩토링 (멀티 커서)",
+                    "확장 문자 입력 모드 (그리스 문자, 기호)"
+                  ]
+                },
+                "description": "해당 프로필에서 활성화할 기능 목록"
+              }
+            },
+            "required": [
+              "profile",
+              "features"
+            ]
+          },
+          "default": [
+            {
+              "profile": 1,
+              "features": [
+                "implicitSubscripts"
+              ]
+            }
+          ]
+        },
+        "tex-machina.argumentNavigation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tab/Shift+Tab 명령어 인자 간 전환 기능을 활성화합니다. 커서가 LaTeX 명령어의 괄호 인자 내부에 있을 때 Tab을 누르면 다음 명령어의 동일 괄호 타입 인자로 이동합니다."
+        },
+        "tex-machina.mathToggle.sequence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["$", "\\[", "equation"],
+          "description": "수식 모드 전환(Math Mode Toggle) 시 순환할 환경의 순서를 설정합니다. (예: '$', '\\[', 'equation', 'align', 'gather', 'equation*' 등)"
+        },
+        "tex-machina.pasteExternalData.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "외부 데이터(Excel/CSV) 붙여넣기 자동 변환 기능을 활성화합니다."
+        },
+        "tex-machina.pasteExternalData.autoPrompt": {
+          "type": "boolean",
+          "default": true,
+          "description": "탭/쉼표 구분 데이터를 감지하면 자동으로 변환 여부를 묻습니다."
+        },
+        "tex-machina.pasteExternalData.defaultMode": {
+          "type": "string",
+          "enum": ["auto", "matrix", "tabular"],
+          "default": "auto",
+          "description": "붙여넣기 시 기본 모드. 'auto'는 커서 위치의 수식 환경을 감지합니다."
+        },
+        "tex-machina.pasteExternalData.alwaysAskMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "항상 Matrix/Tabular 선택 QuickPick을 표시합니다."
+        },
+        "tex-machina.pasteExternalData.matrixType": {
+          "type": "string",
+          "enum": ["pmatrix", "bmatrix", "vmatrix", "Vmatrix", "Bmatrix", "matrix"],
+          "default": "bmatrix",
+          "description": "Matrix 모드에서 사용할 기본 행렬 환경."
+        },
+        "tex-machina.pasteExternalData.tabularStyle": {
+          "type": "string",
+          "enum": ["array", "booktabs"],
+          "default": "array",
+          "description": "Tabular 모드에서 사용할 기본 스타일."
+        },
+        "tex-machina.pasteExternalData.alignmentMode": {
+          "type": "string",
+          "enum": ["auto", "allCenter", "allLeft", "allRight"],
+          "default": "auto",
+          "description": "열 정렬 방식. 'auto'는 데이터 타입에 따라 자동 감지합니다."
+        },
+        "tex-machina.pasteExternalData.hasBorders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Array 스타일 Tabular에서 테두리(|, \\hline)를 추가합니다."
+        },
+        "tex-machina.pasteExternalData.hasHeader": {
+          "type": "string",
+          "enum": ["auto", "true", "false"],
+          "default": "auto",
+          "description": "첫 행을 헤더로 간주할지 여부. 'auto'는 첫 행이 텍스트일 때 자동 감지."
+        },
+        "tex-machina.pasteExternalData.escapeMode": {
+          "type": "string",
+          "enum": ["smart", "all", "none"],
+          "default": "smart",
+          "description": "특수 문자 이스케이프 방식. 'smart'는 LaTeX 명령어(\\...)는 보존합니다."
+        },
+        "tex-machina.pasteExternalData.showPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "변환 전 변환될 코드의 미리보기를 QuickPick에 표시합니다."
+        },
+        "tex-machina.pasteExternalData.removeEmptyRows": {
+          "type": "boolean",
+          "default": true,
+          "description": "데이터의 완전히 빈 행(Empty Row)을 제거합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeCSV": {
+          "type": "boolean",
+          "default": true,
+          "description": "쉼표(Comma)로 구분된 CSV 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeTSV": {
+          "type": "boolean",
+          "default": true,
+          "description": "탭(Tab)으로 구분된 TSV 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeHTMLTable": {
+          "type": "boolean",
+          "default": true,
+          "description": "text/html 클립보드의 HTML <table> 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeSemicolon": {
+          "type": "boolean",
+          "default": true,
+          "description": "세미콜론(Semicolon)으로 구분된 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeSpace": {
+          "type": "boolean",
+          "default": false,
+          "description": "연속 공백(Multi-space)으로 구분된 고정폭 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.customDelimiters": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "사용자 정의 구분자 목록입니다. 정규식(예: \\|)도 사용 가능합니다. 클립보드 데이터에 포함된 경우 자동 인식 후보에 포함됩니다."
+        },
+        "tex-machina.extendedInput.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "확장 문자 입력 모드 (Extended Input Mode) 기능 활성화. 활성화 시 항상 동작하며, 비활성화 시 단축키(cmd+e)로만 토글 가능합니다."
+        },
+        "tex-machina.extendedInput.singleShot": {
+          "type": "boolean",
+          "default": true,
+          "description": "단일 문자 입력 후 자동 종료. true면 cmd+e 후 한 문자만 변환하고 모드가 자동 해제됩니다. false면 토글 모드(10초간 유지)로 동작합니다."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile1",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 1)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile2",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 2)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile3",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 3)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile4",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 4)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile5",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 5)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile6",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 6)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile7",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 7)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile8",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 8)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile9",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 9)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile0",
+        "title": "LaTeX: Toggle Subscript Mode (Profile 0)"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptMode",
+        "title": "LaTeX: Toggle Implicit Subscript Mode"
+      },
+      {
+        "command": "tex-machina.addContextShortcut",
+        "title": "LaTeX: Add Common Macro Contexts"
+      },
+      {
+        "command": "tex-machina.openCLI",
+        "title": "Open TeX-Machina CLI"
+      },
+      {
+        "command": "tex-machina.escapeAutoBracing",
+        "title": "LaTeX: Escape Auto-bracing"
+      },
+      {
+        "command": "tex-machina.splitMath",
+        "title": "LaTeX: Auto-split Math Formula"
+      },
+      {
+        "command": "tex-machina.formatUnit",
+        "title": "LaTeX: Format Unit (siunitx)"
+      },
+      {
+        "command": "tex-machina.insertScanPrevention",
+        "title": "LaTeX: Insert Scan Prevention Pattern"
+      },
+      {
+        "command": "tex-machina.addHat",
+        "title": "LaTeX: Add Hat Diacritic (\\hat{})"
+      },
+      {
+        "command": "tex-machina.addTilde",
+        "title": "LaTeX: Add Tilde Diacritic (\\tilde{})"
+      },
+      {
+        "command": "tex-machina.addDot",
+        "title": "LaTeX: Add Dot Diacritic (\\dot{})"
+      },
+      {
+        "command": "tex-machina.deleteUnusedLabels",
+        "title": "LaTeX: Delete Unused Labels"
+      },
+      {
+        "command": "tex-machina.toggleMathNav",
+        "title": "LaTeX: Toggle Formula Node Navigation"
+      },
+      {
+        "command": "tex-machina.mathNavRight",
+        "title": "LaTeX: Math Node Navigation Right"
+      },
+      {
+        "command": "tex-machina.mathNavLeft",
+        "title": "LaTeX: Math Node Navigation Left"
+      },
+      {
+        "command": "tex-machina.smartNewline",
+        "title": "LaTeX: Smart Newline"
+      },
+      {
+        "command": "tex-machina.triggerRecentSymbols",
+        "title": "LaTeX: Show Recent Symbols"
+      },
+      {
+        "command": "tex-machina.toggleExtendedInput",
+        "title": "LaTeX: Toggle Extended Input Mode"
+      },
+      {
+        "command": "tex-machina.matrix.resizeMenu",
+        "title": "LaTeX: Matrix Resizer Menu"
+      },
+      {
+        "command": "tex-machina.wrapSubscript",
+        "title": "LaTeX: Wrap Selection with Subscript (_)"
+      },
+      {
+        "command": "tex-machina.wrapSuperscript",
+        "title": "LaTeX: Wrap Selection with Superscript (^)"
+      },
+      {
+        "command": "tex-machina.navigateArgumentForward",
+        "title": "LaTeX: Navigate to Next Command Argument"
+      },
+      {
+        "command": "tex-machina.navigateArgumentBackward",
+        "title": "LaTeX: Navigate to Previous Command Argument"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.smart",
+        "title": "LaTeX: Paste External Data (Smart)"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.matrix",
+        "title": "LaTeX: Paste External Data as Matrix"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.tabular",
+        "title": "LaTeX: Paste External Data as Tabular"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tex-machina-explorer",
+          "title": "TeX-Machina",
+          "icon": "$(edit)"
+        }
+      ]
+    },
+    "views": {
+      "tex-machina-explorer": [
+        {
+          "type": "webview",
+          "id": "tex-machina.preview",
+          "name": "Math Preview"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile1",
+        "key": "ctrl+' 1",
+        "mac": "cmd+' 1",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile2",
+        "key": "ctrl+' 2",
+        "mac": "cmd+' 2",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile3",
+        "key": "ctrl+' 3",
+        "mac": "cmd+' 3",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile4",
+        "key": "ctrl+' 4",
+        "mac": "cmd+' 4",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile5",
+        "key": "ctrl+' 5",
+        "mac": "cmd+' 5",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile6",
+        "key": "ctrl+' 6",
+        "mac": "cmd+' 6",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile7",
+        "key": "ctrl+' 7",
+        "mac": "cmd+' 7",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile8",
+        "key": "ctrl+' 8",
+        "mac": "cmd+' 8",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile9",
+        "key": "ctrl+' 9",
+        "mac": "cmd+' 9",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptModeProfile0",
+        "key": "ctrl+' 0",
+        "mac": "cmd+' 0",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleSubscriptMode",
+        "key": "ctrl+'",
+        "mac": "cmd+'",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.openCLI",
+        "key": "ctrl+shift+;",
+        "mac": "cmd+shift+;",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "tex-machina.escapeAutoBracing",
+        "key": "escape",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !editorHasSelection && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.splitMath",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.formatUnit",
+        "key": "ctrl+shift+' u",
+        "mac": "cmd+shift+' u",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addHat",
+        "key": "alt+shift+6",
+        "mac": "alt+shift+6",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addTilde",
+        "key": "alt+shift+`",
+        "mac": "alt+shift+`",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.addDot",
+        "key": "alt+.",
+        "mac": "alt+.",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleMathNav",
+        "key": "ctrl+shift+' l",
+        "mac": "cmd+shift+' l",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.mathNavRight",
+        "key": "alt+right",
+        "mac": "alt+right",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.mathNavLeft",
+        "key": "alt+left",
+        "mac": "alt+left",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.smartNewline",
+        "key": "enter",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.triggerRecentSymbols",
+        "key": "alt+q",
+        "mac": "alt+q",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleExtendedInput",
+        "key": "ctrl+e",
+        "mac": "cmd+e",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.smartBackspace",
+        "key": "backspace",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.matrix.resizeMenu",
+        "key": "alt+l alt+m",
+        "mac": "alt+l alt+m",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleMathMode",
+        "key": "alt+l alt+t",
+        "mac": "alt+l alt+t",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.wrapSubscript",
+        "key": "_",
+        "mac": "_",
+        "when": "editorTextFocus && editorLangId == 'latex' && editorHasSelection"
+      },
+      {
+        "command": "tex-machina.wrapSuperscript",
+        "key": "^",
+        "mac": "^",
+        "when": "editorTextFocus && editorLangId == 'latex' && editorHasSelection"
+      },
+      {
+        "command": "tex-machina.navigateArgumentForward",
+        "key": "tab",
+        "mac": "tab",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.navigateArgumentBackward",
+        "key": "shift+tab",
+        "mac": "shift+tab",
+        "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.smart",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.matrix",
+        "key": "ctrl+alt+shift+v",
+        "mac": "cmd+alt+shift+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.tabular",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "xvfb-run -a vscode-test",
+    "test:fast": "vscode-test --run out/test/parser.test.js out/test/mathSplitter.test.js out/test/unitExpander.test.js out/test/macro.test.js",
+    "test:integration": "vscode-test --run out/test/autoBracing.test.js out/test/markdown.test.js out/test/smartQuotes.test.js out/test/diacritics.test.js out/test/labelDetection.test.js out/test/labelDiscovery.test.js out/test/nodeNavigation.test.js out/test/mathAutoWrap.test.js out/test/fractionShorthand.test.js",
+    "test:webview": "vscode-test --run out/test/webview.test.js",
+    "test:perf": "vscode-test --run out/test/performance.test.js out/test/extreme.test.js",
+    "test:calc": "vscode-test --run out/test/calc_engine_high_difficulty.test.js out/test/calc_engine_extreme.test.js",
+    "test:only": "vscode-test --run"
+  },
+  "dependencies": {
+    "mathjax-full": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.54.0",
+    "eslint": "^9.39.2",
+    "esbuild": "^0.27.2",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
