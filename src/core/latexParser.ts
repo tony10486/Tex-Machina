@@ -23,8 +23,8 @@ export function isInsideComment(document: vscode.TextDocument, pos: vscode.Posit
         if (char === '%') {
             let backslashCount = 0;
             for (let j = i - 1; j >= 0; j--) {
-                if (textBefore[j] === '\\') backslashCount++;
-                else break;
+                if (textBefore[j] === '\\') {backslashCount++;}
+                else {break;}
             }
             if (backslashCount % 2 === 0) {
                 return true;
@@ -52,7 +52,7 @@ export function isInsideVerbatim(document: vscode.TextDocument, pos: vscode.Posi
     while ((match = verbatimRegex.exec(text)) !== null) {
         const start = searchStartOffset + match.index;
         const end = start + match[0].length;
-        if (offset >= start && offset < end) return true;
+        if (offset >= start && offset < end) {return true;}
     }
 
     // 2. \verb command
@@ -60,7 +60,7 @@ export function isInsideVerbatim(document: vscode.TextDocument, pos: vscode.Posi
     while ((match = verbRegex.exec(text)) !== null) {
         const start = searchStartOffset + match.index;
         const end = start + match[0].length;
-        if (offset >= start && offset < end) return true;
+        if (offset >= start && offset < end) {return true;}
     }
 
     return false;
@@ -107,8 +107,8 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     while ((match = commentRegex.exec(text)) !== null) {
         let backslashCount = 0;
         for (let i = match.index - 1; i >= 0; i--) {
-            if (text[i] === '\\') backslashCount++;
-            else break;
+            if (text[i] === '\\') {backslashCount++;}
+            else {break;}
         }
         if (backslashCount % 2 === 0) {
             const lineEnd = text.indexOf('\n', match.index);
@@ -136,7 +136,7 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
 
     boundaryRegex.lastIndex = 0;
     while ((match = boundaryRegex.exec(text)) !== null) {
-        if (isSkipped(match.index)) continue;
+        if (isSkipped(match.index)) {continue;}
 
         const m = match[0];
         const posInDoc = searchStartOffset + match.index;
@@ -218,7 +218,7 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     }
 
 
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) {return null;}
 
     return candidates.reduce((prev, curr) => {
         return curr.text.length < prev.text.length ? curr : prev;
@@ -365,11 +365,56 @@ function findClosingBracket(text: string, start: number, open: string, close: st
 
 
 /**
+ * Checks if a given offset within the math content is inside a text-mode command.
+ * Offset is relative to the start of 'content'.
+ */
+export function isInsideTextMode(content: string, offsetInContent: number): boolean {
+    let i = 0;
+    // Commands that contain non-math text or should be treated as literal text for certain features.
+    const strictTextCommands = [
+        '\\text', '\\mbox', '\\cite', '\\ref', '\\label'
+    ];
+
+    while (i < content.length) {
+        if (content[i] === '\\') {
+            const rest = content.substring(i);
+            const commandMatch = rest.match(/^\\[a-zA-Z]+\*?/);
+            if (commandMatch) {
+                const cmd = commandMatch[0];
+                if (strictTextCommands.includes(cmd)) {
+                    let j = i + cmd.length;
+                    while (j < content.length && /\s/.test(content[j])) {j++;}
+                    if (content[j] === '{') {
+                        const start = i; // Include backslash
+                        i = j + 1;
+                        let depth = 1;
+                        while (i < content.length && depth > 0) {
+                            if (content[i] === '{') {depth++;}
+                            else if (content[i] === '}') {depth--;}
+                            i++;
+                        }
+                        const end = i - 1;
+                        if (offsetInContent >= start && offsetInContent <= end + 1) {
+                            return true;
+                        }
+                        continue;
+                    }
+                }
+                i += commandMatch[0].length;
+                continue;
+            }
+        }
+        i++;
+    }
+    return false;
+}
+
+/**
  * Checks if a LaTeX command structure is "empty" (only whitespace or delimiters in arguments).
  */
 export function isCommandEmpty(commandText: string): boolean {
     const argsMatch = commandText.match(/^\\[a-zA-Z]+\*?\s*([\s\S]*)$/);
-    if (!argsMatch || !argsMatch[1]) return false;
+    if (!argsMatch || !argsMatch[1]) {return false;}
 
     const argsPart = argsMatch[1];
     const contentRegex = /[^{}[\]_^\s]/;

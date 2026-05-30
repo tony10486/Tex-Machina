@@ -16,7 +16,7 @@ export function registerLinkedEditing(context: vscode.ExtensionContext) {
             async provideLinkedEditingRanges(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken) {
                 // Debounce to prevent heavy parsing during rapid cursor movement
                 await new Promise(resolve => setTimeout(resolve, 50));
-                if (token.isCancellationRequested) return undefined;
+                if (token.isCancellationRequested) {return undefined;}
 
                 // Check if Environment Linked Editing is enabled
                 const config = vscode.workspace.getConfiguration('tex-machina');
@@ -25,15 +25,15 @@ export function registerLinkedEditing(context: vscode.ExtensionContext) {
                 // 1. Check for Environment Tags (\begin/\end)
                 if (envEnabled) {
                     const envRanges = getEnvLinkedRanges(document, position);
-                    if (envRanges) return envRanges;
+                    if (envRanges) {return envRanges;}
                 }
 
-                if (token.isCancellationRequested) return undefined;
+                if (token.isCancellationRequested) {return undefined;}
 
                 // 2. Check for Mathematical Variables (Only when Toggle Mode is Active)
                 if (isSubscriptToggleActive()) {
                     const mathRanges = getMathVariableLinkedRanges(document, position);
-                    if (mathRanges) return mathRanges;
+                    if (mathRanges) {return mathRanges;}
                 }
 
                 return undefined;
@@ -77,7 +77,7 @@ function getEnvLinkedRanges(document: vscode.TextDocument, position: vscode.Posi
         }
     }
 
-    if (!foundMatch) return undefined;
+    if (!foundMatch) {return undefined;}
 
     const envName = foundMatch[1];
     const nameRangeInCurrentTag = new vscode.Range(
@@ -92,7 +92,7 @@ function getEnvLinkedRanges(document: vscode.TextDocument, position: vscode.Posi
         otherRange = findMatchingBegin(document, nameRangeInCurrentTag.start, envName);
     }
 
-    if (!otherRange) return undefined;
+    if (!otherRange) {return undefined;}
 
     const adjustedOtherRange = new vscode.Range(
         otherRange.start.translate(0, type === 'begin' ? 5 : 7),
@@ -164,11 +164,11 @@ function findMatchingBegin(document: vscode.TextDocument, startPos: vscode.Posit
 function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vscode.Position): vscode.LinkedEditingRanges | undefined {
     // 1. Ensure we are in a math environment
     const mathEnv = findMathAtPos(document, position);
-    if (!mathEnv) return undefined;
+    if (!mathEnv) {return undefined;}
 
     // 2. Identify the symbol under the cursor
     const wordRange = document.getWordRangeAtPosition(position, /\\[a-zA-Z]+|(?<!\\)[a-zA-Z]/);
-    if (!wordRange) return undefined;
+    if (!wordRange) {return undefined;}
 
     const symbol = document.getText(wordRange);
     
@@ -186,13 +186,13 @@ function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vs
         for (const cmd of textModeCommands) {
             if (content.startsWith(cmd, i)) {
                 let j = i + cmd.length;
-                while (j < content.length && /\s/.test(content[j])) j++;
+                while (j < content.length && /\s/.test(content[j])) {j++;}
                 if (content[j] === '{') {
                     i = j + 1;
                     let depth = 1;
                     while (i < content.length && depth > 0) {
-                        if (content[i] === '{') depth++;
-                        else if (content[i] === '}') depth--;
+                        if (content[i] === '{') {depth++;}
+                        else if (content[i] === '}') {depth--;}
                         i++;
                     }
                     matchedTextCmd = true;
@@ -200,7 +200,7 @@ function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vs
                 }
             }
         }
-        if (matchedTextCmd) continue;
+        if (matchedTextCmd) {continue;}
 
         // Check for command symbol
         if (content[i] === '\\') {
@@ -236,7 +236,7 @@ function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vs
         i++;
     }
 
-    if (ranges.length <= 1) return undefined;
+    if (ranges.length <= 1) {return undefined;}
     return new vscode.LinkedEditingRanges(ranges);
 }
 

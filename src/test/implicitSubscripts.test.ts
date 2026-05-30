@@ -11,7 +11,7 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
     }
 
     setup(async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x' });
+        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '$x$' });
         await vscode.window.showTextDocument(document);
         await new Promise(resolve => setTimeout(resolve, 200));
     });
@@ -34,17 +34,18 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
         const editor = vscode.window.activeTextEditor;
         assert.ok(editor);
 
+        // Position 2 is after 'x' in '$x$'
         await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 1), '1');
+            editBuilder.insert(new vscode.Position(0, 2), '1');
         });
 
         for (let i = 0; i < 20; i++) {
-            if (editor.document.lineAt(0).text === 'x_1') {
+            if (editor.document.lineAt(0).text === '$x_1$') {
                 break;
             }
             await new Promise(resolve => setTimeout(resolve, 50));
         }
-        assert.strictEqual(editor.document.lineAt(0).text, 'x_1');
+        assert.strictEqual(editor.document.lineAt(0).text, '$x_1$');
     });
 
     test('Subscript Transformation: Should accumulate digits (x_1 + 2 -> x_{12})', async () => {
@@ -53,20 +54,21 @@ suite('Implicit Subscripts & Toggle Mode Test Suite', () => {
         assert.ok(editor);
 
         await editor.edit(editBuilder => {
-            editBuilder.replace(new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 1)), 'x_1');
+            editBuilder.replace(new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 3)), '$x_1$');
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
 
+        // Position 4 is after '1' in '$x_1$'
         await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), '2');
+            editBuilder.insert(new vscode.Position(0, 4), '2');
         });
 
         for (let i = 0; i < 20; i++) {
-            if (editor.document.lineAt(0).text === 'x_{12}') {
+            if (editor.document.lineAt(0).text === '$x_{12}$') {
                 break;
             }
             await new Promise(resolve => setTimeout(resolve, 50));
         }
-        assert.strictEqual(editor.document.lineAt(0).text, 'x_{12}');
+        assert.strictEqual(editor.document.lineAt(0).text, '$x_{12}$');
     });
 });

@@ -14,7 +14,7 @@ suite('Matrix Resizer Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.matrix.addRow', { range });
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().split('\\\\').length >= 2) break;
+                if (document.getText().split('\\\\').length >= 2) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
@@ -38,7 +38,7 @@ suite('Matrix Resizer Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.matrix.addCol', { range });
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('&')) break;
+                if (document.getText().includes('&')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
@@ -56,7 +56,7 @@ suite('Matrix Resizer Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.matrix.removeCol', { range });
 
             for (let i = 0; i < 20; i++) {
-                if (!document.getText().includes('&')) break;
+                if (!document.getText().includes('&')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 

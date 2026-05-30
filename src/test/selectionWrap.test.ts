@@ -13,7 +13,7 @@ suite('Selection Wrap Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.wrapSubscript');
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('_')) break;
+                if (document.getText().startsWith('_')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
@@ -30,7 +30,7 @@ suite('Selection Wrap Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('^')) break;
+                if (document.getText().startsWith('^')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
@@ -52,7 +52,7 @@ suite('Selection Wrap Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.wrapSubscript');
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('_{a}')) break;
+                if (document.getText().includes('_{a}')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
@@ -69,7 +69,7 @@ suite('Selection Wrap Test Suite', () => {
             await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
 
             for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('^')) break;
+                if (document.getText().startsWith('^')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 

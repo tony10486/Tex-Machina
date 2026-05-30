@@ -13,7 +13,7 @@ suite('Math Toggle Test Suite', () => {
             for (let i = 0; i < 20; i++) {
                 // Check for either \[ or $$ depending on the default sequence
                 const text = document.getText();
-                if (text.includes('\\[') || text.includes('$$')) break;
+                if (text.includes('\\[') || text.includes('$$')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             const result = document.getText();
@@ -33,7 +33,7 @@ suite('Math Toggle Test Suite', () => {
             editor.selection = new vscode.Selection(0, 1, 0, 1);
             await vscode.commands.executeCommand('tex-machina.toggleMathMode');
             for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('\\begin{gather}')) break;
+                if (document.getText().includes('\\begin{gather}')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             assert.ok(document.getText().includes('\\begin{gather}'), "Should follow custom sequence");
@@ -51,7 +51,7 @@ suite('Math Toggle Test Suite', () => {
             editor.selection = new vscode.Selection(1, 0, 1, 0);
             await vscode.commands.executeCommand('tex-machina.toggleMathMode');
             for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('\\begin{equation}')) break;
+                if (document.getText().includes('\\begin{equation}')) {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             assert.ok(document.getText().includes('c = d'), "Should preserve complex content");

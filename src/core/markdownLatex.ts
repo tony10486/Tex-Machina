@@ -13,7 +13,7 @@ export function registerMarkdownLatex(context: vscode.ExtensionContext) {
                 }
 
                 const line = change.range.start.line;
-                if (line >= editor.document.lineCount) continue;
+                if (line >= editor.document.lineCount) {continue;}
                 const charOffsetAfter = change.range.start.character + 1;
                 const lineText = editor.document.lineAt(line).text;
                 const textBeforeSpace = lineText.substring(0, charOffsetAfter);

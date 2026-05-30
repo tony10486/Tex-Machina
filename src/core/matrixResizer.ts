@@ -10,7 +10,7 @@ export function registerMatrixResizer(context: vscode.ExtensionContext) {
     // 2. Commands
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.matrix.resizeMenu', async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {return;}
         const math = findInnermostEnvAtPos(editor.document, editor.selection.active);
         if (!math || !isMatrixLike(math.envName || '')) {
             vscode.window.showInformationMessage("커서가 행렬 환경 내부에 있지 않습니다.");
@@ -47,7 +47,7 @@ export function registerMatrixResizer(context: vscode.ExtensionContext) {
 class MatrixCodeActionProvider implements vscode.CodeActionProvider {
     provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] | null {
         const math = findInnermostEnvAtPos(document, range.start);
-        if (!math || !isMatrixLike(math.envName || '')) return null;
+        if (!math || !isMatrixLike(math.envName || '')) {return null;}
 
         const actions: vscode.CodeAction[] = [];
         
@@ -83,12 +83,12 @@ function getIndentation(editor: vscode.TextEditor): string {
 
 async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' | 'addCol' | 'removeCol') {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
+    if (!editor) {return;}
 
     const text = editor.document.getText(range);
     // Support optional arguments like [c] or {ccc} for environments like array
     const envMatch = text.match(/^(\\begin\{([a-zA-Z]+\*?)\}(?:\[[^\]]*\]|\{[^\}]*\})*)([\s\S]*?)(\\end\{\2\})$/);
-    if (!envMatch) return;
+    if (!envMatch) {return;}
 
     const startTag = envMatch[1];
     const content = envMatch[3];
@@ -105,7 +105,7 @@ async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' 
         const newRow = new Array(colCount).fill('').join(' & ');
         rows.push(newRow);
     } else if (action === 'removeRow') {
-        if (rows.length > 1) rows.pop();
+        if (rows.length > 1) {rows.pop();}
     } else if (action === 'addCol') {
         rows = rows.map(row => {
             return row + ' & ';

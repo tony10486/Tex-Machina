@@ -22,7 +22,7 @@ export function registerEllipsis(context: vscode.ExtensionContext) {
                 }
 
                 const line = position.line;
-                if (line >= document.lineCount) continue;
+                if (line >= document.lineCount) {continue;}
                 
                 const lineText = document.lineAt(line).text;
                 const charOffset = position.character;

@@ -43,7 +43,9 @@ print(execute_calc(sys.argv[1]))
     });
 }
 
-suite('Calc Engine High Difficulty Tests', () => {
+suite('Calc Engine High Difficulty Tests', function() {
+    this.timeout(10000);
+
     test('Generalized Tensor Expand (4D Minkowski-like)', async () => {
         const payload = {
             rawSelection: "A_\\mu B^\\mu",

@@ -7,7 +7,7 @@ export function registerFractionShorthand(context: vscode.ExtensionContext) {
         name: 'fractionShorthand',
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
-                if (change.text !== ' ') continue;
+                if (change.text !== ' ') {continue;}
 
                 const line = change.range.start.line;
                 const charOffsetAfter = change.range.start.character + 1;
@@ -15,7 +15,7 @@ export function registerFractionShorthand(context: vscode.ExtensionContext) {
                 const textBeforeSpace = lineText.substring(0, charOffsetAfter);
 
                 // 이미 수식 모드라면 건너뜀
-                if (findMathAtPos(editor.document, change.range.start)) continue;
+                if (findMathAtPos(editor.document, change.range.start)) {continue;}
 
                 // 1. 단순 숫자: (\d+)/(\d+) -> \frac{1}{2}
                 // 2. 괄호 포함: \(([^)]+)\)/([^ ]+) -> \frac{a+b}{c}

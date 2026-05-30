@@ -11,7 +11,7 @@ suite('Smart Backspace Test Suite', () => {
             editor.selection = new vscode.Selection(0, 0, 0, 0);
             await vscode.commands.executeCommand('tex-machina.smartBackspace');
             for (let i = 0; i < 20; i++) {
-                if (document.getText() === '') break;
+                if (document.getText() === '') {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             assert.strictEqual(document.getText(), '', "Empty structure should be deleted");
@@ -27,7 +27,7 @@ suite('Smart Backspace Test Suite', () => {
             editor.selection = new vscode.Selection(0, 0, 0, 0);
             await vscode.commands.executeCommand('tex-machina.smartBackspace');
             for (let i = 0; i < 20; i++) {
-                if (document.getText() === '') break;
+                if (document.getText() === '') {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             assert.strictEqual(document.getText(), '', "Complex empty structure should be deleted");
@@ -52,7 +52,7 @@ suite('Smart Backspace Test Suite', () => {
             editor.selection = new vscode.Selection(0, 1, 0, 1); // after \
             await vscode.commands.executeCommand('tex-machina.smartBackspace');
             for (let i = 0; i < 20; i++) {
-                if (document.getText() === '') break;
+                if (document.getText() === '') {break;}
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             assert.strictEqual(document.getText(), '', "Should trigger smart delete from behind backslash");

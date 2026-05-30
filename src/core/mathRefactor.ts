@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { isSubscriptToggleActive, registerToggleFeature, isFeatureActive } from './toggleMode';
-import { findMathAtPos } from './latexParser';
+import { findMathAtPos, isInsideTextMode } from './latexParser';
 
 export interface MathRange {
     range: vscode.Range;
@@ -22,7 +22,7 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
             }
 
             const editor = vscode.window.activeTextEditor;
-            if (!editor) return;
+            if (!editor) {return;}
 
             const document = editor.document;
             const selection = editor.selection;
@@ -42,14 +42,14 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
                 value: oldSymbol
             });
 
-            if (!inputOld) return;
+            if (!inputOld) {return;}
 
             const inputNew = await vscode.window.showInputBox({
                 prompt: `${inputOld}를 무엇으로 바꾸시겠습니까? (예: \\theta)`,
                 value: ''
             });
 
-            if (inputNew === undefined) return;
+            if (inputNew === undefined) {return;}
 
             const scope = selection.isEmpty 
                 ? new vscode.Range(selection.active.line, 0, selection.active.line, document.lineAt(selection.active.line).text.length)
@@ -83,7 +83,7 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'mathRefactor',
         onSelectionChange: async (event, editor) => {
-            if (isInternalSelectionChange) return;
+            if (isInternalSelectionChange) {return;}
 
             const selection = event.selections[0];
             const document = editor.document;
@@ -110,26 +110,26 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
 
             // 3. Identify the symbol under the selection
             const wordRange = document.getWordRangeAtPosition(selection.start, /\\[a-zA-Z]+|(?<!\\)[a-zA-Z0-9]+/);
-            if (!wordRange) return;
+            if (!wordRange) {return;}
 
             // The selection must match or be within the variable
-            if (!wordRange.contains(selection)) return;
+            if (!wordRange.contains(selection)) {return;}
 
             const symbol = document.getText(wordRange);
-            if (!symbol || symbol.length === 0) return;
+            if (!symbol || symbol.length === 0) {return;}
 
             // 4. Ensure we are in a math environment
             const mathEnv = findMathAtPos(document, selection.active);
-            if (!mathEnv) return;
+            if (!mathEnv) {return;}
 
             // 5. Text Mode Protection: Ensure the selection is not inside \text{...} or similar
             const offsetInContent = document.offsetAt(selection.start) - (document.offsetAt(mathEnv.range.start) + mathEnv.prefixLen);
-            if (isInsideTextMode(mathEnv.content, offsetInContent)) return;
+            if (isInsideTextMode(mathEnv.content, offsetInContent)) {return;}
 
             // 6. Find all occurrences of this symbol in the same math environment
             const occurrences = findOccurrencesInMath(document, mathEnv, symbol);
             
-            if (occurrences.length <= 1) return;
+            if (occurrences.length <= 1) {return;}
 
             // Check if we already have these selections to avoid unnecessary updates
             const currentSelections = editor.selections;
@@ -159,46 +159,6 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
 /**
  * Checks if a given offset within the math content is inside a text-mode command.
  */
-export function isInsideTextMode(content: string, offsetInContent: number): boolean {
-    let i = 0;
-    // Only strictly textual commands that contain non-math content.
-    // Commands like \mathbf, \mathrm, \mathsf are math-formatting and should be refactorable.
-    const strictTextCommands = ['\\text', '\\mbox', '\\cite', '\\ref', '\\label'];
-
-    while (i < content.length) {
-        if (content[i] === '\\') {
-            const rest = content.substring(i);
-            const commandMatch = rest.match(/^\\[a-zA-Z]+\*?/);
-            if (commandMatch) {
-                const cmd = commandMatch[0];
-                if (strictTextCommands.includes(cmd)) {
-                    let j = i + cmd.length;
-                    while (j < content.length && /\s/.test(content[j])) j++;
-                    if (content[j] === '{') {
-                        const start = i; // Include backslash
-                        i = j + 1;
-                        let depth = 1;
-                        while (i < content.length && depth > 0) {
-                            if (content[i] === '{') depth++;
-                            else if (content[i] === '}') depth--;
-                            i++;
-                        }
-                        const end = i - 1;
-                        if (offsetInContent >= start && offsetInContent <= end + 1) {
-                            return true;
-                        }
-                        continue;
-                    }
-                }
-                i += commandMatch[0].length;
-                continue;
-            }
-        }
-        i++;
-    }
-    return false;
-}
-
 
 /**
  * Finds all semantic occurrences of a symbol within a math environment.
@@ -219,13 +179,13 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
         for (const cmd of strictTextCommands) {
             if (content.startsWith(cmd, i)) {
                 let j = i + cmd.length;
-                while (j < content.length && /\s/.test(content[j])) j++;
+                while (j < content.length && /\s/.test(content[j])) {j++;}
                 if (content[j] === '{') {
                     i = j + 1;
                     let depth = 1;
                     while (i < content.length && depth > 0) {
-                        if (content[i] === '{') depth++;
-                        else if (content[i] === '}') depth--;
+                        if (content[i] === '{') {depth++;}
+                        else if (content[i] === '}') {depth--;}
                         i++;
                     }
                     matchedTextCmd = true;
@@ -233,7 +193,7 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
                 }
             }
         }
-        if (matchedTextCmd) continue;
+        if (matchedTextCmd) {continue;}
 
         // Check for command symbol
         if (content[i] === '\\') {
@@ -380,15 +340,15 @@ function processContent(content: string, oldSym: string, newSym: string): string
         for (const cmd of textModeCommands) {
             if (content.startsWith(cmd, i)) {
                 let j = i + cmd.length;
-                while (j < content.length && /\s/.test(content[j])) j++;
+                while (j < content.length && /\s/.test(content[j])) {j++;}
                 
                 if (content[j] === '{') {
                     result += content.substring(i, j + 1);
                     i = j + 1;
                     let depth = 1;
                     while (i < content.length && depth > 0) {
-                        if (content[i] === '{') depth++;
-                        else if (content[i] === '}') depth--;
+                        if (content[i] === '{') {depth++;}
+                        else if (content[i] === '}') {depth--;}
                         result += content[i];
                         i++;
                     }
@@ -397,7 +357,7 @@ function processContent(content: string, oldSym: string, newSym: string): string
                 }
             }
         }
-        if (matchedTextCmd) continue;
+        if (matchedTextCmd) {continue;}
 
         if (content[i] === '\\') {
             if (oldSym.startsWith('\\')) {

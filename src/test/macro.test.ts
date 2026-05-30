@@ -5,7 +5,14 @@ import { MacroManager } from '../core/macroManager';
 
 suite('Macro and Chaining Test Suite', () => {
     test('MacroManager: parseDefinition basics', () => {
-        const manager = new MacroManager(null as any);
+        const mockContext: any = {
+            subscriptions: [],
+            globalState: {
+                get: () => ({}),
+                update: () => Promise.resolve()
+            }
+        };
+        const manager = new MacroManager(mockContext);
         const input1 = "define:calc > diff && plot > 2d>:diffplot";
         const res1 = manager.parseDefinition(input1);
         assert.ok(res1);
@@ -22,6 +29,7 @@ suite('Macro and Chaining Test Suite', () => {
     test('MacroManager: context-aware expansion (math vs text)', async () => {
         const mockStorage: Record<string, any> = {};
         const mockContext: any = {
+            subscriptions: [],
             globalState: {
                 get: (key: string, defaultValue: any) => mockStorage[key] || defaultValue,
                 update: (key: string, value: any) => { mockStorage[key] = value; return Promise.resolve(); }

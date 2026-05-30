@@ -14,7 +14,7 @@ export function registerSelectionWrap(context: vscode.ExtensionContext) {
 
 async function wrapWith(editor: vscode.TextEditor, scriptChar: string) {
     const selections = editor.selections;
-    if (selections.length === 0) return;
+    if (selections.length === 0) {return;}
 
     // Store original start positions and lengths to calculate new selections later
     const originalInfos = selections.map(sel => ({

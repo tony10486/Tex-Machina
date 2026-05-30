@@ -15,7 +15,7 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
         const config = vscode.workspace.getConfiguration('tex-machina');
         const sequence = config.get<string[]>('mathToggle.sequence', ['$', '\\[', 'equation']);
         
-        if (sequence.length === 0) return;
+        if (sequence.length === 0) {return;}
 
         // Map internal types to user-friendly sequence names
         let currentType = '';
@@ -35,9 +35,9 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
         
         // Fallback: if current environment is not in sequence, try to find a close match
         if (currentIndex === -1) {
-            if (mathEnv.type === 'inline') currentIndex = sequence.indexOf('$');
-            else if (mathEnv.type === 'display') currentIndex = sequence.indexOf('\\[') !== -1 ? sequence.indexOf('\\[') : sequence.indexOf('$$');
-            else currentIndex = sequence.indexOf('equation');
+            if (mathEnv.type === 'inline') {currentIndex = sequence.indexOf('$');}
+            else if (mathEnv.type === 'display') {currentIndex = sequence.indexOf('\\[') !== -1 ? sequence.indexOf('\\[') : sequence.indexOf('$$');}
+            else {currentIndex = sequence.indexOf('equation');}
         }
 
         const nextIndex = (currentIndex + 1) % sequence.length;
