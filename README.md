@@ -310,6 +310,6 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 - Python 3.x: 파이썬으로 구현된 기능을 실행하기 위해 필요합니다.
 - 필수 패키지 설치:
   ```bash
-  pip install sympy numpy scipy matplotlib
+  pip install sympy numpy scipy matplotlib requests
   ```
 
