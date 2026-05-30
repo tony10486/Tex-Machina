@@ -1,21 +1,16 @@
 import sympy as sp
 from sympy.parsing.latex import parse_latex  # 공식 파서 사용
-from sympy.parsing.sympy_parser import parse_expr
 import json
 import re
 import os
 from functools import lru_cache
+from utils import SAFE_SYMPY_DICT, safe_parse_expr, strip_latex_delimiters
 
 try:
     import symengine
     HAS_SYMENGINE = True
 except ImportError:
     HAS_SYMENGINE = False
-
-SAFE_SYMPY_DICT = {'__builtins__': {}}
-for k, v in sp.__dict__.items():
-    if not k.startswith('__'):
-        SAFE_SYMPY_DICT[k] = v
 
 def op_tensor_expand(expr, args, parallels=[], selection=None):
     """
@@ -302,13 +297,13 @@ def op_taylor(expr, args, parallels):
     for p in parallels:
         if p.startswith('at='):
             try:
-                at = parse_expr(p.split('=')[1], evaluate=True, global_dict=SAFE_SYMPY_DICT)
+                at = safe_parse_expr(p.split('=')[1], evaluate=True)
                 break
             except: pass
     
     if len(args) > 2:
         try:
-            at = parse_expr(args[2], evaluate=True, global_dict=SAFE_SYMPY_DICT)
+            at = safe_parse_expr(args[2], evaluate=True)
         except: pass
 
     # 4. 테일러 전개 실행
@@ -364,7 +359,7 @@ def op_int(expr, args):
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
     if len(params) == 3:
-        return sp.integrate(expr, (var, parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT), parse_expr(params[2], evaluate=False, global_dict=SAFE_SYMPY_DICT)))
+        return sp.integrate(expr, (var, safe_parse_expr(params[1], evaluate=False), safe_parse_expr(params[2], evaluate=False)))
     return sp.integrate(expr, var)
 
 def op_limit(expr, args):
@@ -377,7 +372,7 @@ def op_limit(expr, args):
         # 단, 명시된 변수와 대상이 이미 Limit의 정보와 같다면 redundant로 보고 doit()
         params = [p.strip() for p in args[0].split(',')]
         var = sp.Symbol(params[0])
-        target = parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(params) > 1 else 0
+        target = safe_parse_expr(params[1], evaluate=False) if len(params) > 1 else 0
         if var == expr.variables[0] and target == expr.z0:
             return expr.doit()
         expr = expr.doit()
@@ -385,7 +380,7 @@ def op_limit(expr, args):
     if not args: return expr
     params = [p.strip() for p in args[0].split(',')]
     var = sp.Symbol(params[0])
-    target = parse_expr(params[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(params) > 1 else 0
+    target = safe_parse_expr(params[1], evaluate=False) if len(params) > 1 else 0
     direction = params[2] if len(params) > 2 else '+'
     return sp.limit(expr, var, target, dir=direction)
 
@@ -550,7 +545,7 @@ def parse_ics(ics_str, funcs, x):
             continue
             
         lhs_str = lhs_str.strip()
-        rhs = parse_expr(rhs_str.strip(), evaluate=False, global_dict=SAFE_SYMPY_DICT)
+        rhs = safe_parse_expr(rhs_str.strip(), evaluate=False)
         
         # 정규화하여 감지 (f(x0) 또는 f'(x0) 형태)
         clean_lhs = lhs_str.replace('\\', '').replace('{', '').replace('}', '').replace(' ', '')
@@ -564,7 +559,7 @@ def parse_ics(ics_str, funcs, x):
             if func_name in func_map:
                 try:
                     target_func = func_map[func_name]
-                    x0 = parse_expr(x0_str, evaluate=False, global_dict=SAFE_SYMPY_DICT)
+                    x0 = safe_parse_expr(x0_str, evaluate=False)
                     order = len(primes)
                     
                     if order == 0:
@@ -941,7 +936,7 @@ def get_calc_operations():
         "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환
         
         # 6. 복소해석학
-        "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), parse_expr(v[1], evaluate=False, global_dict=SAFE_SYMPY_DICT) if len(v)>1 else 0),
+        "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), safe_parse_expr(v[1], evaluate=False) if len(v)>1 else 0),
         "laurent": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]), 0, 4, dir='+').removeO(),
         "conjugate": lambda x, v, p, c, s: sp.conjugate(x),
         "re": lambda x, v, p, c, s: sp.re(x),
@@ -965,16 +960,6 @@ def get_calc_operations():
 # 3. 메인 핸들러 (Node.js 통신 엔트리)
 # ==========================================
 
-def strip_latex_delimiters(text):
-    r"""$...$, $$...$$, \[...\], \(...\) 등의 LaTeX 구분자를 제거합니다."""
-    text = text.strip()
-    # $$...$$ or \[...\]
-    if (text.startswith('$$') and text.endswith('$$')) or (text.startswith(r'\[') and text.endswith(r'\]')):
-        return text[2:-2].strip()
-    # $...$ or \(...\)
-    if (text.startswith('$') and text.endswith('$')) or (text.startswith(r'\(') and text.endswith(r'\)')):
-        return text[1:-1].strip()
-    return text
 
 def preprocess_matrix_latex(latex_str):
     r"""
@@ -1277,7 +1262,7 @@ def execute_calc(parsed_json_str):
                     'det': sp.det, 'tr': sp.trace, 'transpose': lambda m: m.T, 'inv': lambda m: m.inv(),
                     'diff': sp.diff, 'integrate': sp.integrate, 'limit': sp.limit
                 }
-                expr = parse_expr(processed_selection, local_dict=calc_locals, global_dict=SAFE_SYMPY_DICT, evaluate=False)
+                expr = safe_parse_expr(processed_selection, local_dict=calc_locals, evaluate=False)
             else:
                 # [Pre-process for Gamma and other functions]
                 # \Gamma{\left(z \right)} -> \Gamma(z)

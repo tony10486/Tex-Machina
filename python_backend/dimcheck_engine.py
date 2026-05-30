@@ -1,12 +1,7 @@
 import sympy as sp
-from sympy.parsing.sympy_parser import parse_expr
 from typing import Dict, Any, Union
 import re
-
-SAFE_SYMPY_DICT = {'__builtins__': {}}
-for k, v in sp.__dict__.items():
-    if not k.startswith('__'):
-        SAFE_SYMPY_DICT[k] = v
+from utils import SAFE_SYMPY_DICT, safe_parse_expr
 
 # Vol 1. 5.1장 규격에 따른 안전한 파서
 from sympy.parsing.latex import parse_latex as latex2sympy
@@ -167,7 +162,7 @@ def _parse_custom_dims(parallels: list) -> Dict[str, sp.Expr]:
                 try:
                     # 안전을 위해 미리 정의된 기호(M, L, T, I, Theta)만 eval 허용
                     allowed_locals = {'M': M, 'L': L, 'T': T_dim, 'I': I, 'Theta': Theta}
-                    dim_expr = parse_expr(dim_str.strip(), local_dict=allowed_locals, global_dict=SAFE_SYMPY_DICT, evaluate=False)
+                    dim_expr = safe_parse_expr(dim_str.strip(), local_dict=allowed_locals, evaluate=False)
                     custom_map[var_name] = dim_expr
                 except Exception:
                     continue
