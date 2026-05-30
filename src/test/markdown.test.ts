@@ -1,57 +1,47 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, insertAt, waitForLine, waitForIncludes } from './testUtils';
 
 suite('Markdown Test Suite', () => {
-    test('Markdown: **bold** space should become \\textbf{bold} ', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '**bold**' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 8), ' ');
-        });
-
-        for (let i = 0; i < 20; i++) {
-            if (document.lineAt(0).text === '\\textbf{bold} ') {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        assert.strictEqual(document.lineAt(0).text, '\\textbf{bold} ');
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('**bold** space should become \\textbf{bold}', async () => {
+        const { document, editor } = await openDoc('**bold**');
+        await insertAt(editor, 0, 8, ' ');
+        assert.ok(await waitForLine(document, 0, '\\textbf{bold} '));
+        await closeEditor();
     });
 
-    test('Markdown: - space at start should become itemize environment', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '-' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 1), ' ');
-        });
-
-        for (let i = 0; i < 20; i++) {
-            if (document.lineAt(0).text.includes('\\begin{itemize}')) {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        assert.ok(document.getText().includes('\\begin{itemize}'));
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('*italic* space should become \\textit{italic}', async () => {
+        const { document, editor } = await openDoc('*italic*');
+        await insertAt(editor, 0, 8, ' ');
+        assert.ok(await waitForLine(document, 0, '\\textit{italic} '));
+        await closeEditor();
     });
 
-    test('Markdown: #Section# space should become \\section{Section}', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '#My Section#' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 12), ' ');
-        });
-        for (let i = 0; i < 20; i++) {
-            if (document.lineAt(0).text.includes('\\section{My Section}')) {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        assert.ok(document.lineAt(0).text.includes('\\section{My Section}'));
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('- space at start should become itemize environment', async () => {
+        const { document, editor } = await openDoc('-');
+        await insertAt(editor, 0, 1, ' ');
+        assert.ok(await waitForIncludes(document, '\\begin{itemize}'));
+        await closeEditor();
+    });
+
+    test('#Section# space should become \\section{Section}', async () => {
+        const { document, editor } = await openDoc('#My Section#');
+        await insertAt(editor, 0, 12, ' ');
+        assert.ok(await waitForIncludes(document, '\\section{My Section}'));
+        await closeEditor();
+    });
+
+    test('##Sub## space should become \\subsection{Sub}', async () => {
+        const { document, editor } = await openDoc('##Sub##');
+        await insertAt(editor, 0, 7, ' ');
+        assert.ok(await waitForIncludes(document, '\\subsection{Sub}'));
+        await closeEditor();
+    });
+
+    test('~~strike~~ space should become \\sout{strike}', async () => {
+        const { document, editor } = await openDoc('~~strike~~');
+        await insertAt(editor, 0, 10, ' ');
+        assert.ok(await waitForIncludes(document, '\\sout{strike}'));
+        await closeEditor();
     });
 });

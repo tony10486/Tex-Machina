@@ -1,84 +1,51 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, waitForCondition } from './testUtils';
 
 suite('Selection Wrap Test Suite', () => {
-    
-    suite('Simple Feature Check', () => {
-        test('Should wrap selection with subscript (_)', async () => {
-            const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'n+1' });
-            const editor = await vscode.window.showTextDocument(document);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            editor.selection = new vscode.Selection(0, 0, 0, 3);
-            await vscode.commands.executeCommand('tex-machina.wrapSubscript');
-
-            for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('_')) {break;}
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            assert.strictEqual(document.getText(), '_{n+1}', "Should be wrapped with _{...}");
-            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-        });
-
-        test('Should wrap selection with superscript (^)', async () => {
-            const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x+y' });
-            const editor = await vscode.window.showTextDocument(document);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            editor.selection = new vscode.Selection(0, 0, 0, 3);
-            await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
-
-            for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('^')) {break;}
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            assert.strictEqual(document.getText(), '^{x+y}', "Should be wrapped with ^{...}");
-            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-        });
+    test('Should wrap selection with subscript (_)', async () => {
+        const { document, editor } = await openDoc('n+1');
+        editor.selection = new vscode.Selection(0, 0, 0, 3);
+        await vscode.commands.executeCommand('tex-machina.wrapSubscript');
+        assert.ok(await waitForCondition(() => document.getText() === '_{n+1}'));
+        await closeEditor();
     });
 
-    suite('Detailed Feature Check', () => {
-        test('Should handle multiple selections', async () => {
-            const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'a b' });
-            const editor = await vscode.window.showTextDocument(document);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            editor.selections = [
-                new vscode.Selection(0, 0, 0, 1),
-                new vscode.Selection(0, 2, 0, 3)
-            ];
-            await vscode.commands.executeCommand('tex-machina.wrapSubscript');
+    test('Should wrap selection with superscript (^)', async () => {
+        const { document, editor } = await openDoc('x+y');
+        editor.selection = new vscode.Selection(0, 0, 0, 3);
+        await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
+        assert.ok(await waitForCondition(() => document.getText() === '^{x+y}'));
+        await closeEditor();
+    });
 
-            for (let i = 0; i < 20; i++) {
-                if (document.getText().includes('_{a}')) {break;}
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
+    test('Should handle multiple selections', async () => {
+        const { document, editor } = await openDoc('a b');
+        editor.selections = [
+            new vscode.Selection(0, 0, 0, 1),
+            new vscode.Selection(0, 2, 0, 3)
+        ];
+        await vscode.commands.executeCommand('tex-machina.wrapSubscript');
+        assert.ok(await waitForCondition(() => document.getText() === '_{a} _{b}'));
+        await closeEditor();
+    });
 
-            assert.strictEqual(document.getText(), '_{a} _{b}', "Both selections should be wrapped");
-            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-        });
+    test('Selection should be inside braces after wrap', async () => {
+        const { document, editor } = await openDoc('abc');
+        editor.selection = new vscode.Selection(0, 0, 0, 3);
+        await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
+        assert.ok(await waitForCondition(() => document.getText().startsWith('^')));
+        assert.strictEqual(document.getText(editor.selection), 'abc');
+        assert.strictEqual(editor.selection.start.character, 2);
+        assert.strictEqual(editor.selection.end.character, 5);
+        await closeEditor();
+    });
 
-        test('Should adjust selection to be inside braces after wrap', async () => {
-            const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'abc' });
-            const editor = await vscode.window.showTextDocument(document);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            editor.selection = new vscode.Selection(0, 0, 0, 3);
-            await vscode.commands.executeCommand('tex-machina.wrapSuperscript');
-
-            for (let i = 0; i < 20; i++) {
-                if (document.getText().startsWith('^')) {break;}
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            const sel = editor.selection;
-            // Text is ^{abc}. 'abc' should be selected.
-            assert.strictEqual(document.getText(sel), 'abc', "Selection should exactly cover 'abc' inside ^{}");
-            assert.strictEqual(sel.start.character, 2, "Start should be after ^{");
-            assert.strictEqual(sel.end.character, 5, "End should be before }");
-            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-        });
+    test('No selection should NOT trigger wrap', async () => {
+        const { document, editor } = await openDoc('abc');
+        editor.selection = new vscode.Selection(0, 1, 0, 1);
+        await vscode.commands.executeCommand('tex-machina.wrapSubscript');
+        assert.strictEqual(document.getText(), 'abc');
+        await closeEditor();
     });
 });

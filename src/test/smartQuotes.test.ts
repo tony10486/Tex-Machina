@@ -1,33 +1,27 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, insertAt, waitForLine, waitForCondition, sleep } from './testUtils';
 
 suite('Smart Quotes Test Suite', () => {
-    test('Smart Quotes: " at start of line should become ``', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 0), '"');
-        });
-        for (let i = 0; i < 20; i++) {
-            if (document.lineAt(0).text === '``') {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        assert.strictEqual(document.lineAt(0).text, '``');
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('" at start of line should become ``', async () => {
+        const { document, editor } = await openDoc('');
+        await insertAt(editor, 0, 0, '"');
+        assert.ok(await waitForLine(document, 0, '``'));
+        await closeEditor();
     });
 
-    test('Smart Quotes: " inside verbatim should stay "', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\begin{verbatim}\n\n\\end{verbatim}' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(1, 0), '"');
-        });
-        await new Promise(resolve => setTimeout(resolve, 500));
+    test('" after text should become \'\' (closing)', async () => {
+        const { document, editor } = await openDoc('hello');
+        await insertAt(editor, 0, 5, '"');
+        assert.ok(await waitForCondition(() => document.lineAt(0).text.includes("''"), 500));
+        await closeEditor();
+    });
+
+    test('" inside verbatim should stay "', async () => {
+        const { document, editor } = await openDoc('\\begin{verbatim}\n\n\\end{verbatim}');
+        await insertAt(editor, 1, 0, '"');
+        await waitForCondition(() => document.lineAt(1).text === '"', 200);
         assert.strictEqual(document.lineAt(1).text, '"');
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        await closeEditor();
     });
 });

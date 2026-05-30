@@ -1,56 +1,51 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, waitForNotIncludes, waitForCondition } from './testUtils';
 
-suite('Env Auto-Delete Test Suite', function() {
+suite('Env Auto-Delete Test Suite', function () {
     this.timeout(10000);
 
-    test('Env Auto-Delete: Deleting \\begin{itemize} should delete matching \\end{itemize}', async () => {
+    test('Deleting \\begin{itemize} should delete matching \\end{itemize}', async () => {
         const content = '\\begin{itemize}\n  \\item Hello\n\\end{itemize}';
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
-        const editor = await vscode.window.showTextDocument(document);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        await editor.edit(editBuilder => {
-            const range = new vscode.Range(new vscode.Position(0, 0), new vscode.Position(1, 0));
-            editBuilder.delete(range);
+        const { document, editor } = await openDoc(content);
+        await editor.edit(eb => {
+            eb.delete(new vscode.Range(new vscode.Position(0, 0), new vscode.Position(1, 0)));
         });
-
-        for (let i = 0; i < 20; i++) {
-            if (!document.getText().includes('\\end{itemize}')) {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        const remainingText = document.getText();
-        assert.ok(!remainingText.includes('\\end{itemize}'), "Matching \\end should be deleted");
-        assert.ok(remainingText.includes('\\item Hello'), "Content should remain");
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        assert.ok(await waitForNotIncludes(document, '\\end{itemize}'));
+        assert.ok(document.getText().includes('\\item Hello'));
+        await closeEditor();
     });
 
-    test('Env Auto-Delete: Deleting nested \\begin{itemize} should only delete its matching \\end', async () => {
+    test('Deleting nested \\begin{itemize} should only delete its matching \\end', async () => {
         const content = '\\begin{itemize}\n  \\begin{itemize}\n    \\item Nested\n  \\end{itemize}\n\\end{itemize}';
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content });
-        const editor = await vscode.window.showTextDocument(document);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        await editor.edit(editBuilder => {
-            const range = new vscode.Range(new vscode.Position(1, 0), new vscode.Position(2, 0));
-            editBuilder.delete(range);
+        const { document, editor } = await openDoc(content);
+        await editor.edit(eb => {
+            eb.delete(new vscode.Range(new vscode.Position(1, 2), new vscode.Position(2, 4)));
         });
+        assert.ok(await waitForCondition(() => {
+            const m = document.getText().match(/\\end\{itemize\}/g);
+            return m !== null && m.length === 1;
+        }, 1000));
+        await closeEditor();
+    });
 
-        for (let i = 0; i < 20; i++) {
-            const matches = document.getText().match(/\\end\{itemize\}/g);
-            if (matches && matches.length === 1) {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
+    test('Deleting \\begin{equation} should delete matching \\end{equation}', async () => {
+        const content = '\\begin{equation}\nx = 1\n\\end{equation}';
+        const { document, editor } = await openDoc(content);
+        await editor.edit(eb => {
+            eb.delete(new vscode.Range(new vscode.Position(0, 0), new vscode.Position(1, 0)));
+        });
+        assert.ok(await waitForNotIncludes(document, '\\end{equation}'));
+        await closeEditor();
+    });
 
-        const matches = document.getText().match(/\\end\{itemize\}/g);
-        assert.strictEqual(matches?.length, 1, "Should have exactly one \\end{itemize} left");
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('Deleting \\begin{align} should delete matching \\end{align}', async () => {
+        const content = '\\begin{align}\na &= b\n\\end{align}';
+        const { document, editor } = await openDoc(content);
+        await editor.edit(eb => {
+            eb.delete(new vscode.Range(new vscode.Position(0, 0), new vscode.Position(1, 0)));
+        });
+        assert.ok(await waitForNotIncludes(document, '\\end{align}'));
+        await closeEditor();
     });
 });

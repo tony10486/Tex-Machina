@@ -1,53 +1,59 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, insertAt, waitForLine, waitForCondition, sleep } from './testUtils';
 
-suite('Ellipsis Conversion Test Suite', () => {
+suite('Ellipsis Conversion Test Suite', function () {
+    this.timeout(5000);
     setup(async () => {
         const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '' });
         await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await sleep(30);
     });
 
     teardown(async () => {
         const config = vscode.workspace.getConfiguration('tex-machina');
         await config.update('ellipsis.macro', '\\dots', vscode.ConfigurationTarget.Global);
         await config.update('ellipsis.enabled', true, vscode.ConfigurationTarget.Global);
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        await closeEditor();
     });
 
-    test('Ellipsis: ... should become \\dots by default', async () => {
-        const editor = vscode.window.activeTextEditor;
-        assert.ok(editor);
-
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 0), '..');
-        });
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 2), '.');
-        });
-
-        for (let i = 0; i < 20; i++) {
-            if (editor.document.lineAt(0).text === '\\dots') {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 50));
-        }
-
-        assert.strictEqual(editor.document.lineAt(0).text, '\\dots');
+    test('... should become \\dots by default', async () => {
+        const editor = vscode.window.activeTextEditor!;
+        await insertAt(editor, 0, 0, '..');
+        await insertAt(editor, 0, 2, '.');
+        assert.ok(await waitForLine(editor.document, 0, '\\dots'));
     });
 
-    test('Ellipsis: Should NOT convert when disabled', async () => {
+    test('Should NOT convert when disabled', async () => {
         const config = vscode.workspace.getConfiguration('tex-machina');
         await config.update('ellipsis.enabled', false, vscode.ConfigurationTarget.Global);
-
-        const editor = vscode.window.activeTextEditor;
-        assert.ok(editor);
-
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 0), '...');
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 300));
+        const editor = vscode.window.activeTextEditor!;
+        await insertAt(editor, 0, 0, '...');
+        await waitForCondition(() => editor.document.lineAt(0).text === '...', 200);
         assert.strictEqual(editor.document.lineAt(0).text, '...');
+    });
+
+    test('... should become \\cdots when configured', async () => {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        await config.update('ellipsis.macro', '\\cdots', vscode.ConfigurationTarget.Global);
+        const editor = vscode.window.activeTextEditor!;
+        await insertAt(editor, 0, 0, '..');
+        await insertAt(editor, 0, 2, '.');
+        assert.ok(await waitForLine(editor.document, 0, '\\cdots'));
+    });
+
+    test('Only 3 dots should convert, not 2', async () => {
+        const editor = vscode.window.activeTextEditor!;
+        await insertAt(editor, 0, 0, '..');
+        await waitForCondition(() => editor.document.lineAt(0).text !== '..', 200);
+        assert.strictEqual(editor.document.lineAt(0).text, '..');
+    });
+
+    test('... in math mode should also convert', async () => {
+        const editor = vscode.window.activeTextEditor!;
+        await insertAt(editor, 0, 0, '$');
+        await insertAt(editor, 0, 1, '..');
+        await insertAt(editor, 0, 3, '.');
+        assert.ok(await waitForCondition(() => editor.document.lineAt(0).text.includes('\\dots'), 500));
     });
 });

@@ -1,50 +1,37 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, insertAt, waitForIncludes, waitForLine, sleep } from './testUtils';
 
 suite('Fraction Shorthand Test Suite', () => {
-    test('Fraction Shorthand: 1/2 space should become \\frac{1}{2} ', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '1/2' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), ' ');
-        });
-
-        await new Promise<void>((resolve) => {
-            const disposable = vscode.workspace.onDidChangeTextDocument(() => {
-                if (document.lineAt(0).text.includes('\\frac{1}{2}')) {
-                    disposable.dispose();
-                    resolve();
-                }
-            });
-            setTimeout(() => { disposable.dispose(); resolve(); }, 1000);
-        });
-
-        assert.ok(document.lineAt(0).text.includes('\\frac{1}{2}'));
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('1/2 space should become \\frac{1}{2}', async () => {
+        const { document, editor } = await openDoc('1/2');
+        await insertAt(editor, 0, 3, ' ');
+        assert.ok(await waitForIncludes(document, '\\frac{1}{2}'));
+        await closeEditor();
     });
 
-    test('Fraction Shorthand: (a+b)/c space should become \\frac{a+b}{c} ', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: '(a+b)/c' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
+    test('(a+b)/c space should become \\frac{a+b}{c}', async () => {
+        const { document, editor } = await openDoc('(a+b)/c');
+        await insertAt(editor, 0, 7, ' ');
+        assert.ok(await waitForIncludes(document, '\\frac{a+b}{c}'));
+        await closeEditor();
+    });
 
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 7), ' ');
-        });
+    test('a/b space should become \\frac{a}{b}', async () => {
+        const { document, editor } = await openDoc('a/b');
+        await insertAt(editor, 0, 3, ' ');
+        assert.ok(await waitForIncludes(document, '\\frac{a}{b}'));
+        await closeEditor();
+    });
 
-        await new Promise<void>((resolve) => {
-            const disposable = vscode.workspace.onDidChangeTextDocument(() => {
-                if (document.lineAt(0).text.includes('\\frac{a+b}{c}')) {
-                    disposable.dispose();
-                    resolve();
-                }
-            });
-            setTimeout(() => { disposable.dispose(); resolve(); }, 1000);
-        });
-
-        assert.ok(document.lineAt(0).text.includes('\\frac{a+b}{c}'));
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('Should NOT convert when disabled', async () => {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        await config.update('fractionShorthand.enabled', false, vscode.ConfigurationTarget.Global);
+        const { document, editor } = await openDoc('1/2');
+        await insertAt(editor, 0, 3, ' ');
+        await sleep(200);
+        assert.ok(!document.getText().includes('\\frac'));
+        await config.update('fractionShorthand.enabled', true, vscode.ConfigurationTarget.Global);
+        await closeEditor();
     });
 });

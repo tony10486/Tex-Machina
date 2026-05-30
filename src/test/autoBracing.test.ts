@@ -1,58 +1,43 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { openDoc, closeEditor, insertAt, waitForLine, waitForCondition } from './testUtils';
 
 suite('Auto-bracing Test Suite', () => {
-    test('Auto-bracing: ^ab should become ^{ab}', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^a' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), 'b');
-        });
-
-        for (let i = 0; i < 10; i++) {
-            if (document.lineAt(0).text === 'x^{ab}') {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        assert.strictEqual(document.lineAt(0).text, 'x^{ab}', "Text should be auto-braced");
-        assert.strictEqual(editor.selection.active.character, 5, "Cursor should be inside braces");
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('^ab should become ^{ab}', async () => {
+        const { document, editor } = await openDoc('x^a');
+        await insertAt(editor, 0, 3, 'b');
+        assert.ok(await waitForLine(document, 0, 'x^{ab}'));
+        assert.strictEqual(editor.selection.active.character, 5);
+        await closeEditor();
     });
 
-    test('Auto-bracing: v_1, should NOT become v_{1,}', async () => {
-        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: 'v_1' });
-        const ed = await vscode.window.showTextDocument(doc);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await ed.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), ',');
-        });
-        await new Promise(resolve => setTimeout(resolve, 200));
-        assert.strictEqual(doc.lineAt(0).text, 'v_1,', "v_1, should NOT be auto-braced");
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('_ab should become _{ab}', async () => {
+        const { document, editor } = await openDoc('v_1');
+        await insertAt(editor, 0, 3, '2');
+        assert.ok(await waitForLine(document, 0, 'v_{12}'));
+        await closeEditor();
     });
 
-    test('Auto-bracing: x^-1 should become x^{-1} and cursor outside', async () => {
-        const document = await vscode.workspace.openTextDocument({ language: 'latex', content: 'x^-' });
-        const editor = await vscode.window.showTextDocument(document);
-        await new Promise(resolve => setTimeout(resolve, 100));
+    test('v_1, should NOT become v_{1,}', async () => {
+        const { document, editor } = await openDoc('v_1');
+        await insertAt(editor, 0, 3, ',');
+        await waitForCondition(() => document.lineAt(0).text === 'v_1,', 200);
+        assert.strictEqual(document.lineAt(0).text, 'v_1,');
+        await closeEditor();
+    });
 
-        await editor.edit(editBuilder => {
-            editBuilder.insert(new vscode.Position(0, 3), '1');
-        });
+    test('x^-1 should become x^{-1} with cursor outside', async () => {
+        const { document, editor } = await openDoc('x^-');
+        await insertAt(editor, 0, 3, '1');
+        assert.ok(await waitForLine(document, 0, 'x^{-1}'));
+        assert.strictEqual(editor.selection.active.character, 6);
+        await closeEditor();
+    });
 
-        for (let i = 0; i < 10; i++) {
-            if (document.lineAt(0).text === 'x^{-1}') {
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        assert.strictEqual(document.lineAt(0).text, 'x^{-1}', "Text should be auto-braced");
-        assert.strictEqual(editor.selection.active.character, 6, "Cursor should be outside braces for -1");
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    test('^{abc} should auto-brace three chars', async () => {
+        const { document, editor } = await openDoc('x^a');
+        await insertAt(editor, 0, 3, 'bc');
+        assert.ok(await waitForLine(document, 0, 'x^{abc}'));
+        await closeEditor();
     });
 });
