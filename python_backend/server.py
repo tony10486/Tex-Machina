@@ -23,9 +23,20 @@ def main():
         if not line:
             continue
             
+        request_id = None
         try:
+            req = json.loads(line)
+            request_id = req.get('requestId')
+            
             from calc_engine import execute_calc
             result_json_str = execute_calc(line)
+            
+            # result_json_str is already a JSON string from execute_calc
+            # We need to inject requestId if it's not already there
+            if request_id:
+                res_obj = json.loads(result_json_str)
+                res_obj['requestId'] = request_id
+                result_json_str = json.dumps(res_obj)
             
             sys.stdout.write(result_json_str + '\n')
             sys.stdout.flush()
@@ -35,6 +46,8 @@ def main():
                 "status": "error", 
                 "message": f"Server Error: {str(e)}"
             }
+            if request_id:
+                error_msg['requestId'] = request_id
             sys.stdout.write(json.dumps(error_msg) + '\n')
             sys.stdout.flush()
 

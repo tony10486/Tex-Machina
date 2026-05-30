@@ -6,69 +6,6 @@ calc_engine.py 에서 하드코딩 되어 있는, 즉 ad hoc 의 상황을 대�
 
 현재 개발중인 latex를 위한 vscode 확장프로그램의 개발에서 다음 취약점이 발견되었어. 이를 수정해 줘. 본 확장프로그램은 상용 프로그램으로 런칭될 예정이니, 기능의 완성도를 1순위로 하여 잘 구현되었는지를 확인해 줘
 
-
-## 3. [Critical/Security] 정규표현식 서비스 거부 공격 (ReDoS) 취약점
-
-*   **파일 위치:** `src/core/latexParser.ts` (Line 118)
-*   **문제 코드:**
-    ```typescript
-    const commandRegex = /^\\[a-zA-Z]+\*?(?:\s*(?:\[[^\]]*\]|\{[^\}]*\}|_[^ \t\r\n{}]|_\s*\{[^\}]*\}|\^[^ \t\r\n{}]|\^\s*\{[^\}]*\}))*/;
-    ```
-*   **문제점 및 잠재적 영향:**
-    정규표현식 내부에 `(?: ... )*` 형태의 중첩된 수량자(Nested Quantifiers)가 존재합니다. 닫히지 않은 괄호나 기형적인 LaTeX 매크로가 수만 자 입력되었을 때, 정규식 엔진의 백트래킹(Backtracking)이 기하급수적으로 증가하여 확장의 CPU 점유율이 100%로 치솟고 영구적으로 멈추는 **Catastrophic Backtracking**을 유발합니다.
-*   **해결 방안:**
-    중첩 수량자를 제거하도록 정규식을 단순화하거나, 정규식을 사용하지 않고 단순한 문자열 인덱스 스캔(State Machine)을 통해 명령어와 인자(`{}`, `[]`)를 파싱하는 함수형 로직으로 대체해야 합니다.
-
-## 5. [Major/Performance] 무거운 파싱 로직 내 불필요한 메모리 할당 (GC 부하)
-
-*   **파일 위치:** `src/core/latexParser.ts` (Line 44, 50, 60, 68)
-*   **문제 코드:**
-    ```typescript
-    candidates.push({
-        // ...
-        content: document.getText(new vscode.Range(...))
-    });
-    ```
-*   **문제점 및 잠재적 영향:**
-    `findInnermostEnvAtPos` 함수는 커서가 이동할 때마다(`onDidChangeTextEditorSelection`) 토글 모드에서 빈번하게 호출됩니다. 이 함수 내의 `while` 루프 안에서 매번 `document.getText(new Range(...))`를 호출하여 새로운 문자열 객체를 할당합니다. 이미 상단에서 `const text = document.getText(rangeToSearch);`로 해당 블록의 텍스트를 모두 가져왔음에도 불구하고, VS Code API 브릿지를 거쳐 텍스트를 계속 재요청하므로, 극심한 가비지 컬렉션(GC) 부하와 에디터 렉을 유발합니다.
-*   **해결 방안:**
-    미리 가져온 `text` 변수에 대해 순수 자바스크립트의 `text.substring(start, end)` 메서드를 사용하여 부분 문자열을 추출해야 합니다. 
-
-## 4. [Major/Architecture] Python IPC 통신에서의 Race Condition (응답 유실)
-
-*   **파일 위치:** `src/services/pythonService.ts` (Line 67)
-*   **문제 코드:**
-    ```typescript
-    public sendAndWait(payload: any): Promise<any> {
-        return new Promise((resolve) => {
-            // ...
-            this.responseResolver = resolve;
-            this.pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
-        });
-    }
-    ```
-*   **문제점 및 잠재적 영향:**
-    여러 개의 비동기 명령이 거의 동시에 실행될 경우(예: 사용자의 계산 명령 + 백그라운드 라벨 검색), 단일 변수인 `this.responseResolver`가 마지막 명령의 `resolve`로 덮어씌워집니다. 이로 인해 앞선 명령들은 영원히 Pending 상태로 남게 되며(메모리 누수), 응답이 엉뚱한 요청으로 전달되어 수식이 망가질 수 있습니다.
-*   **해결 방안:**
-    각 요청 객체에 고유한 `uuid`를 발급하고, Python 백엔드도 응답 시 해당 `uuid`를 포함하여 반환하도록 설계해야 합니다. TypeScript에서는 `Map<string, Function>` 형태로 Resolver를 관리하여 매칭시켜야 합니다.
-
-
-
-## 6. [Major/Performance] 설정(Configuration) 기반 동적 RegExp 컴파일 병목
-
-*   **파일 위치:** `src/core/macroManager.ts` (Line 52)
-*   **문제 코드:**
-    ```typescript
-    for (const ctx of customContexts) {
-        const regex = new RegExp(ctx.regex);
-        if (regex.test(checkText)) { ... }
-    }
-    ```
-*   **문제점 및 잠재적 영향:**
-    사용자가 텍스트를 입력하여 매크로를 확장할 때(`expand` 호출 시), 루프 내부에서 매번 `new RegExp()` 객체를 동적으로 생성합니다. 정규식 컴파일은 비용이 큰 작업이며, 타이핑 중에 매번 발생하면 성능을 갉아먹습니다.
-*   **해결 방안:**
-    `MacroManager`의 생성자 또는 설정이 변경될 때(`onDidChangeConfiguration`) 미리 `RegExp` 객체를 생성하여 배열이나 맵에 캐싱(Caching)해 두고 재사용해야 합니다.
-
 ## 7. [Major/Performance] 이벤트 리스너 내 디바운싱(Debouncing) 부재
 
 *   **파일 위치:** `src/core/toggleMode.ts` (Line 132), `src/core/linkedEditing.ts`

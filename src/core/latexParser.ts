@@ -103,9 +103,9 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                     if (mathEnvs.includes(last.envName!)) {
                         candidates.push({
                             range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
-                            text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                            text: text.substring(last.start - searchStartOffset, endPos - searchStartOffset),
                             type: 'equation',
-                            content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                            content: text.substring(last.start + last.tagLen - searchStartOffset, posInDoc - searchStartOffset),
                             envName: last.envName,
                             prefixLen: last.tagLen
                         });
@@ -124,9 +124,9 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                     if (offset >= last.start && offset <= endPos) {
                         candidates.push({
                             range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
-                            text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                            text: text.substring(last.start - searchStartOffset, endPos - searchStartOffset),
                             type: m === '$' ? 'inline' : 'display',
-                            content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                            content: text.substring(last.start + last.tagLen - searchStartOffset, posInDoc - searchStartOffset),
                             prefixLen: last.tagLen
                         });
                     }
@@ -146,9 +146,9 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                 if (offset >= last.start && offset <= endPos) {
                     candidates.push({
                         range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
-                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                        text: text.substring(last.start - searchStartOffset, endPos - searchStartOffset),
                         type: openTag === '\\[' ? 'display' : 'inline',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                        content: text.substring(last.start + last.tagLen - searchStartOffset, posInDoc - searchStartOffset),
                         prefixLen: last.tagLen
                     });
                 }
@@ -160,9 +160,7 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     if (candidates.length === 0) return null;
 
     return candidates.reduce((prev, curr) => {
-        const prevLen = document.offsetAt(prev.range.end) - document.offsetAt(prev.range.start);
-        const currLen = document.offsetAt(curr.range.end) - document.offsetAt(curr.range.start);
-        return currLen < prevLen ? curr : prev;
+        return curr.text.length < prev.text.length ? curr : prev;
     });
 }
 

@@ -3,8 +3,39 @@ import { findMathAtPos } from './latexParser';
 
 export class MacroManager {
     private static readonly STORAGE_KEY = 'tex-machina.macros';
+    private cachedContexts: { name: string, regex: RegExp, scope: string }[] = [];
 
-    constructor(private context: vscode.ExtensionContext) {}
+    constructor(private context: vscode.ExtensionContext) {
+        this.loadConfig();
+        // 설정 변경 감지 시 캐시 갱신
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration(e => {
+                if (e.affectsConfiguration('tex-machina.macros.customContexts')) {
+                    this.loadConfig();
+                }
+            })
+        );
+    }
+
+    /**
+     * 설정을 로드하고 정규표현식을 미리 컴파일하여 캐싱합니다.
+     */
+    private loadConfig(): void {
+        const config = vscode.workspace.getConfiguration('tex-machina');
+        const customContexts = config.get<any[]>('macros.customContexts', []);
+        this.cachedContexts = customContexts.map(ctx => {
+            try {
+                return {
+                    name: ctx.name,
+                    regex: new RegExp(ctx.regex),
+                    scope: ctx.scope
+                };
+            } catch (e) {
+                console.error(`Invalid regex in macro context '${ctx.name}': ${ctx.regex}`);
+                return null;
+            }
+        }).filter((ctx): ctx is { name: string, regex: RegExp, scope: string } => ctx !== null);
+    }
 
     /**
      * 저장된 모든 매크로를 가져옵니다.
@@ -61,21 +92,17 @@ export class MacroManager {
                     if (macros[contextName]) { return macros[contextName]; }
                 }
 
-                // 2. 사용자 정의 컨텍스트 (정규표현식 감지)
-                const config = vscode.workspace.getConfiguration('tex-machina');
-                const customContexts = config.get<any[]>('macros.customContexts', []);
-                
-                for (const ctx of customContexts) {
-                    const regex = new RegExp(ctx.regex);
+                // 2. 사용자 정의 컨텍스트 (캐싱된 정규표현식 사용)
+                for (const ctx of this.cachedContexts) {
                     const lineText = editor.document.lineAt(editor.selection.active.line).text;
                     const checkText = (ctx.scope === 'around') 
                         ? editor.document.getText(new vscode.Range(
-                            editor.selection.active.translate(-2), 
-                            editor.selection.active.translate(2)
+                            editor.selection.active.translate(0, -Math.min(editor.selection.active.character, 2)), 
+                            editor.selection.active.translate(0, 2)
                           ))
                         : lineText;
 
-                    if (regex.test(checkText)) {
+                    if (ctx.regex.test(checkText)) {
                         contextName = `${name}:${ctx.name}`;
                         if (macros[contextName]) { return macros[contextName]; }
                     }

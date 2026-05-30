@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { spawn, ChildProcess } from 'child_process';
+import * as crypto from 'crypto';
 
 export class PythonService {
     private pythonProcess: ChildProcess | null = null;
-    private responseResolver: ((response: any) => void) | null = null;
+    private resolvers: Map<string, (response: any) => void> = new Map();
     private stdoutBuffer: string = "";
 
     constructor(private context: vscode.ExtensionContext) {}
@@ -52,10 +53,14 @@ export class PythonService {
             if (!line.trim()) { continue; }
             try {
                 const response = JSON.parse(line);
-                if (this.responseResolver) {
-                    const resolve = this.responseResolver;
-                    this.responseResolver = null;
-                    resolve(response);
+                const requestId = response.requestId;
+                
+                if (requestId && this.resolvers.has(requestId)) {
+                    const resolve = this.resolvers.get(requestId);
+                    this.resolvers.delete(requestId);
+                    if (resolve) {
+                        resolve(response);
+                    }
                 } else {
                     this.emitResponse(response);
                 }
@@ -90,7 +95,11 @@ export class PythonService {
                 resolve({ status: 'error', message: 'Python process is not running' });
                 return;
             }
-            this.responseResolver = resolve;
+            
+            const requestId = crypto.randomUUID();
+            payload.requestId = requestId;
+            this.resolvers.set(requestId, resolve);
+            
             this.pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
         });
     }
