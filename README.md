@@ -59,7 +59,7 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 - 첨가 행렬 (`/ aug=n`): 특정 열 뒤에 수직선(`|`)을 추가하여 첨가 행렬(Augmented Matrix)을 만듭니다.
   - 예: `matrix > 1,0,5 / 0,1,2 / aug=2` (2열 뒤에 구분선 추가)
 
-#### 4. 인터랙티브 행렬 리사이저 (Matrix Resizer)
+#### 4. 행렬 리사이저
 작성된 행렬의 구조를 직관적으로 변경할 수 있습니다.
 - 실행 방식: 행렬 코드 내부에 커서를 두고 `Alt + L M` (macOS: `Option + L M`)을 입력하거나, `Ctrl + .` (Quick Fix) 메뉴를 엽니다.
 - 제공 기능:
@@ -186,14 +186,13 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 > *   `\begin{document}` → `Enter` → `\begin{itemize}` → `Enter` → 두 단계 들여쓰기
 > *   단축키: `Enter`
 
-### 외부 데이터 붙여넣기 (Paste External Data)
-엑셀, 구글 시트, Numbers, CSV 파일 등 외부 프로그램에서 복사한 셀 데이터를 에디터에 붙여넣으면 자동으로 `&`와 `\\`가 적용된 LaTeX 행렬(`matrix`) 또는 표(`tabular`) 코드로 변환합니다. 외부 데이터를 LaTeX 표/행렬로 옮기는 고통스러운 수작업을 없애줍니다.
+### 외부 데이터 붙여넣기
+엑셀, 구글 시트, Numbers, CSV 파일 등 외부 프로그램에서 복사한 셀 데이터를 에디터에 붙여넣으면 자동으로 `&`와 `\\`가 적용된 LaTeX 행렬(`matrix`) 또는 표(`tabular`) 코드로 변환합니다.
 
 #### 작동 방식
 확장은 VS Code의 기본 붙여넣기 메뉴(`Ctrl+V`)에 "Paste as LaTeX Matrix/Table" 옵션을 주입합니다. 엑셀에서 복사한 데이터를 에디터에 붙여넣으면, VS Code의 네이티브 붙여넣기 메뉴에 "Paste as LaTeX Tabular" 또는 "Paste as LaTeX Matrix"가 추가됩니다.
 
-#### 스마트 붙여넣기 (`Ctrl+Shift+V` / `Cmd+Shift+V`)
-Smart Paste 명령어는 커서 위치에 따라 자동으로 최적의 형식을 선택합니다:
+> `Ctrl+Shift+V` (`Cmd+Shift+V`)를 사용하여 더 세세하게 조정한 후 데이터를 삽입할 수도 있습니다.;
 *   수식 환경 내부 (`$...$`, `\[...\]`, `equation`, `align` 등) → 자동으로 `\begin{bmatrix}` (또는 설정한 행렬 환경) 삽입
 *   일반 텍스트 영역 → 자동으로 `\begin{tabular}` (또는 Booktabs 스타일) 삽입
 *   구분자 자동 감지: 탭(TSV), 쉼표(CSV), 세미콜론, 연속 공백을 자동으로 인식하여 열을 분리합니다.
@@ -249,7 +248,7 @@ Smart Paste 명령어는 커서 위치에 따라 자동으로 최적의 형식�
 *   체이닝 지원: 여러 명령어를 `&&`로 묶어 하나의 매크로로 등록하고 `;이름` 만으로 즉시 실행할 수 있습니다.
 *   CLI 기반 정의: `define:명령어체인>:매크로이름` 구문을 통해 명령줄에서 즉시 매크로를 생성합니다.
 
-### 지능형 편집 보조
+### 기타 기능
 - 마크다운 문법 지원 : 다음과 같이 마크다운 문법을 latex에서 바로 사용할 수 있습니다.
   - `#제목#` + 스페이스 → \section{제목}
   - `##제목##` + 스페이스 → \subsection{제목}
@@ -282,7 +281,7 @@ Smart Paste 명령어는 커서 위치에 따라 자동으로 최적의 형식�
 ## Keybindings
 
 | 기능 | Windows/Linux | macOS | 설명 |
-| :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- |w
 | 최근 기호 팝업 | `Alt + Q` | `Alt + Q` | 자주 쓰는 기호 자동완성 띄움 |
 | 선택 영역 확장 | `Shift + Alt + →` | `Shift + Alt + →` | 수학적 계층 단위로 선택 확장 |
 | 선택 영역 축소 | `Shift + Alt + ←` | `Shift + Alt + ←` | 수학적 계층 단위로 선택 축소 |
@@ -307,13 +306,10 @@ Smart Paste 명령어는 커서 위치에 따라 자동으로 최적의 형식�
 | 인자 간 전환 (이전) | `Shift+Tab` | `Shift+Tab` | 명령어 괄호 인자 간 이전 이동 |
 
 ## Installation & Setup 
-
-### 필수 요구 사항
-- Python 3.x: 수치 연산과 지능형 엔진 구동을 위해 필수적입니다.
+### 요구 사항
+- Python 3.x: 파이썬으로 구현된 기능을 실행하기 위해 필요합니다.
 - 필수 패키지 설치:
   ```bash
   pip install sympy numpy scipy matplotlib
   ```
-### 설치 방법
-1. VS Code 확장 마켓플레이스에서 `TeX-Machina`를 검색하여 설치합니다.
-2. `.tex` 파일을 열고 `ctrl+shift+;` (macOS: `cmd+shift+;`)를 눌러 명령줄(CLI)이 뜨는지 확인하세요.
+
