@@ -8,17 +8,20 @@ export class PythonService {
 
     constructor(private context: vscode.ExtensionContext) {}
 
-    public start(): void {
+    public async start(): Promise<void> {
         const isWindows = process.platform === 'win32';
         const venvPath = isWindows 
             ? this.context.asAbsolutePath('venv/Scripts/python.exe')
             : this.context.asAbsolutePath('venv/bin/python3');
         
         // venv가 존재하면 우선적으로 사용하고, 아니면 시스템 python 사용
-        const fs = require('fs');
+        const fsPromises = require('fs').promises;
         let pythonCommand = process.platform === 'darwin' ? 'python3' : 'python';
-        if (fs.existsSync(venvPath)) {
+        try {
+            await fsPromises.access(venvPath);
             pythonCommand = venvPath;
+        } catch (e) {
+            // venv does not exist or is not accessible
         }
 
         const serverPath = this.context.asAbsolutePath('python_backend/server.py');

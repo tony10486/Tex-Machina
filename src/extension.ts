@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { parseUserCommand, splitChain } from './core/commandParser';
 import { TeXMachinaWebviewProvider } from './ui/webviewProvider';
@@ -127,11 +127,11 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
     }
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
 
     pythonService = new PythonService(context);
-    pythonService.start();
+    await pythonService.start();
 
     registerImplicitSubscripts();
     registerToggleMode(context);
@@ -524,8 +524,8 @@ export function activate(context: vscode.ExtensionContext) {
         const filename = `plot_3d_${timestamp}.${ext}`;
         const exportPath = path.join(imagesDir, filename);
         try {
-            if (!fs.existsSync(imagesDir)) { fs.mkdirSync(imagesDir, { recursive: true }); }
-            fs.writeFileSync(exportPath, buffer);
+            await fsPromises.mkdir(imagesDir, { recursive: true });
+            await fsPromises.writeFile(exportPath, buffer);
             const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
             await currentEditor.edit(editBuilder => {
                 if (currentSelection) { editBuilder.replace(currentSelection, figureCode); }
@@ -600,12 +600,15 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                 const editor = vscode.window.activeTextEditor;
                 if (editor) {
                     const texDir = path.dirname(editor.document.uri.fsPath);
-                    const files = fs.readdirSync(texDir);
+                    const files = await fsPromises.readdir(texDir);
                     let bibFile = files.find(f => f.endsWith('.bib')) || 'references.bib';
                     const bibPath = path.join(texDir, bibFile);
-                    let content = fs.existsSync(bibPath) ? fs.readFileSync(bibPath, 'utf8') : "";
+                    let content = "";
+                    try {
+                        content = await fsPromises.readFile(bibPath, 'utf8');
+                    } catch (err) {}
                     if (!content.includes(response.cite_key)) {
-                        fs.appendFileSync(bibPath, `\n\n${response.bibtex}`);
+                        await fsPromises.appendFile(bibPath, `\n\n${response.bibtex}`);
                         vscode.window.showInformationMessage(`BibTeX이 ${bibFile}에 추가되었습니다.`);
                     } else { vscode.window.showInformationMessage(`이미 존재하는 인용 키입니다: ${response.cite_key}`); }
                     await editor.edit(editBuilder => { editBuilder.insert(editor.selection.active, `\\cite{${response.cite_key}}`); });
@@ -623,8 +626,8 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                     const filename = `plot_3d.${ext}`;
                     const exportPath = path.join(imagesDir, filename);
                     try {
-                        if (!fs.existsSync(imagesDir)) { fs.mkdirSync(imagesDir, { recursive: true }); }
-                        fs.writeFileSync(exportPath, exportBuffer);
+                        await fsPromises.mkdir(imagesDir, { recursive: true });
+                        await fsPromises.writeFile(exportPath, exportBuffer);
                         const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
                         await currentEditor.edit(editBuilder => { editBuilder.replace(currentSelection!, figureCode); });                                    
                         vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
@@ -639,7 +642,10 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                         const dataDir = path.join(texDir, 'data');
                         const datFilename = response.dat_filename || 'plot_data.dat';
                         const datPath = path.join(dataDir, datFilename);
-                        try { if (!fs.existsSync(dataDir)) { fs.mkdirSync(dataDir, { recursive: true }); } fs.writeFileSync(datPath, response.dat_content); } catch (err: any) { vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`); }
+                        try { 
+                            await fsPromises.mkdir(dataDir, { recursive: true }); 
+                            await fsPromises.writeFile(datPath, response.dat_content); 
+                        } catch (err: any) { vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`); }
                     }
                     if (currentMainCommand === "matrix") { outputText = resultLatex; }
                     else if (currentMainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : currentOriginalText; }

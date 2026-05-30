@@ -12,13 +12,15 @@ export interface MathEnvironment {
 /**
  * Finds the innermost LaTeX environment at the given position.
  * Handles nested environments correctly by finding the tightest pair of \begin and \end.
+ * Improved to skip comments, verbatim environments, and handle whitespace/different math modes.
  */
 export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode.Position): MathEnvironment | null {
     const offset = document.offsetAt(pos);
     const lineCount = document.lineCount;
     
-    const startLine = Math.max(0, pos.line - 100);
-    const endLine = Math.min(lineCount - 1, pos.line + 100);
+    // Search a reasonable window around the cursor
+    const startLine = Math.max(0, pos.line - 150);
+    const endLine = Math.min(lineCount - 1, pos.line + 150);
     
     const rangeToSearch = new vscode.Range(
         new vscode.Position(startLine, 0),
@@ -27,54 +29,117 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     const text = document.getText(rangeToSearch);
     const searchStartOffset = document.offsetAt(rangeToSearch.start);
 
-    const boundaryRegex = /\\begin\{([a-zA-Z]+\*?)\}|\\end\{([a-zA-Z]+\*?)\}|\$\$|(?<!\\)\$|\\\[|\\\]/g;
+    // Boundary regex for environments and math modes
+    // Handle whitespace in \begin{...} and \end{...}
+    // Handle $$, $, \[, \], \(, \)
+    const boundaryRegex = /\\begin\s*\{([^}]+)\}|\\end\s*\{([^}]+)\}|\$\$|(?<!\\)\$|\\\[|\\\]|\\\(|\\\)/g;
     
     const stack: { type: string, start: number, envName?: string, tagLen: number }[] = [];
     const candidates: MathEnvironment[] = [];
 
+    // Pre-calculate comment and verbatim ranges to skip
+    const skipRanges: { start: number, end: number }[] = [];
+    
+    // Find comments: % to end of line, but not escaped \%
+    const commentRegex = /%/g;
     let match: RegExpExecArray | null;
+    while ((match = commentRegex.exec(text)) !== null) {
+        let backslashCount = 0;
+        for (let i = match.index - 1; i >= 0; i--) {
+            if (text[i] === '\\') backslashCount++;
+            else break;
+        }
+        if (backslashCount % 2 === 0) {
+            const lineEnd = text.indexOf('\n', match.index);
+            const end = lineEnd === -1 ? text.length : lineEnd;
+            skipRanges.push({ start: match.index, end: end });
+            commentRegex.lastIndex = end;
+        }
+    }
+
+    // Find verbatim environments
+    const verbatimRegex = /\\begin\s*\{(verbatim|lstlisting|minted|comment|code)\}[\s\S]*?\\end\s*\{\1\}/g;
+    while ((match = verbatimRegex.exec(text)) !== null) {
+        skipRanges.push({ start: match.index, end: match.index + match[0].length });
+    }
+
+    // Find \verb commands
+    const verbRegex = /\\verb([^\s])[\s\S]*?\1/g;
+    while ((match = verbRegex.exec(text)) !== null) {
+        skipRanges.push({ start: match.index, end: match.index + match[0].length });
+    }
+
+    const isSkipped = (idx: number) => {
+        return skipRanges.some(r => idx >= r.start && idx < r.end);
+    };
+
+    boundaryRegex.lastIndex = 0;
     while ((match = boundaryRegex.exec(text)) !== null) {
+        if (isSkipped(match.index)) continue;
+
         const m = match[0];
         const posInDoc = searchStartOffset + match.index;
 
         if (m.startsWith('\\begin')) {
-            stack.push({ type: 'begin', start: posInDoc, envName: match[1], tagLen: m.length });
+            const envName = (match[1] || '').replace(/\s+/g, ' ').trim();
+            stack.push({ type: 'begin', start: posInDoc, envName, tagLen: m.length });
         } else if (m.startsWith('\\end')) {
-            const currentEndName = match[2];
+            const currentEndName = (match[2] || '').replace(/\s+/g, ' ').trim();
             const lastIdx = stack.map(s => s.envName).lastIndexOf(currentEndName);
             if (lastIdx !== -1) {
                 const last = stack.splice(lastIdx, 1)[0];
                 const endPos = posInDoc + m.length;
                 if (offset >= last.start && offset <= endPos) {
-                    candidates.push({
-                        range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
-                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
-                        type: 'equation',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
-                        envName: last.envName,
-                        prefixLen: last.tagLen
-                    });
+                    // Only treat as math if it's a known math environment
+                    const mathEnvs = [
+                        'equation', 'equation*', 'equation *',
+                        'align', 'align*', 'align *',
+                        'gather', 'gather*', 'gather *',
+                        'multline', 'multline*', 'multline *',
+                        'flalign', 'flalign*', 'flalign *',
+                        'alignat', 'alignat*', 'alignat *',
+                        'displaymath'
+                    ];
+                    if (mathEnvs.includes(last.envName!)) {
+                        candidates.push({
+                            range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
+                            text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                            type: 'equation',
+                            content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                            envName: last.envName,
+                            prefixLen: last.tagLen
+                        });
+                    }
                 }
             }
-        } else if (m === '$$' || m === '\\[' || m === '$') {
+        } else if (m === '$$' || m === '\\[' || m === '$' || m === '\\(') {
+            const closeTag = m === '$$' ? '$$' : (m === '\\[' ? '\\]' : (m === '$' ? '$' : '\\)'));
             const existingIdx = stack.findIndex(s => s.type === m);
-            if (existingIdx !== -1) {
-                const last = stack.splice(existingIdx, 1)[0];
-                const endPos = posInDoc + m.length;
-                if (offset >= last.start && offset <= endPos) {
-                    candidates.push({
-                        range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
-                        text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
-                        type: m === '$' ? 'inline' : 'display',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
-                        prefixLen: last.tagLen
-                    });
+            
+            // If it's $, we need to be careful as it's the same for open/close
+            if (m === '$' || m === '$$') {
+                if (existingIdx !== -1) {
+                    const last = stack.splice(existingIdx, 1)[0];
+                    const endPos = posInDoc + m.length;
+                    if (offset >= last.start && offset <= endPos) {
+                        candidates.push({
+                            range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
+                            text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
+                            type: m === '$' ? 'inline' : 'display',
+                            content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                            prefixLen: last.tagLen
+                        });
+                    }
+                } else {
+                    stack.push({ type: m, start: posInDoc, tagLen: m.length });
                 }
             } else {
+                // For \[ and \(, we just push to stack and wait for \] and \)
                 stack.push({ type: m, start: posInDoc, tagLen: m.length });
             }
-        } else if (m === '\\]') {
-            const lastIdx = stack.findIndex(s => s.type === '\\[');
+        } else if (m === '\\]' || m === '\\)') {
+            const openTag = m === '\\]' ? '\\[' : '\\(';
+            const lastIdx = stack.map(s => s.type).lastIndexOf(openTag);
             if (lastIdx !== -1) {
                 const last = stack.splice(lastIdx, 1)[0];
                 const endPos = posInDoc + m.length;
@@ -82,14 +147,15 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                     candidates.push({
                         range: new vscode.Range(document.positionAt(last.start), document.positionAt(endPos)),
                         text: document.getText(new vscode.Range(document.positionAt(last.start), document.positionAt(endPos))),
-                        type: 'display',
-                        content: document.getText(new vscode.Range(document.positionAt(last.start + 2), document.positionAt(posInDoc))),
-                        prefixLen: 2
+                        type: openTag === '\\[' ? 'display' : 'inline',
+                        content: document.getText(new vscode.Range(document.positionAt(last.start + last.tagLen), document.positionAt(posInDoc))),
+                        prefixLen: last.tagLen
                     });
                 }
             }
         }
     }
+
 
     if (candidates.length === 0) return null;
 
@@ -136,23 +202,108 @@ export function splitTopLevel(text: string, delimiter: string): string[] {
 /**
  * Finds a LaTeX command starting at the given position on the same line.
  * Optimized to only look at the current line.
+ * Uses a manual scan to avoid ReDoS and support nested braces.
  */
 export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
     const lineText = document.lineAt(pos.line).text;
     const restOfLine = lineText.substring(pos.character);
 
-    // Match \command followed by optional arguments like [], {}, _{}, ^{}
-    const commandRegex = /^\\[a-zA-Z]+\*?(?:\s*(?:\[[^\]]*\]|\{[^\}]*\}|_[^ \t\r\n{}]|_\s*\{[^\}]*\}|\^[^ \t\r\n{}]|\^\s*\{[^\}]*\}))*/;
-    const match = restOfLine.match(commandRegex);
-
-    if (match) {
-        return {
-            range: new vscode.Range(pos, pos.translate(0, match[0].length)),
-            text: match[0]
-        };
+    if (!restOfLine.startsWith('\\')) {
+        return null;
     }
-    return null;
+
+    let i = 1; // skip backslash
+    // Match command name: [a-zA-Z]+
+    while (i < restOfLine.length && /[a-zA-Z]/.test(restOfLine[i])) {
+        i++;
+    }
+    // Optional asterisk
+    if (i < restOfLine.length && restOfLine[i] === '*') {
+        i++;
+    }
+
+    // Match optional arguments like [], {}, _{}, ^{}
+    while (i < restOfLine.length) {
+        let j = i;
+        // Skip whitespace before argument
+        while (j < restOfLine.length && /\s/.test(restOfLine[j])) {
+            j++;
+        }
+
+        if (j >= restOfLine.length) {
+            break;
+        }
+
+        const char = restOfLine[j];
+        if (char === '[') {
+            const end = findClosingBracket(restOfLine, j, '[', ']');
+            if (end !== -1) {
+                i = end + 1;
+                continue;
+            }
+        } else if (char === '{') {
+            const end = findClosingBracket(restOfLine, j, '{', '}');
+            if (end !== -1) {
+                i = end + 1;
+                continue;
+            }
+        } else if (char === '_' || char === '^') {
+            let k = j + 1;
+            // Skip whitespace after _ or ^ to look for {
+            while (k < restOfLine.length && /\s/.test(restOfLine[k])) {
+                k++;
+            }
+            if (k < restOfLine.length && restOfLine[k] === '{') {
+                const end = findClosingBracket(restOfLine, k, '{', '}');
+                if (end !== -1) {
+                    i = end + 1;
+                    continue;
+                }
+            } else {
+                // If no {, check if there was an immediate character (no spaces allowed for single char arg)
+                const immediateChar = restOfLine[j + 1];
+                if (immediateChar && !/[\s{}]/.test(immediateChar)) {
+                    i = j + 2;
+                    continue;
+                }
+            }
+        }
+        break; // No more arguments matched
+    }
+
+    const commandText = restOfLine.substring(0, i);
+    if (commandText === '\\') {
+        return null;
+    }
+
+    return {
+        range: new vscode.Range(pos, pos.translate(0, i)),
+        text: commandText
+    };
 }
+
+/**
+ * Finds the index of the matching closing bracket, handling nested brackets and escaped characters.
+ */
+function findClosingBracket(text: string, start: number, open: string, close: string): number {
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+        if (text[i] === '\\' && i + 1 < text.length) {
+            i++;
+            continue;
+        }
+        if (text[i] === open) {
+            depth++;
+        } else if (text[i] === close) {
+            depth--;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
 
 /**
  * Checks if a LaTeX command structure is "empty" (only whitespace or delimiters in arguments).

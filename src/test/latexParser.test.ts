@@ -72,4 +72,59 @@ suite('LaTeX Parser Test Suite', () => {
     test('isCommandEmpty: should NOT treat simple macros as structures to delete', () => {
         assert.strictEqual(isCommandEmpty('\\alpha'), false);
     });
+
+    test('findCommandAtCursor: should handle nested braces', async () => {
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\cmd{a{b}c}' });
+        const pos = new vscode.Position(0, 0);
+        const cmd = findCommandAtCursor(doc, pos);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\cmd{a{b}c}');
+    });
+
+    test('findCommandAtCursor: should handle escaped braces', async () => {
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\cmd{a\\}b}' });
+        const pos = new vscode.Position(0, 0);
+        const cmd = findCommandAtCursor(doc, pos);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\cmd{a\\}b}');
+    });
+
+    test('findCommandAtCursor: should handle subscripts and superscripts with braces', async () => {
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\sum_{i=1}^{n}' });
+        const pos = new vscode.Position(0, 0);
+        const cmd = findCommandAtCursor(doc, pos);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\sum_{i=1}^{n}');
+    });
+
+    test('findCommandAtCursor: should handle single character sub/superscripts', async () => {
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\sum_i^n' });
+        const pos = new vscode.Position(0, 0);
+        const cmd = findCommandAtCursor(doc, pos);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\sum_i^n');
+    });
+
+    test('findCommandAtCursor: should be robust against unclosed braces (no ReDoS)', async () => {
+        const longUnclosed = '\\cmd' + '{'.repeat(1000);
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: longUnclosed });
+        const pos = new vscode.Position(0, 0);
+        
+        const startTime = Date.now();
+        const cmd = findCommandAtCursor(doc, pos);
+        const duration = Date.now() - startTime;
+        
+        assert.ok(duration < 100, `Parsing took too long: ${duration}ms`);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\cmd'); // Should stop at unclosed brace
+    });
+
+    test('findCommandAtCursor: should handle spaces before arguments', async () => {
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '\\cmd  [opt] {arg}' });
+        const pos = new vscode.Position(0, 0);
+        const cmd = findCommandAtCursor(doc, pos);
+        assert.ok(cmd);
+        assert.strictEqual(cmd!.text, '\\cmd  [opt] {arg}');
+    });
 });
+
