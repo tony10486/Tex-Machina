@@ -13,7 +13,11 @@ export function registerLinkedEditing(context: vscode.ExtensionContext) {
     const provider = vscode.languages.registerLinkedEditingRangeProvider(
         'latex',
         {
-            provideLinkedEditingRanges(document: vscode.TextDocument, position: vscode.Position) {
+            async provideLinkedEditingRanges(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken) {
+                // Debounce to prevent heavy parsing during rapid cursor movement
+                await new Promise(resolve => setTimeout(resolve, 50));
+                if (token.isCancellationRequested) return undefined;
+
                 // Check if Environment Linked Editing is enabled
                 const config = vscode.workspace.getConfiguration('tex-machina');
                 const envEnabled = config.get<boolean>('linkedEditing.enabled', true);
@@ -23,6 +27,8 @@ export function registerLinkedEditing(context: vscode.ExtensionContext) {
                     const envRanges = getEnvLinkedRanges(document, position);
                     if (envRanges) return envRanges;
                 }
+
+                if (token.isCancellationRequested) return undefined;
 
                 // 2. Check for Mathematical Variables (Only when Toggle Mode is Active)
                 if (isSubscriptToggleActive()) {

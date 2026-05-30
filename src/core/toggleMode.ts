@@ -98,8 +98,9 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
     );
 
     // 3. Listen to text changes and delegate to registered features
+    let textChangeTimeout: NodeJS.Timeout | undefined;
     context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
+        vscode.workspace.onDidChangeTextDocument((event) => {
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.document !== event.document) {
                 return;
@@ -110,51 +111,64 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // Execute all active registered toggle features
-            for (const feature of registeredFeatures) {
-                if (!feature.onTextChange) {
-                    continue;
-                }
+            if (textChangeTimeout) {
+                clearTimeout(textChangeTimeout);
+            }
 
-                // A feature runs if it's globally enabled OR if it's active in the current toggle profile
-                const config = vscode.workspace.getConfiguration('tex-machina');
-                const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+            textChangeTimeout = setTimeout(async () => {
+                // Execute all active registered toggle features
+                for (const feature of registeredFeatures) {
+                    if (!feature.onTextChange) {
+                        continue;
+                    }
 
-                if (isGloballyEnabled || isFeatureActive(feature.name)) {
-                    try {
-                        await feature.onTextChange(event, editor);
-                    } catch (e) {
-                        console.error(`Error in toggle feature ${feature.name}:`, e);
+                    // A feature runs if it's globally enabled OR if it's active in the current toggle profile
+                    const config = vscode.workspace.getConfiguration('tex-machina');
+                    const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+
+                    if (isGloballyEnabled || isFeatureActive(feature.name)) {
+                        try {
+                            await feature.onTextChange(event, editor);
+                        } catch (e) {
+                            console.error(`Error in toggle feature ${feature.name}:`, e);
+                        }
                     }
                 }
-            }
+            }, 50);
         })
     );
 
     // 4. Listen to selection changes and delegate to registered features
+    let selectionChangeTimeout: NodeJS.Timeout | undefined;
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection(async (event) => {
+        vscode.window.onDidChangeTextEditorSelection((event) => {
             const editor = event.textEditor;
             if (editor.document.languageId !== 'latex') {
                 return;
             }
 
-            for (const feature of registeredFeatures) {
-                if (!feature.onSelectionChange) {
-                    continue;
-                }
+            if (selectionChangeTimeout) {
+                clearTimeout(selectionChangeTimeout);
+            }
 
-                const config = vscode.workspace.getConfiguration('tex-machina');
-                const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+            selectionChangeTimeout = setTimeout(async () => {
+                for (const feature of registeredFeatures) {
+                    if (!feature.onSelectionChange) {
+                        continue;
+                    }
 
-                if (isGloballyEnabled || isFeatureActive(feature.name)) {
-                    try {
-                        await feature.onSelectionChange(event, editor);
-                    } catch (e) {
-                        console.error(`Error in toggle feature ${feature.name}:`, e);
+                    const config = vscode.workspace.getConfiguration('tex-machina');
+                    const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+
+                    if (isGloballyEnabled || isFeatureActive(feature.name)) {
+                        try {
+                            await feature.onSelectionChange(event, editor);
+                        } catch (e) {
+                            console.error(`Error in toggle feature ${feature.name}:`, e);
+                        }
                     }
                 }
-            }
+            }, 50);
         })
     );
 }
