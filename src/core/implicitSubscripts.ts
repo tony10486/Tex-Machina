@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { registerToggleFeature } from './toggleMode';
+import { findMathAtPos, isInsideComment, isInsideVerbatim } from './latexParser';
 
 export function registerImplicitSubscripts() {
     registerToggleFeature({
@@ -11,14 +12,23 @@ export function registerImplicitSubscripts() {
                     continue;
                 }
 
-                const line = change.range.start.line;
-                if (line >= editor.document.lineCount) {
+                const pos = change.range.start;
+                const document = editor.document;
+
+                // Performance & Context check: 
+                // We must skip comments and verbatim environments.
+                if (isInsideComment(document, pos) || isInsideVerbatim(document, pos)) {
                     continue;
                 }
 
-                const lineText = editor.document.lineAt(line).text;
+                const line = pos.line;
+                if (line >= document.lineCount) {
+                    continue;
+                }
+
+                const lineText = document.lineAt(line).text;
                 // Index after the newly typed digit is inserted
-                const charOffsetAfter = change.range.start.character + 1;
+                const charOffsetAfter = pos.character + 1;
                 if (charOffsetAfter <= 1) {
                     continue;
                 }

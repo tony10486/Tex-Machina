@@ -7,26 +7,33 @@ import { findMathAtPos } from './latexParser';
  * when pressing Enter within certain LaTeX environments.
  */
 
-const ENV_AUTO_INSERT: Record<string, string> = {
-    'align': '\\\\\n    & ',
-    'align*': '\\\\\n    & ',
-    'alignat': '\\\\\n    & ',
-    'alignat*': '\\\\\n    & ',
-    'flalign': '\\\\\n    & ',
-    'flalign*': '\\\\\n    & ',
-    'gather': '\\\\\n    ',
-    'gather*': '\\\\\n    ',
-    'multline': '\\\\\n    ',
-    'multline*': '\\\\\n    ',
-    'equation': '\\\\\n    ',
-    'equation*': '\\\\\n    ',
-    'matrix': '\\\\\n    ',
-    'pmatrix': '\\\\\n    ',
-    'bmatrix': '\\\\\n    ',
-    'vmatrix': '\\\\\n    ',
-    'Vmatrix': '\\\\\n    ',
-    'cases': '\\\\\n    & ',
+// Environments that support multi-line structures (allow \\)
+// Value indicates whether to include an ampersand (&) for alignment.
+const ENV_CONFIG: Record<string, { ampersand: boolean }> = {
+    'align': { ampersand: true },
+    'align*': { ampersand: true },
+    'alignat': { ampersand: true },
+    'alignat*': { ampersand: true },
+    'flalign': { ampersand: true },
+    'flalign*': { ampersand: true },
+    'gather': { ampersand: false },
+    'gather*': { ampersand: false },
+    'multline': { ampersand: false },
+    'multline*': { ampersand: false },
+    // equation and equation* are single-line environments and DO NOT allow \\.
+    'matrix': { ampersand: false },
+    'pmatrix': { ampersand: false },
+    'bmatrix': { ampersand: false },
+    'vmatrix': { ampersand: false },
+    'Vmatrix': { ampersand: false },
+    'cases': { ampersand: true },
 };
+
+function getIndentation(editor: vscode.TextEditor): string {
+    const tabSize = Number(editor.options.tabSize) || 4;
+    const insertSpaces = editor.options.insertSpaces;
+    return insertSpaces ? ' '.repeat(tabSize) : '\t';
+}
 
 export function registerSmartNewline(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('tex-machina.smartNewline', async () => {
@@ -53,18 +60,19 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
         }
 
         // 2. Identify the specific environment name
-        // regex to match \begin{envname}
         const beginMatch = mathEnv.text.match(/^\\begin\{([^}]+)\}/);
         if (!beginMatch) {
-            // Probably inline math $...$ or \[...\]
             await vscode.commands.executeCommand('type', { source: 'keyboard', text: '\n' });
             return;
         }
 
         const envName = beginMatch[1];
-        const insertText = ENV_AUTO_INSERT[envName];
+        const envConfig = ENV_CONFIG[envName];
 
-        if (insertText) {
+        if (envConfig) {
+            const indent = getIndentation(editor);
+            const insertText = envConfig.ampersand ? `\\\\\n${indent}& ` : `\\\\\n${indent}`;
+            
             // Check if the current line already ends with \\ to avoid duplication
             const line = document.lineAt(pos.line).text;
             const textBeforeCursor = line.substring(0, pos.character).trim();

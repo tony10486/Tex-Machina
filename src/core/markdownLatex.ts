@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { registerToggleFeature } from './toggleMode';
+import { isInsideComment, isInsideVerbatim } from './latexParser';
 
 export function registerMarkdownLatex(context: vscode.ExtensionContext) {
     registerToggleFeature({
@@ -16,6 +17,12 @@ export function registerMarkdownLatex(context: vscode.ExtensionContext) {
                 const charOffsetAfter = change.range.start.character + 1;
                 const lineText = editor.document.lineAt(line).text;
                 const textBeforeSpace = lineText.substring(0, charOffsetAfter);
+                const pos = change.range.start;
+
+                // Check if we are inside a comment or verbatim environment
+                if (isInsideComment(editor.document, pos) || isInsideVerbatim(editor.document, pos)) {
+                    continue;
+                }
 
                 // 1. Check for Bold: **text** followed by space
                 const boldRegex = /\*\*([^*]+)\*\* $/;

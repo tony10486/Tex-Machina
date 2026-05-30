@@ -10,11 +10,72 @@ export interface MathEnvironment {
 }
 
 /**
+ * Checks if the given position is inside a LaTeX comment.
+ */
+export function isInsideComment(document: vscode.TextDocument, pos: vscode.Position): boolean {
+    const lineText = document.lineAt(pos.line).text;
+    const textBefore = lineText.substring(0, pos.character);
+    
+    // Find unescaped %
+    let i = 0;
+    while (i < textBefore.length) {
+        const char = textBefore[i];
+        if (char === '%') {
+            let backslashCount = 0;
+            for (let j = i - 1; j >= 0; j--) {
+                if (textBefore[j] === '\\') backslashCount++;
+                else break;
+            }
+            if (backslashCount % 2 === 0) {
+                return true;
+            }
+        }
+        i++;
+    }
+    return false;
+}
+
+/**
+ * Checks if the given position is inside a verbatim-like environment or command.
+ */
+export function isInsideVerbatim(document: vscode.TextDocument, pos: vscode.Position): boolean {
+    const offset = document.offsetAt(pos);
+    const startLine = Math.max(0, pos.line - 150);
+    const endLine = Math.min(document.lineCount - 1, pos.line + 150);
+    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(endLine).text.length));
+    const text = document.getText(range);
+    const searchStartOffset = document.offsetAt(range.start);
+
+    // 1. Verbatim environments
+    const verbatimRegex = /\\begin\s*\{(verbatim|lstlisting|minted|comment|code)\}[\s\S]*?\\end\s*\{\1\}/g;
+    let match: RegExpExecArray | null;
+    while ((match = verbatimRegex.exec(text)) !== null) {
+        const start = searchStartOffset + match.index;
+        const end = start + match[0].length;
+        if (offset >= start && offset < end) return true;
+    }
+
+    // 2. \verb command
+    const verbRegex = /\\verb([^\s])[\s\S]*?\1/g;
+    while ((match = verbRegex.exec(text)) !== null) {
+        const start = searchStartOffset + match.index;
+        const end = start + match[0].length;
+        if (offset >= start && offset < end) return true;
+    }
+
+    return false;
+}
+
+/**
  * Finds the innermost LaTeX environment at the given position.
  * Handles nested environments correctly by finding the tightest pair of \begin and \end.
  * Improved to skip comments, verbatim environments, and handle whitespace/different math modes.
  */
 export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode.Position): MathEnvironment | null {
+    if (isInsideComment(document, pos) || isInsideVerbatim(document, pos)) {
+        return null;
+    }
+
     const offset = document.offsetAt(pos);
     const lineCount = document.lineCount;
     

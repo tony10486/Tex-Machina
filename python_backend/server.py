@@ -31,12 +31,16 @@ def main():
             from calc_engine import execute_calc
             result_json_str = execute_calc(line)
             
-            # result_json_str is already a JSON string from execute_calc
-            # We need to inject requestId if it's not already there
+            # If execute_calc returned a string that is already JSON, 
+            # and we have a requestId, ensure it's in that JSON.
             if request_id:
-                res_obj = json.loads(result_json_str)
-                res_obj['requestId'] = request_id
-                result_json_str = json.dumps(res_obj)
+                try:
+                    res_obj = json.loads(result_json_str)
+                    if isinstance(res_obj, dict):
+                        res_obj['requestId'] = request_id
+                        result_json_str = json.dumps(res_obj)
+                except:
+                    pass # Not JSON or not a dict, keep as is
             
             sys.stdout.write(result_json_str + '\n')
             sys.stdout.flush()

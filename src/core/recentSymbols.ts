@@ -4,11 +4,88 @@ import { findMathAtPos } from './latexParser';
 /**
  * [Recent Symbols]
  * Tracks and suggests frequently used LaTeX commands in the current document.
- * Triggered by Alt+Q to show a completion list.
+ * Performance optimized: Uses background caching and debounced scanning.
  */
 
+class SymbolFrequencyManager {
+    private frequencyCache = new Map<string, Map<string, number>>();
+    private scanTimers = new Map<string, NodeJS.Timeout>();
+    private excludeList = ['\\begin', '\\end', '\\label', '\\cite', '\\ref', '\\section', '\\subsection'];
+    private cmdRegex = /\\[a-zA-Z]+/g;
+
+    constructor() {
+        // Initial scan for all open LaTeX documents
+        vscode.workspace.textDocuments.forEach(doc => {
+            if (doc.languageId === 'latex') {
+                this.scanDocument(doc);
+            }
+        });
+    }
+
+    public getFrequencies(uri: string): Map<string, number> | undefined {
+        return this.frequencyCache.get(uri);
+    }
+
+    public requestScan(document: vscode.TextDocument) {
+        if (document.languageId !== 'latex') { return; }
+        
+        const uri = document.uri.toString();
+        if (this.scanTimers.has(uri)) {
+            clearTimeout(this.scanTimers.get(uri)!);
+        }
+
+        // Debounce scan to 500ms to avoid excessive overhead during typing
+        const timer = setTimeout(() => {
+            this.scanDocument(document);
+            this.scanTimers.delete(uri);
+        }, 500);
+
+        this.scanTimers.set(uri, timer);
+    }
+
+    private scanDocument(document: vscode.TextDocument) {
+        const text = document.getText();
+        const commandMap = new Map<string, number>();
+        
+        let match;
+        // Reset regex state
+        this.cmdRegex.lastIndex = 0;
+        
+        while ((match = this.cmdRegex.exec(text)) !== null) {
+            const cmd = match[0];
+            if (this.excludeList.includes(cmd)) { continue; }
+            commandMap.set(cmd, (commandMap.get(cmd) || 0) + 1);
+        }
+
+        this.frequencyCache.set(document.uri.toString(), commandMap);
+    }
+
+    public disposeDocument(uri: string) {
+        this.frequencyCache.delete(uri);
+        if (this.scanTimers.has(uri)) {
+            clearTimeout(this.scanTimers.get(uri)!);
+            this.scanTimers.delete(uri);
+        }
+    }
+}
+
 export function registerRecentSymbols(context: vscode.ExtensionContext) {
-    // 1. Completion Provider Registration
+    const manager = new SymbolFrequencyManager();
+
+    // 1. Listen for document changes to update cache
+    const changeListener = vscode.workspace.onDidChangeTextDocument(e => {
+        manager.requestScan(e.document);
+    });
+
+    const openListener = vscode.workspace.onDidOpenTextDocument(doc => {
+        manager.requestScan(doc);
+    });
+
+    const closeListener = vscode.workspace.onDidCloseTextDocument(doc => {
+        manager.disposeDocument(doc.uri.toString());
+    });
+
+    // 2. Completion Provider Registration
     const provider = vscode.languages.registerCompletionItemProvider(
         'latex',
         {
@@ -18,22 +95,12 @@ export function registerRecentSymbols(context: vscode.ExtensionContext) {
                     return undefined;
                 }
 
-                const text = document.getText();
-                const commandMap = new Map<string, number>();
-                
-                // Regex to find LaTeX commands like \alpha, \phi, etc.
-                // Exclude common structural commands to focus on symbols
-                const excludeList = ['\\begin', '\\end', '\\label', '\\cite', '\\ref', '\\section', '\\subsection'];
-                const cmdRegex = /\\[a-zA-Z]+/g;
-                let match;
-                
-                while ((match = cmdRegex.exec(text)) !== null) {
-                    const cmd = match[0];
-                    if (excludeList.includes(cmd)) { continue; }
-                    commandMap.set(cmd, (commandMap.get(cmd) || 0) + 1);
+                const commandMap = manager.getFrequencies(document.uri.toString());
+                if (!commandMap) {
+                    return undefined;
                 }
 
-                // Sort by frequency and take top 10
+                // Sort by frequency and take top 12
                 const sortedCommands = Array.from(commandMap.entries())
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 12);
@@ -41,13 +108,11 @@ export function registerRecentSymbols(context: vscode.ExtensionContext) {
                 return sortedCommands.map(([cmd, count], index) => {
                     const item = new vscode.CompletionItem(cmd, vscode.CompletionItemKind.Value);
                     item.detail = `최근 사용 (${count}회)`;
-                    item.sortText = `000${index}`; // Ensure they appear at the top
-                    item.insertText = cmd.startsWith('\\') ? cmd.substring(1) : cmd; // Handle \ prefixing if needed
+                    item.sortText = `000${index.toString().padStart(3, '0')}`; // Ensure they appear at the top
+                    item.insertText = cmd.startsWith('\\') ? cmd.substring(1) : cmd; 
                     
-                    // Add a filter text so it doesn't disappear if user types
                     item.filterText = cmd; 
                     
-                    // Better UX: replace the slash if the user already typed it
                     const line = document.lineAt(position.line).text;
                     const textBefore = line.substring(0, position.character);
                     if (textBefore.endsWith('\\')) {
@@ -78,5 +143,11 @@ export function registerRecentSymbols(context: vscode.ExtensionContext) {
         await vscode.commands.executeCommand('editor.action.triggerSuggest');
     });
 
-    context.subscriptions.push(provider, triggerCommand);
+    context.subscriptions.push(
+        provider, 
+        triggerCommand, 
+        changeListener, 
+        openListener, 
+        closeListener
+    );
 }

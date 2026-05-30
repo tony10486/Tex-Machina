@@ -75,6 +75,12 @@ function isMatrixLike(env: string): boolean {
     return matrixEnvs.includes(env.replace(/\*$/, ''));
 }
 
+function getIndentation(editor: vscode.TextEditor): string {
+    const tabSize = Number(editor.options.tabSize) || 4;
+    const insertSpaces = editor.options.insertSpaces;
+    return insertSpaces ? ' '.repeat(tabSize) : '\t';
+}
+
 async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' | 'addCol' | 'removeCol') {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
@@ -116,7 +122,8 @@ async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' 
     }
 
     // Reconstruct with consistent formatting (always end rows with \\ for clarity)
-    let newContent = '\n    ' + rows.join(' \\\\\n    ') + ' \\\\\n';
+    const indent = getIndentation(editor);
+    let newContent = `\n${indent}` + rows.join(` \\\\\n${indent}`) + ` \\\\\n`;
     const result = `${startTag}${newContent}${endTag}`;
 
     await editor.edit(editBuilder => {
