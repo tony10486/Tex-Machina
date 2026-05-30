@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import { findMathAtPos } from './latexParser';
 
+const TABLE_ENVS = new Set([
+    'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix', 'Bmatrix',
+    'tabular', 'tabular*', 'array',
+    'align', 'align*', 'gather', 'gather*', 'flalign', 'flalign*',
+    'alignat', 'alignat*', 'multline', 'multline*',
+    'cases', 'smallmatrix', 'subarray',
+]);
+
 const MATH_COMMANDS = new Set([
     '\\frac', '\\dfrac', '\\tfrac', '\\sqrt', '\\binom', '\\tbinom',
     '\\sum', '\\prod', '\\coprod', '\\int', '\\iint', '\\iiint', '\\oint',
@@ -99,6 +107,221 @@ function isLineCommented(lineText: string): boolean {
         return backslashCount % 2 === 0;
     }
     return false;
+}
+
+function isTableEnv(envName: string | undefined): boolean {
+    if (!envName) { return false; }
+    return TABLE_ENVS.has(envName.replace(/\*$/, '').replace(/ $/, ''));
+}
+
+function findTableEnvAtPos(document: vscode.TextDocument, pos: vscode.Position): vscode.Range | null {
+    const offset = document.offsetAt(pos);
+    const startLine = Math.max(0, pos.line - 50);
+    const endLine = Math.min(document.lineCount - 1, pos.line + 50);
+    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(endLine).text.length));
+    const text = document.getText(range);
+    const baseOffset = document.offsetAt(range.start);
+
+    const beginRegex = /\\begin\s*\{([^}]+)\}/g;
+    const stack: { envName: string; startOffset: number }[] = [];
+    let m: RegExpExecArray | null;
+
+    while ((m = beginRegex.exec(text)) !== null) {
+        const envName = m[1].trim();
+        const absStart = baseOffset + m.index;
+        const closeTag = `\\end{${envName}}`;
+        let searchFrom = m.index + m[0].length;
+        let depth = 1;
+        let endIdx = -1;
+
+        while (depth > 0 && searchFrom < text.length) {
+            const nextBegin = text.indexOf(`\\begin{${envName}}`, searchFrom);
+            const nextEnd = text.indexOf(closeTag, searchFrom);
+
+            if (nextEnd === -1) { break; }
+            if (nextBegin !== -1 && nextBegin < nextEnd) {
+                depth++;
+                searchFrom = nextBegin + 1;
+            } else {
+                depth--;
+                if (depth === 0) { endIdx = nextEnd; }
+                searchFrom = nextEnd + 1;
+            }
+        }
+
+        if (endIdx !== -1) {
+            const absEnd = baseOffset + endIdx + closeTag.length;
+            if (offset >= absStart && offset <= absEnd && isTableEnv(envName)) {
+                stack.push({ envName, startOffset: absStart });
+            }
+        }
+    }
+
+    if (stack.length === 0) { return null; }
+
+    let best = stack[0];
+    for (const s of stack) {
+        if (s.startOffset > best.startOffset) {
+            best = s;
+        }
+    }
+
+    const envName = best.envName;
+    const closeTag = `\\end{${envName}}`;
+    const contentStartOffset = best.startOffset + `\\begin{${envName}}`.length;
+
+    let searchFrom = best.startOffset - baseOffset + `\\begin{${envName}}`.length;
+    let depth = 1;
+    let endIdx = -1;
+    while (depth > 0 && searchFrom < text.length) {
+        const nextBegin = text.indexOf(`\\begin{${envName}}`, searchFrom);
+        const nextEnd = text.indexOf(closeTag, searchFrom);
+        if (nextEnd === -1) { break; }
+        if (nextBegin !== -1 && nextBegin < nextEnd) {
+            depth++;
+            searchFrom = nextBegin + 1;
+        } else {
+            depth--;
+            if (depth === 0) { endIdx = nextEnd; }
+            searchFrom = nextEnd + 1;
+        }
+    }
+    if (endIdx === -1) { return null; }
+
+    return new vscode.Range(
+        document.positionAt(best.startOffset),
+        document.positionAt(baseOffset + endIdx + closeTag.length)
+    );
+}
+
+function findTopLevelAmpersands(lineText: string): number[] {
+    const positions: number[] = [];
+    let depth = 0;
+    for (let i = 0; i < lineText.length; i++) {
+        if (lineText[i] === '\\' && i + 1 < lineText.length) {
+            i++;
+            continue;
+        }
+        if (lineText[i] === '{' || lineText[i] === '[' || lineText[i] === '(') {
+            depth++;
+        } else if (lineText[i] === '}' || lineText[i] === ']' || lineText[i] === ')') {
+            depth--;
+        } else if (lineText[i] === '&' && depth === 0) {
+            positions.push(i);
+        }
+    }
+    return positions;
+}
+
+function findTopLevelRowEnd(lineText: string): number {
+    let depth = 0;
+    for (let i = 0; i < lineText.length - 1; i++) {
+        if (lineText[i] === '\\' && i + 1 < lineText.length) {
+            if (lineText[i + 1] === '\\' && depth === 0) {
+                return i;
+            }
+            i++;
+            continue;
+        }
+        if (lineText[i] === '{' || lineText[i] === '[') { depth++; }
+        else if (lineText[i] === '}' || lineText[i] === ']') { depth--; }
+    }
+    return lineText.length;
+}
+
+function findCellRange(lineText: string, ampersands: number[], rowEnd: number, cellIdx: number): { start: number; end: number } {
+    const cellStart = cellIdx === 0 ? 0 : ampersands[cellIdx - 1] + 1;
+    const cellEnd = cellIdx < ampersands.length ? ampersands[cellIdx] : rowEnd;
+    const raw = lineText.substring(cellStart, cellEnd);
+    const trimmedStart = raw.length - raw.trimStart().length;
+    const trimmedEnd = raw.trimEnd().length;
+    return {
+        start: cellStart + trimmedStart,
+        end: cellStart + trimmedEnd,
+    };
+}
+
+function findCurrentCellIdx(charPos: number, ampersands: number[]): number {
+    for (let i = 0; i < ampersands.length; i++) {
+        if (charPos <= ampersands[i]) { return i; }
+    }
+    return ampersands.length;
+}
+
+function smartTabForward(editor: vscode.TextEditor): boolean {
+    const document = editor.document;
+    const pos = editor.selection.active;
+
+    if (!findTableEnvAtPos(document, pos)) {
+        return false;
+    }
+
+    const lineText = document.lineAt(pos.line).text;
+    const charPos = editor.selection.start.character;
+    const ampersands = findTopLevelAmpersands(lineText);
+    const rowEnd = findTopLevelRowEnd(lineText);
+
+    const currentCellIdx = findCurrentCellIdx(charPos, ampersands);
+    const nextCellIdx = currentCellIdx + 1;
+
+    if (nextCellIdx < ampersands.length + 1) {
+        const cell = findCellRange(lineText, ampersands, rowEnd, nextCellIdx);
+        if (cell.start < cell.end) {
+            editor.selection = new vscode.Selection(pos.line, cell.start, pos.line, cell.end);
+        } else {
+            const insertPos = nextCellIdx <= ampersands.length && nextCellIdx > 0
+                ? ampersands[nextCellIdx - 1] + 1
+                : lineText.length;
+            editor.selection = new vscode.Selection(pos.line, insertPos, pos.line, insertPos);
+        }
+        return true;
+    }
+
+    const insertPos = rowEnd;
+    editor.edit(eb => {
+        eb.insert(new vscode.Position(pos.line, insertPos), ' & ');
+    }).then(() => {
+        const newLineText = document.lineAt(pos.line).text;
+        const newAmpPos = newLineText.indexOf('&', insertPos);
+        if (newAmpPos !== -1) {
+            const afterAmp = newAmpPos + 2;
+            editor.selection = new vscode.Selection(pos.line, afterAmp, pos.line, afterAmp);
+        }
+    });
+    return true;
+}
+
+function smartTabBackward(editor: vscode.TextEditor): boolean {
+    const document = editor.document;
+    const pos = editor.selection.active;
+
+    if (!findTableEnvAtPos(document, pos)) {
+        return false;
+    }
+
+    const lineText = document.lineAt(pos.line).text;
+    const charPos = editor.selection.start.character;
+    const ampersands = findTopLevelAmpersands(lineText);
+    const rowEnd = findTopLevelRowEnd(lineText);
+
+    const currentCellIdx = findCurrentCellIdx(charPos, ampersands);
+
+    if (currentCellIdx > 0) {
+        const prevCellIdx = currentCellIdx - 1;
+        const cell = findCellRange(lineText, ampersands, rowEnd, prevCellIdx);
+        editor.selection = new vscode.Selection(pos.line, cell.end, pos.line, cell.start);
+        return true;
+    }
+
+    const prevLineNum = pos.line - 1;
+    if (prevLineNum < 0) { return false; }
+    const prevLineText = document.lineAt(prevLineNum).text;
+    const prevAmps = findTopLevelAmpersands(prevLineText);
+    const prevRowEnd = findTopLevelRowEnd(prevLineText);
+    const lastCellIdx = prevAmps.length;
+    const cell = findCellRange(prevLineText, prevAmps, prevRowEnd, lastCellIdx);
+    editor.selection = new vscode.Selection(prevLineNum, cell.end, prevLineNum, cell.start);
+    return true;
 }
 
 function parseCommandOnLine(
@@ -328,7 +551,7 @@ function getCurrentCommandStartOffset(document: vscode.TextDocument, pos: vscode
     return cursorOffset;
 }
 
-function navigateForward(editor: vscode.TextEditor): boolean {
+function navigateArgumentForward(editor: vscode.TextEditor): boolean {
     const document = editor.document;
     const pos = editor.selection.active;
 
@@ -389,7 +612,7 @@ function navigateForward(editor: vscode.TextEditor): boolean {
     return false;
 }
 
-function navigateBackward(editor: vscode.TextEditor): boolean {
+function navigateArgumentBackward(editor: vscode.TextEditor): boolean {
     const document = editor.document;
     const pos = editor.selection.active;
 
@@ -467,10 +690,9 @@ export function registerArgumentNavigation(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const handled = navigateForward(editor);
-            if (!handled) {
-                await vscode.commands.executeCommand('tab');
-            }
+            if (smartTabForward(editor)) { return; }
+            if (navigateArgumentForward(editor)) { return; }
+            await vscode.commands.executeCommand('tab');
         }
     );
 
@@ -488,10 +710,9 @@ export function registerArgumentNavigation(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const handled = navigateBackward(editor);
-            if (!handled) {
-                await vscode.commands.executeCommand('outdent');
-            }
+            if (smartTabBackward(editor)) { return; }
+            if (navigateArgumentBackward(editor)) { return; }
+            await vscode.commands.executeCommand('outdent');
         }
     );
 

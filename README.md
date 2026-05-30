@@ -211,11 +211,90 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 > *   `\usepackage[utf8]` 내부에서 `Tab` → 다음 명령어의 `[]` 인자로 이동
 > *   단축키: `Tab` (다음 인자) / `Shift+Tab` (이전 인자)
 
+### 스마트 테이블 탭 (Smart Table Tab)
+테이블 환경(`bmatrix`, `pmatrix`, `tabular`, `align`, `cases` 등) 내에서 `Tab` / `Shift+Tab`으로 셀 간 빠르게 이동합니다.
+
+*   **셀 간 이동**: `Tab`으로 다음 셀, `Shift+Tab`으로 이전 셀로 이동하며, 이동 시 셀 내용이 자동으로 선택됩니다.
+*   **자동 & 삽입**: 마지막 셀에서 `Tab`을 누르면 자동으로 `&`를 삽입하고 새 셀로 이동합니다.
+*   **행 간 이동**: 행의 첫 셀에서 `Shift+Tab`을 누르면 이전 행의 마지막 셀로 이동합니다.
+*   **중첩 괄호 무시**: `\frac{1}{2}` 내부의 `{` `}`는 셀 경계로 처리하지 않으며, 최상위 레벨의 `&`와 `\\`만 셀/행 구분자로 인식합니다.
+*   **우선순위**: 테이블 셀 이동 > 명령어 인자 이동 > VS Code 기본 Tab 동작 순으로 처리됩니다.
+
+> 사용 예시
+> *   `\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}`에서 셀 `1`에 커서 → `Tab` → 셀 `2` 선택
+> *   마지막 셀에서 `Tab` → `&` 자동 삽입 후 새 셀로 이동
+> *   단축키: `Tab` (다음 셀) / `Shift+Tab` (이전 셀)
+
+### 환경 시작 시 자동 들여쓰기 (Auto-indent on Enter)
+`\begin{env}` 뒤에서 `Enter`를 누르면, 다음 줄에 자동으로 들여쓰기를 적용하고 커서를 배치합니다. 코드의 계층 구조가 자동으로 잡혀 환경의 범위를 파악하기 좋아집니다.
+
+*   **\begin 뒤 자동 들여쓰기**: `\begin{itemize}` 뒤에서 `Enter` → 들여쓰기된 새 줄에 커서 배치
+*   **\end 전 자동 들여쓰기**: `\end{env}`만 있는 줄에서 `Enter` → `\end` 앞에 들여쓰기된 빈 줄 삽입
+*   **빈 환경 처리**: `\begin{env}\end{env}` 같은 줄에서 `Enter` → 들여쓰기된 빈 줄 + `\end`를 `\begin`과 같은 수준으로 정렬
+*   **중첩 누적**: `\begin{a}` 안의 `\begin{b}` 뒤에서 `Enter` → 두 단계 들여쓰기 적용
+*   **인라인 대응**: 줄 중간에 `\begin{env}`가 등장해도 정상 동작
+*   **\end 들여쓰기 정렬**: `Enter` 후 `\end{env}` 줄의 들여쓰기를 자동으로 `\begin{env}`와 동일한 수준으로 맞춤
+*   **수식 환경과의 통합**: `align`, `gather` 등 기존 스마트 줄바꿈 대상 환경에서는 `\\` + `&` 삽입이 우선되며, 그 외 환경에서는 자동 들여쓰기가 적용됩니다
+
+> 사용 예시
+> *   `\begin{itemize}|` (커서 위치 `|`) → `Enter` → 들여쓰기된 빈 줄에 커서
+> *   `\begin{document}` → `Enter` → `\begin{itemize}` → `Enter` → 두 단계 들여쓰기
+> *   단축키: `Enter`
+
 ### 표 생성 도구 (Table Generator)
-측면 GUI를 통해 표를 손쉽게 생성할 수 있습니다. 
+측면 GUI를 통해 표를 손쉽게 생성할 수 있습니다.
 
 *   시각적 그리드: 웹뷰 패널에서 행과 열의 개수를 지정하고, 정렬 방식(Left, Center, Right) 및 테두리 유무를 설정할 수 있습니다.
 *   데이터 미리보기: 그리드에 데이터를 직접 입력하며 실시간으로 생성될 표의 구조를 확인할 수 있습니다.
+
+### 외부 데이터 붙여넣기 (Paste External Data)
+엑셀, 구글 시트, Numbers, CSV 파일 등 외부 프로그램에서 복사한 셀 데이터를 에디터에 붙여넣으면 자동으로 `&`와 `\\`가 적용된 LaTeX 행렬(`matrix`) 또는 표(`tabular`) 코드로 변환합니다. 외부 데이터를 LaTeX 표/행렬로 옮기는 고통스러운 수작업을 없애줍니다.
+
+#### 작동 방식
+확장은 VS Code의 기본 붙여넣기 메뉴(`Ctrl+V`)에 **"Paste as LaTeX Matrix/Table"** 옵션을 주입합니다. 엑셀에서 복사한 데이터를 에디터에 붙여넣으면, VS Code의 네이티브 붙여넣기 메뉴에 "Paste as LaTeX Tabular" 또는 "Paste as LaTeX Matrix"가 추가됩니다.
+
+#### 스마트 붙여넣기 (`Ctrl+Shift+V` / `Cmd+Shift+V`)
+**Smart Paste** 명령어는 커서 위치에 따라 자동으로 최적의 형식을 선택합니다:
+*   **수식 환경 내부** (`$...$`, `\[...\]`, `equation`, `align` 등) → 자동으로 `\begin{bmatrix}` (또는 설정한 행렬 환경) 삽입
+*   **일반 텍스트 영역** → 자동으로 `\begin{tabular}` (또는 Booktabs 스타일) 삽입
+*   **구분자 자동 감지**: 탭(TSV), 쉼표(CSV), 세미콜론, 연속 공백을 자동으로 인식하여 열을 분리합니다.
+*   **구분자 모호 시 수동 선택**: 구분자를 감지하지 못하면, 붙여넣기 전 QuickPick이 떠서 **Tab / Comma / Semicolon / Space / Regex** 중 선택하여 재파싱할 수 있습니다.
+
+#### 지원하는 출력 형식
+*   **행렬 (Matrix)**: `pmatrix`, `bmatrix`, `vmatrix`, `Vmatrix`, `Bmatrix`, `matrix`
+*   **표 (Tabular)**:
+    *   **Array 스타일** (기본): `\hline`, `|` 테두리. 전통적인 `tabular` 형태.
+    *   **Booktabs 스타일**: `\toprule`, `\midrule`, `\bottomrule`. 현대적이고 학술적인 표 형태로, 테두리 없이 깔끔하게 표현됩니다.
+*   **헤더 행 자동 인식**: 첫 행이 텍스트이고 나머지 행이 숫자인 경우, 첫 행을 헤더로 간주하여 `\hline` 또는 `\midrule`로 자동 구분합니다.
+*   **열 정렬 자동 감지**: 데이터 타입에 따라 `l` (텍스트), `r` (숫자), `c` (혼합)을 자동으로 배정합니다.
+
+#### 데이터 정제 (Smart Escape & Formatting)
+*   **LaTeX 명령어 보존**: `\alpha`, `\sum`, `\frac{1}{2}` 등은 자동으로 인식하여 Escape하지 않고 그대로 보존합니다.
+*   **특수 문자 Escape**: `$`, `%`, `&`, `_`, `#`, `{`, `}` 등 LaTeX에서 문제가 되는 문자는 자동으로 Escape (`\$`, `\%`, `\&` 등).
+*   **천 단위 구분 쉼표**: `1,234.56` → `1\,234.56` (수평 간격)으로 자동 변환.
+*   **지수 표기 변환**: `1.23E+05` → `1.23 \times 10^{5}`으로 자동 변환.
+*   **불규칙한 행 패딩**: 열 개수가 일치하지 않는 행은 빈 셀(`""`)로 자동 패딩하여 코드가 깨지지 않도록 합니다.
+*   **미리보기**: 붙여넣기 전 QuickPick에 데이터의 첫 3행을 미리보여주고 "삽입 / 취소"를 선택할 수 있습니다.
+
+#### 설정 (Settings)
+`tex-machina.pasteExternalData.*` 네임스페이스에서 모든 동작을 세밀하게 제어할 수 있습니다:
+*   `defaultMode`: `auto` (커서 위치 기반) / `matrix` / `tabular`
+*   `matrixType`: `bmatrix` (기본), `pmatrix`, `vmatrix` 등
+*   `tabularStyle`: `array` (기본) / `booktabs`
+*   `alignmentMode`: `auto` (데이터 타입 감지) / `allCenter` / `allLeft` / `allRight`
+*   `hasBorders`: Array 스타일에서 테두리 표시 여부
+*   `hasHeader`: `auto` (자동 감지) / `true` / `false`
+*   `escapeMode`: `smart` (명령어 보존) / `all` / `none`
+*   `showPreview`: 미리보기 표시 여부
+*   `recognizeCSV`, `recognizeTSV`, `recognizeSemicolon`, `recognizeSpace`, `recognizeHTMLTable`: 자동 인식할 데이터 형식별 On/Off
+*   `customDelimiters`: 사용자 정의 구분자 목록 (정규식 지원, 예: `\\|`, `\s+`)
+
+#### 단축키
+| 기능 | Windows/Linux | macOS |
+| :--- | :--- | :--- |
+| 스마트 붙여넣기 | `Ctrl + Shift + V` | `Cmd + Shift + V` |
+| 강제 행렬 붙여넣기 | `Ctrl + Alt + Shift + V` | `Cmd + Alt + Shift + V` |
+| 강제 표 붙여넣기 | `Ctrl + Alt + V` | `Cmd + Alt + V` |
 
 ### 토글 모드 및 프로파일 (Toggle Mode)
 특정 편집 보조 기능들을 한시적으로 활성화하거나, 작업 성격에 맞춰 기능 프로파일을 전환할 수 있습니다.
@@ -246,6 +325,7 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 - 분수 자동 변환 (Fraction Shorthand): `1/2` 또는 `(a+b)/c` 입력 후 스페이스를 누르면 자동으로 `\frac{1}{2}` 또는 `\frac{a+b}{c}`로 변환됩니다.
 - 선택 영역 자동 씌우기 (Wrap Selection with Scripts): 특정 텍스트를 블록 지정한 상태에서 `_`나 `^`를 누르면, 선택 영역이 자동으로 `_{...}` 또는 `^{...}`로 감싸집니다. 이미 작성된 수식을 첨자로 만들 때 유용합니다.
 - 자동 중괄호 (Auto-bracing) : `_` 또는 `^` 입력 후 두 글자 이상을 치면 자동으로 `{ }`를 씌워줍니다. `-1`과 같이 자주 쓰이는 지수는 입력 후 커서가 자동으로 중괄호 밖으로 이동합니다.
+- 환경 시작 시 자동 들여쓰기 (Auto-indent on Enter): `\begin{env}` 뒤에서 `Enter`를 누르면 자동 들여쓰기 적용 및 커서 배치. 자세한 내용은 [환경 시작 시 자동 들여쓰기](#환경-시작-시-자동-들여쓰기-auto-indent-on-enter) 섹션 참조.
 - 스마트 줄바꿈 (Smart Newline): 수식 환경(`align`, `gather` 등) 내부에서 `Enter` 입력 시 `\\`와 `&` 정렬 기호를 상황에 맞게 자동으로 삽입합니다.
 - 수식 전용 리가처 (Mathematical Ligatures): `!=`, `<=`, `->`, `&&` 등 익숙한 기호 조합을 입력하면 즉시 `\neq`, `\le`, `\to`, `\land` 등 LaTeX 명령어로 변환합니다.
 - 환경 이름 동기화 수정 (Linked Editing): `\begin{...}`의 이름을 수정하면 쌍이 맞는 `\end{...}`의 이름도 실시간으로 함께 변경됩니다. (VS Code 'Linked Editing' 기능 활성화 필요)
@@ -269,7 +349,7 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 | 선택 영역 축소 | `Shift + Alt + ←` | `Shift + Alt + ←` | 수학적 계층 단위로 선택 축소 |
 | 행렬 리사이저 메뉴 | `Alt + L M` | `Option + L M` | 행/열 추가 삭제 메뉴 호출 |
 | 수식 환경 전환 | `Alt + L T` | `Option + L T` | 인라인/디스플레이 등 모드 전환 |
-| 스마트 줄바꿈 | `Enter` | `Enter` | (수식 내) `\\` 및 `&` 자동 삽입 |
+| 스마트 줄바꿈 / 자동 들여쓰기 | `Enter` | `Enter` | (수식 내) `\\` 및 `&` 자동 삽입, `\begin{env}` 뒤 자동 들여쓰기 |
 | CLI 열기 | `Ctrl + Shift + ;` | `Cmd + Shift + ;` | TeX-Machina 통합 명령줄 실행 |
 | 수식 분할 | `Ctrl + Shift + L` | `Cmd + Shift + L` | 수식 자동 분할 (`align` 변환) |
 | 토글 모드 (Profile 1) | `Ctrl + ' 1` | `Cmd + ' 1` | 1번 프로필 활성화 (1~9, 0 가능) |

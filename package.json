@@ -478,6 +478,103 @@
           },
           "default": ["$", "\\[", "equation"],
           "description": "수식 모드 전환(Math Mode Toggle) 시 순환할 환경의 순서를 설정합니다. (예: '$', '\\[', 'equation', 'align', 'gather', 'equation*' 등)"
+        },
+        "tex-machina.pasteExternalData.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "외부 데이터(Excel/CSV) 붙여넣기 자동 변환 기능을 활성화합니다."
+        },
+        "tex-machina.pasteExternalData.autoPrompt": {
+          "type": "boolean",
+          "default": true,
+          "description": "탭/쉼표 구분 데이터를 감지하면 자동으로 변환 여부를 묻습니다."
+        },
+        "tex-machina.pasteExternalData.defaultMode": {
+          "type": "string",
+          "enum": ["auto", "matrix", "tabular"],
+          "default": "auto",
+          "description": "붙여넣기 시 기본 모드. 'auto'는 커서 위치의 수식 환경을 감지합니다."
+        },
+        "tex-machina.pasteExternalData.alwaysAskMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "항상 Matrix/Tabular 선택 QuickPick을 표시합니다."
+        },
+        "tex-machina.pasteExternalData.matrixType": {
+          "type": "string",
+          "enum": ["pmatrix", "bmatrix", "vmatrix", "Vmatrix", "Bmatrix", "matrix"],
+          "default": "bmatrix",
+          "description": "Matrix 모드에서 사용할 기본 행렬 환경."
+        },
+        "tex-machina.pasteExternalData.tabularStyle": {
+          "type": "string",
+          "enum": ["array", "booktabs"],
+          "default": "array",
+          "description": "Tabular 모드에서 사용할 기본 스타일."
+        },
+        "tex-machina.pasteExternalData.alignmentMode": {
+          "type": "string",
+          "enum": ["auto", "allCenter", "allLeft", "allRight"],
+          "default": "auto",
+          "description": "열 정렬 방식. 'auto'는 데이터 타입에 따라 자동 감지합니다."
+        },
+        "tex-machina.pasteExternalData.hasBorders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Array 스타일 Tabular에서 테두리(|, \\hline)를 추가합니다."
+        },
+        "tex-machina.pasteExternalData.hasHeader": {
+          "type": "string",
+          "enum": ["auto", "true", "false"],
+          "default": "auto",
+          "description": "첫 행을 헤더로 간주할지 여부. 'auto'는 첫 행이 텍스트일 때 자동 감지."
+        },
+        "tex-machina.pasteExternalData.escapeMode": {
+          "type": "string",
+          "enum": ["smart", "all", "none"],
+          "default": "smart",
+          "description": "특수 문자 이스케이프 방식. 'smart'는 LaTeX 명령어(\\...)는 보존합니다."
+        },
+        "tex-machina.pasteExternalData.showPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "변환 전 변환될 코드의 미리보기를 QuickPick에 표시합니다."
+        },
+        "tex-machina.pasteExternalData.removeEmptyRows": {
+          "type": "boolean",
+          "default": true,
+          "description": "데이터의 완전히 빈 행(Empty Row)을 제거합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeCSV": {
+          "type": "boolean",
+          "default": true,
+          "description": "쉼표(Comma)로 구분된 CSV 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeTSV": {
+          "type": "boolean",
+          "default": true,
+          "description": "탭(Tab)으로 구분된 TSV 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeHTMLTable": {
+          "type": "boolean",
+          "default": true,
+          "description": "text/html 클립보드의 HTML <table> 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeSemicolon": {
+          "type": "boolean",
+          "default": true,
+          "description": "세미콜론(Semicolon)으로 구분된 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.recognizeSpace": {
+          "type": "boolean",
+          "default": false,
+          "description": "연속 공백(Multi-space)으로 구분된 고정폭 데이터를 자동으로 인식합니다."
+        },
+        "tex-machina.pasteExternalData.customDelimiters": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "사용자 정의 구분자 목록입니다. 정규식(예: \\|)도 사용 가능합니다. 클립보드 데이터에 포함된 경우 자동 인식 후보에 포함됩니다."
         }
       }
     },
@@ -609,6 +706,18 @@
       {
         "command": "tex-machina.navigateArgumentBackward",
         "title": "LaTeX: Navigate to Previous Command Argument"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.smart",
+        "title": "LaTeX: Paste External Data (Smart)"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.matrix",
+        "title": "LaTeX: Paste External Data as Matrix"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.tabular",
+        "title": "LaTeX: Paste External Data as Tabular"
       }
     ],
     "viewsContainers": {
@@ -806,6 +915,24 @@
         "key": "shift+tab",
         "mac": "shift+tab",
         "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !inSnippetMode"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.smart",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.matrix",
+        "key": "ctrl+alt+shift+v",
+        "mac": "cmd+alt+shift+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.pasteExternalData.tabular",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v",
+        "when": "editorTextFocus && editorLangId == 'latex'"
       }
     ]
   },

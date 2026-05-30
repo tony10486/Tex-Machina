@@ -29,6 +29,8 @@
 | **최근 기호 추천** | `src/core/recentSymbols.ts` | `Alt+Q` 시 문서 내 빈도 기반 기호 자동완성 제공. |
 | **스마트 선택 확장** | `src/core/selectionExpansion.ts` | 수학적 계층 구조에 따른 단계별 선택 영역 확장. |
 | **환경 이름 동기화** | `src/core/linkedEditing.ts` | `\begin`과 `\end` 사이의 환경 이름 실시간 동기화. |
+| **외부 데이터 붙여넣기** | `src/core/pasteExternalData.ts` | Excel/CSV/TSV 데이터를 LaTeX `matrix`/`tabular`로 변환. Smart Escape, 지수/천단위 포맷, Booktabs/Array 스타일 지원. |
+| **외부 데이터 붙여넣기 통합** | `src/core/pasteExternalDataProvider.ts` | `DocumentPasteEditProvider` 구현. VS Code 기본 붙여넣기 메뉴에 "Paste as LaTeX Matrix/Table" 주입. |
 
 ## Extension Entry & UI
 

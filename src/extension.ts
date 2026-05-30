@@ -32,6 +32,12 @@ import { registerMathToggle } from './core/mathToggle';
 import { registerMatrixResizer } from './core/matrixResizer';
 import { registerSelectionWrap } from './core/selectionWrap';
 import { registerMathRefactor } from './core/mathRefactor';
+import {
+    PasteExternalDataProvider,
+    smartPasteExternalData,
+    forcePasteAsMatrix,
+    forcePasteAsTabular,
+} from './core/pasteExternalDataProvider';
 import { PythonService } from './services/pythonService';
 
 let pythonService: PythonService;
@@ -158,6 +164,23 @@ export async function activate(context: vscode.ExtensionContext) {
     registerMatrixResizer(context);
     registerSelectionWrap(context);
     registerMathRefactor(context);
+
+    // Paste External Data Provider
+    if (typeof vscode.languages.registerDocumentPasteEditProvider === 'function') {
+        context.subscriptions.push(vscode.languages.registerDocumentPasteEditProvider(
+            'latex',
+            new PasteExternalDataProvider(),
+            {
+                providedPasteEditKinds: [
+                    vscode.DocumentDropOrPasteEditKind.Empty.append('latex'),
+                ],
+            }
+        ));
+    }
+
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.pasteExternalData.smart', smartPasteExternalData));
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.pasteExternalData.matrix', forcePasteAsMatrix));
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.pasteExternalData.tabular', forcePasteAsTabular));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;
