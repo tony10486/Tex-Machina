@@ -254,64 +254,19 @@ function updateStatusBar() {
 
 async function setStatusBarColorGreen() {
     try {
-        const config = vscode.workspace.getConfiguration();
-        const currentColorCustomizations = config.get<any>('workbench.colorCustomizations') || {};
-        
-        if (originalColorCustomizations === undefined) {
-            originalColorCustomizations = { ...currentColorCustomizations };
+        if (statusBarItem) {
+            statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         }
-        
-        const newColors = {
-            ...currentColorCustomizations,
-            "statusBar.background": "#2e7d32",
-            "statusBar.noFolderBackground": "#2e7d32",
-            "statusBar.debuggingBackground": "#2e7d32",
-            "statusBar.foreground": "#ffffff"
-        };
-        
-        const target = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global;
-
-        await config.update('workbench.colorCustomizations', newColors, target);
     } catch (e) {
-        console.error('Failed to set green status bar background color', e);
+        console.error('Failed to set status bar background color', e);
     }
 }
 
 async function restoreStatusBarColor() {
     try {
-        const config = vscode.workspace.getConfiguration();
-        const currentColorCustomizations = config.get<any>('workbench.colorCustomizations') || {};
-        
-        const newColors = { ...currentColorCustomizations };
-        delete newColors["statusBar.background"];
-        delete newColors["statusBar.noFolderBackground"];
-        delete newColors["statusBar.debuggingBackground"];
-        delete newColors["statusBar.foreground"];
-        
-        if (originalColorCustomizations) {
-            if (originalColorCustomizations["statusBar.background"] !== undefined) {
-                newColors["statusBar.background"] = originalColorCustomizations["statusBar.background"];
-            }
-            if (originalColorCustomizations["statusBar.noFolderBackground"] !== undefined) {
-                newColors["statusBar.noFolderBackground"] = originalColorCustomizations["statusBar.noFolderBackground"];
-            }
-            if (originalColorCustomizations["statusBar.debuggingBackground"] !== undefined) {
-                newColors["statusBar.debuggingBackground"] = originalColorCustomizations["statusBar.debuggingBackground"];
-            }
-            if (originalColorCustomizations["statusBar.foreground"] !== undefined) {
-                newColors["statusBar.foreground"] = originalColorCustomizations["statusBar.foreground"];
-            }
+        if (statusBarItem) {
+            statusBarItem.backgroundColor = undefined;
         }
-        
-        const target = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global;
-
-        const valueToUpdate = Object.keys(newColors).length > 0 ? newColors : undefined;
-        await config.update('workbench.colorCustomizations', valueToUpdate, target);
-        originalColorCustomizations = undefined;
     } catch (e) {
         console.error('Failed to restore status bar background color', e);
     }

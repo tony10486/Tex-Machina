@@ -113,35 +113,34 @@ export async function updateLabelDecorations(editor: vscode.TextEditor) {
 class LabelTracker {
     private previousLabels: Map<string, Map<string, string>> = new Map();
     private fileRefCache: Map<string, Set<string>> = new Map();
-    private allWorkspaceRefs: Set<string> = new Set();
+    private globalRefCounts: Map<string, number> = new Map();
     private isInitialized = false;
 
     public getGlobalRefs(): Set<string> {
-        return this.allWorkspaceRefs;
+        return new Set(this.globalRefCounts.keys());
     }
 
     async syncWorkspaceRefs(affectedUri?: vscode.Uri) {
         if (!this.isInitialized && !affectedUri) {
-            const allRefs = new Set<string>();
             const texFiles = await vscode.workspace.findFiles('**/*.tex');
-            
             for (const file of texFiles) {
                 await this.updateFileRefCache(file);
             }
-            this.rebuildGlobalRefs();
             this.isInitialized = true;
             return;
         }
 
         if (affectedUri) {
             await this.updateFileRefCache(affectedUri);
-            this.rebuildGlobalRefs();
         }
     }
 
     private async updateFileRefCache(uri: vscode.Uri) {
+        const uriStr = uri.toString();
+        const oldRefs = this.fileRefCache.get(uriStr) || new Set<string>();
+        
         try {
-            const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uriStr);
             let text: string;
             if (doc) {
                 text = doc.getText();
@@ -149,18 +148,42 @@ class LabelTracker {
                 const content = await vscode.workspace.fs.readFile(uri);
                 text = new TextDecoder().decode(content);
             }
-            this.fileRefCache.set(uri.toString(), findReferences(text));
+            
+            const newRefs = findReferences(text);
+            this.fileRefCache.set(uriStr, newRefs);
+
+            // Incremental Delta Tracking: Only update the changed references
+            for (const ref of oldRefs) {
+                if (!newRefs.has(ref)) {
+                    this.decrementRefCount(ref);
+                }
+            }
+            for (const ref of newRefs) {
+                if (!oldRefs.has(ref)) {
+                    this.incrementRefCount(ref);
+                }
+            }
         } catch (e) {
-            this.fileRefCache.delete(uri.toString());
+            // File deleted or inaccessible
+            for (const ref of oldRefs) {
+                this.decrementRefCount(ref);
+            }
+            this.fileRefCache.delete(uriStr);
         }
     }
 
-    private rebuildGlobalRefs() {
-        const newGlobalRefs = new Set<string>();
-        for (const refs of this.fileRefCache.values()) {
-            refs.forEach(r => newGlobalRefs.add(r));
+    private incrementRefCount(ref: string) {
+        const count = this.globalRefCounts.get(ref) || 0;
+        this.globalRefCounts.set(ref, count + 1);
+    }
+
+    private decrementRefCount(ref: string) {
+        const count = this.globalRefCounts.get(ref) || 0;
+        if (count <= 1) {
+            this.globalRefCounts.delete(ref);
+        } else {
+            this.globalRefCounts.set(ref, count - 1);
         }
-        this.allWorkspaceRefs = newGlobalRefs;
     }
 
     async initialize() {
@@ -192,18 +215,20 @@ class LabelTracker {
         const oldLabelMap = this.previousLabels.get(uri);
 
         if (oldLabelMap) {
-            // Only sync the current document's references to be efficient
+            // Incremental update of references for this specific file
             await this.syncWorkspaceRefs(document.uri);
+            
+            const globalRefs = this.getGlobalRefs();
 
             for (const [label, oldContext] of oldLabelMap.entries()) {
                 if (!currentLabelMap.has(label)) {
-                    if (this.allWorkspaceRefs.has(label)) {
+                    if (globalRefs.has(label)) {
                         vscode.window.showWarningMessage(`참조된 라벨 '${label}'이(가) 삭제되거나 이름이 변경되었습니다.`);
                     }
                 } else {
                     const newContext = currentLabelMap.get(label);
                     if (newContext !== oldContext) {
-                        if (this.allWorkspaceRefs.has(label)) {
+                        if (globalRefs.has(label)) {
                             vscode.window.showInformationMessage(`참조된 라벨 '${label}'의 내용(수식/정리 등)이 수정되었습니다.`);
                         }
                     }
