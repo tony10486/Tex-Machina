@@ -27,6 +27,7 @@ import { registerRecentSymbols } from './core/recentSymbols';
 import { registerSelectionExpansion } from './core/selectionExpansion';
 import { registerLinkedEditing } from './core/linkedEditing';
 import { registerSmartBackspace } from './core/smartBackspace';
+import { registerArgumentNavigation } from './core/argumentNavigation';
 import { registerMathToggle } from './core/mathToggle';
 import { registerMatrixResizer } from './core/matrixResizer';
 import { registerSelectionWrap } from './core/selectionWrap';
@@ -152,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerSelectionExpansion(context);
     registerLinkedEditing(context);
     registerSmartBackspace(context);
+    registerArgumentNavigation(context);
     registerMathToggle(context);
     registerMatrixResizer(context);
     registerSelectionWrap(context);

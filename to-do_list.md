@@ -53,6 +53,7 @@
 [option + l] + [option + k] : 현재 위치의 
 
 
+현재 개발중인 latex를 위한 vscode 확장프로그램의 개발에서 다음 기능을 추가할 때, 필요한 계획을 짜 줘  
 tab 과 shift + tab 을 이용한 명령어 인자 간 전환 
 \author{asdf}
 \advisor{aaaa}
