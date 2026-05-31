@@ -21,7 +21,7 @@ export function registerAutoEndEnv(context: vscode.ExtensionContext) {
             const lineText = doc.lineAt(pos.line).text;
             const textBefore = lineText.substring(0, pos.character);
 
-            if (!/(?:^|\s+)\\end(?:\{|$)/.test(textBefore)) continue;
+            if (!/(?:^|\s+)\\end(?:\{[^}]*)?$/.test(textBefore)) continue;
             if (isInsideComment(doc, pos)) continue;
 
             if (suggestTimeout) clearTimeout(suggestTimeout);
