@@ -117,15 +117,6 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 > *   단축키: `Shift + Alt + →` (확장) / `Shift + Alt + ←` (축소) (Windows)
 > `Control + Shift + →` (확장) / `Control + Shift + ←` (축소)
 
-### 최근 사용 기호 (Recent Symbols)
-현재 문서에서 가장 자주 사용한 수학 기호들을 커서 바로 아래 자동완성 창으로 띄워줍니다.
-
-*   빈도 분석: 현재 문서 내의 LaTeX 명령어(`\command`) 빈도를 실시간으로 분석하여 최대 12개의 추천 리스트를 제공합니다.
-*   빠른 입력: `\phi`, `\partial` 같이 타이핑이 긴 기호를 몇 번의 키 입력만으로 삽입할 수 있습니다.
-
-> 사용 예시
-> *   단축키: `Alt + Q`
-
 ### 수식 환경 변경
 인라인 수식(`$`)을 `\[ \]` 환경, 또는 `\begin{equation}` 환경으로 한번에 변경하는 기능을 지원합니다. 커서를 수식 내에 두고, `Alt + L T` (Windows/macOS 공통, Option 키 유지 가능)를 눌러 순환 전환이 가능합니다. 전환 순서는 설정(`mathToggle.sequence`)에서 커스터마이징할 수 있습니다.
 
@@ -150,9 +141,9 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 ### 수식 자동 계산 (Auto Calc)
 수식 내부에서 `=..`을 입력하면 SymPy가 자동으로 수식을 계산하여 `=` 뒤에 결과를 삽입합니다.
 
-- **동작 방식**: `(x+1)^3=..` 까지 타이핑하면, SymPy가 `(x+1)^3`을 전개하여 `= x^3 + 3x^2 + 3x + 1`로 자동 완성합니다.
-- **연산 자동 감지**: 수식에 따라 적분(`\int`), 미분(`\frac{d}{dx}`), 극한(`\lim`), 전개(`expand`), 단순화(`simplify`) 등을 자동으로 선택합니다.
-- **수식 환경**: `$...$`, `$$...$$`, `\[...\]`, `\begin{equation}`, `\begin{align}`, `\begin{gather}` 등 모든 수식 환경에서 동작합니다.
+- 동작 방식: `(x+1)^3=..` 까지 타이핑하면, SymPy가 `(x+1)^3`을 전개하여 `= x^3 + 3x^2 + 3x + 1`로 자동 완성합니다.
+- 연산 자동 감지: 수식에 따라 적분(`\int`), 미분(`\frac{d}{dx}`), 극한(`\lim`), 전개(`expand`), 단순화(`simplify`) 등을 자동으로 선택합니다.
+- 수식 환경: `$...$`, `$$...$$`, `\[...\]`, `\begin{equation}`, `\begin{align}`, `\begin{gather}` 등 모든 수식 환경에서 동작합니다.
 
 > 사용 예시
 > - `$ (x+1)^3 =.. $` → `$ (x+1)^3 = x^3 + 3x^2 + 3x + 1 $`
@@ -161,10 +152,10 @@ NumPy, SymPy, SciPy 패키지를 이용한 기호 기반 연산 기능입니다.
 ### 수식 고스트 텍스트 (Ghost Calc)
 수식 내부에서 `=`을 입력하면 SymPy 계산 결과를 흐릿한 텍스트(Ghost Text/Inline Suggestion)로 제안하며, `Tab`을 누르면 결과가 삽입됩니다.
 
-- **비동기 제안**: Python 계산이 완료되는 즉시 Ghost Text가 나타납니다 (사용자가 기다리지 않음).
-- **결과 캐싱**: 동일한 수식을 다시 계산하지 않도록 최대 50개 결과를 10초간 캐싱합니다.
-- **복잡한 계산 지원**: `\int`, `\frac{d}{dx}`, `\lim` 등 모든 SymPy 연산을 지원합니다.
-- **타임아웃**: 기본 10초 (설정 가능). 타임아웃이 발생해도 사용자 흐름을 방해하지 않습니다.
+- 비동기 제안: Python 계산이 완료되는 즉시 Ghost Text가 나타납니다 (사용자가 기다리지 않음).
+- 결과 캐싱: 동일한 수식을 다시 계산하지 않도록 최대 50개 결과를 10초간 캐싱합니다.
+- 복잡한 계산 지원: `\int`, `\frac{d}{dx}`, `\lim` 등 모든 SymPy 연산을 지원합니다.
+- 타임아웃: 기본 10초 (설정 가능). 타임아웃이 발생해도 사용자 흐름을 방해하지 않습니다.
 
 > 사용 예시
 > - `\int x \sin(x) \, dx =` 입력 → ` \sin(x) - x\cos(x)` Ghost Text → `Tab`으로 삽입
@@ -306,8 +297,8 @@ LaTeX 명령어의 괄호 인자(`{}` 또는 `[]`) 사이를 `Tab` / `Shift+Tab`
 ### 확장 문자 입력 (Extended Input Mode)
 LaTeX 명령어를 직접 입력하지 않고, 단축키 + 한 글자로 즉시 변환하는 입력 모드입니다. `Cmd+E` (macOS) / `Ctrl+E` (Windows/Linux)를 누른 후 매핑된 문자를 입력하면 해당 LaTeX 명령어로 자동 치환됩니다.
 
-- **단일 입력 모드 (기본)**: `Cmd+E` → 문자 입력 → 변환 후 모드 자동 종료
-- **토글 모드**: 설정(`tex-machina.extendedInput.singleShot: false`)에서 변경 가능, 10초간 유지
+- 단일 입력 모드 (기본): `Cmd+E` → 문자 입력 → 변환 후 모드 자동 종료
+- 토글 모드: 설정(`tex-machina.extendedInput.singleShot: false`)에서 변경 가능, 10초간 유지
 
 #### 그리스 문자 및 특수 기호 매핑
 
@@ -340,17 +331,17 @@ LaTeX 명령어를 직접 입력하지 않고, 단축키 + 한 글자로 즉시 
 ### 단축 모드 (Shorthand Mode)
 LaTeX 명령어를 직접 입력하지 않고, 약어(Abbreviation) + Space로 즉시 확장하는 입력 모드입니다. `Alt+G` (macOS/Windows/Linux 공통)를 누른 후 약어를 입력하고 Space를 누르면 자동으로 확장됩니다.
 
-**동작 방식**:
+동작 방식:
 1. `Alt+G`로 모드 진입 (상태 표시줄에 `[SH]` 표시)
 2. 약어 및 subscript 입력 (예: `bc,idx`)
 3. Space 입력 시 약어가 확장되고 모드가 자동 종료
 
-**약어와 subscript**:
+약어와 subscript:
 - `,` (쉼표)를 기준으로 앞부분은 약어, 뒷부분은 subscript로 처리됩니다.
 - 약어는 단축어 매핑 테이블을 통해 LaTeX 명령어로 변환됩니다.
 - subscript는 수식 환경 내에서 `idx` → `{i \in I}` 등으로 자동 확장됩니다.
 
-**사용 예시**:
+사용 예시:
 | 입력 | 결과 | 설명 |
 |------|------|------|
 | `G = ` + `Alt+G` + `bc,idx` + `Space` | `G = \bigcup_{i \in I}` | bigcup + 인덱스 |
@@ -358,7 +349,7 @@ LaTeX 명령어를 직접 입력하지 않고, 약어(Abbreviation) + Space로 �
 | `Alt+G` + `bc,i` + `Space` | `\bigcup_{i}` | 단순 subscript |
 | `\` 입력 | 모드 자동 종료 | |
 
-**설정** (`tex-machina.shorthandMode.*`):
+설정 (`tex-machina.shorthandMode.*`):
 - `singleShot` (기본 `true`): 한 번 확장 후 자동 종료. `false`로 설정하면 연속 모드(10초간 유지).
 - `mappings`: 사용자 정의 약어 매핑. 예: `{ "bi": "\\bigcap", "su": "\\sum" }`
 

@@ -22,7 +22,6 @@ import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
 import { registerImplicitSubscripts } from './core/implicitSubscripts';
 import { registerSmartNewline } from './core/smartNewline';
 import { registerMathLigatures } from './core/mathLigatures';
-import { registerRecentSymbols } from './core/recentSymbols';
 import { registerAutoEndEnv } from './core/autoEndEnv';
 import { registerIdxExpansion } from './core/idxExpansion';
 import { registerShorthandMode } from './core/shorthandMode';
@@ -160,7 +159,6 @@ export async function activate(context: vscode.ExtensionContext) {
     registerDiacritics(context);
     registerSmartNewline(context);
     registerMathLigatures(context);
-    registerRecentSymbols(context);
     registerAutoEndEnv(context);
     registerExtendedInput(context);
     registerShorthandMode(context);

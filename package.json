@@ -767,10 +767,6 @@
         "title": "LaTeX: Smart Newline"
       },
       {
-        "command": "tex-machina.triggerRecentSymbols",
-        "title": "LaTeX: Show Recent Symbols"
-      },
-      {
         "command": "tex-machina.toggleExtendedInput",
         "title": "LaTeX: Toggle Extended Input Mode"
       },
@@ -959,12 +955,6 @@
         "command": "tex-machina.smartNewline",
         "key": "enter",
         "when": "editorTextFocus && editorLangId == 'latex' && !suggestWidgetVisible && !findWidgetVisible && !parameterHintsVisible && !inSnippetMode"
-      },
-      {
-        "command": "tex-machina.triggerRecentSymbols",
-        "key": "alt+q",
-        "mac": "alt+q",
-        "when": "editorTextFocus && editorLangId == 'latex'"
       },
       {
         "command": "tex-machina.toggleExtendedInput",
