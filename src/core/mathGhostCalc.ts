@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { findMathAtPos } from './latexParser';
 import { PythonService } from '../services/pythonService';
-import { detectOperation, isInOpenMathEnv, extractExprFromLine } from './mathCalcUtils';
+import { detectOperation, isInOpenMathEnv, extractExprFromLine, extractExprFromDocument } from './mathCalcUtils';
 
 class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
     private cache = new Map<string, { result: string; timestamp: number }>();
@@ -31,10 +31,11 @@ class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
         }
 
         const inMath = findMathAtPos(document, position.translate(0, -1)) ||
-            isInOpenMathEnv(line, position.character);
+            isInOpenMathEnv(document, position);
         if (!inMath) { return []; }
 
-        const expr = extractExprFromLine(line, position.character, 1);
+        const expr = extractExprFromLine(line, position.character, 1) ||
+            extractExprFromDocument(document, position, 1);
         if (!expr) { return []; }
 
         const exprMin = expr.replace(/\s/g, '');

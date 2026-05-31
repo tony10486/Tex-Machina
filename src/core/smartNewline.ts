@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findMathAtPos, isInsideComment, isInsideVerbatim } from './latexParser';
+import { findMathAtPos, isInsideComment, isInsideVerbatim, findEnclosingEnvContext } from './latexParser';
 
 /**
  * [Smart Newline]
@@ -31,33 +31,6 @@ function getIndentation(editor: vscode.TextEditor): string {
     const tabSize = Number(editor.options.tabSize) || 4;
     const insertSpaces = editor.options.insertSpaces;
     return insertSpaces ? ' '.repeat(tabSize) : '\t';
-}
-
-function findEnclosingEnvContext(document: vscode.TextDocument, pos: vscode.Position): { envName: string; beginLine: number } | null {
-    const offset = document.offsetAt(pos);
-    const fullText = document.getText();
-    const tagRegex = /\\(begin|end)\{([^}]+)\}/g;
-    const stack: { name: string; line: number }[] = [];
-    let match: RegExpExecArray | null;
-    while ((match = tagRegex.exec(fullText)) !== null) {
-        if (match.index >= offset) { break; }
-        const type = match[1] as 'begin' | 'end';
-        const name = match[2];
-        if (type === 'begin') {
-            const tagPos = document.positionAt(match.index);
-            stack.push({ name, line: tagPos.line });
-        } else {
-            for (let i = stack.length - 1; i >= 0; i--) {
-                if (stack[i].name === name) {
-                    stack.splice(i, 1);
-                    break;
-                }
-            }
-        }
-    }
-    if (stack.length === 0) { return null; }
-    const innermost = stack[stack.length - 1];
-    return { envName: innermost.name, beginLine: innermost.line };
 }
 
 export function registerSmartNewline(context: vscode.ExtensionContext) {

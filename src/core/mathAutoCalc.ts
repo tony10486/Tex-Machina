@@ -2,7 +2,12 @@ import * as vscode from 'vscode';
 import { findMathAtPos } from './latexParser';
 import { registerToggleFeature } from './toggleMode';
 import { PythonService } from '../services/pythonService';
-import { detectOperation, isInOpenMathEnv, extractExprFromLine } from './mathCalcUtils';
+import {
+    detectOperation,
+    isInOpenMathEnv,
+    extractExprFromLine,
+    extractExprFromDocument
+} from './mathCalcUtils';
 
 export function registerMathAutoCalc(context: vscode.ExtensionContext, pythonService: PythonService) {
     registerToggleFeature({
@@ -22,10 +27,11 @@ export function registerMathAutoCalc(context: vscode.ExtensionContext, pythonSer
                 if (!textBefore.endsWith('=..')) { continue; }
 
                 const inMath = findMathAtPos(editor.document, pos.translate(0, -1)) ||
-                    isInOpenMathEnv(line, pos.character);
+                    isInOpenMathEnv(editor.document, pos);
                 if (!inMath) { continue; }
 
-                const expr = extractExprFromLine(line, pos.character, 3);
+                const expr = extractExprFromLine(line, pos.character, 3) ||
+                    extractExprFromDocument(editor.document, pos, 3);
                 if (!expr) { continue; }
 
                 const op = detectOperation(expr);

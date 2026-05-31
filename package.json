@@ -157,7 +157,12 @@
         "tex-machina.fractionShorthand.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\ubd84\uc218 \uc790\ub3d9 \ubcc0\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. '1/2' \ub610\ub294 '(a+b)/c' \uc785\ub825 \ud6c4 \uc2a4\ud398\uc774\uc2a4\ub97c \ub204\ub974\uba74 \uc790\ub3d9\uc73c\ub85c \\frac{}{}\uc73c\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+          "description": "분수 자동 변환 기능을 활성화합니다. '1/2' 또는 '(a+b)/c' 입력 후 스페이스를 누르면 자동으로 \\frac{}{}로 변환됩니다."
+        },
+        "tex-machina.idxExpansion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "인덱스 자동 확장 기능을 활성화합니다. 수식 내에서 'idx' 입력 시 '{i \\in I}'로, 'GHidx' 입력 시 '[G:H]'로 자동 변환합니다."
         },
         "tex-machina.markdownLatex.enabled": {
           "type": "boolean",
@@ -196,7 +201,12 @@
         "tex-machina.smartNewline.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\uc2a4\ub9c8\ud2b8 \uc904\ubc14\uafc8 (Smart Newline) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \ud2b9\uc815 \ud658\uacbd\uc5d0\uc11c Enter \uc785\ub825 \uc2dc \\\\\ub098 & \ub4f1\uc744 \uc790\ub3d9\uc73c\ub85c \uc0bd\uc785\ud569\ub2c8\ub2e4."
+          "description": "스마트 줄바꿈 (Smart Newline) 기능을 활성화합니다. 특정 환경에서 Enter 입력 시 \\\\나 & 등을 자동으로 삽입합니다."
+        },
+        "tex-machina.autoEndEnv.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "자동 환경 닫기 (Auto End Env) 기능을 활성화합니다. \\end 입력 시 가장 가까운 미완성 \\begin 환경을 찾아 자동 완성합니다."
         },
         "tex-machina.mathLigatures.enabled": {
           "type": "boolean",

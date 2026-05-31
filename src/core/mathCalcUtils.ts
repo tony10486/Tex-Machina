@@ -1,3 +1,5 @@
+import * as vscode from 'vscode';
+
 export interface CalcOperation {
     mainCommand: string;
     subCommands: string[];
@@ -31,40 +33,70 @@ export function detectOperation(expr: string): CalcOperation {
     return { mainCommand: 'simplify', subCommands: [] };
 }
 
-export function isInOpenMathEnv(line: string, charPos: number): boolean {
-    const textBefore = line.substring(0, charPos);
+const MATH_OPENERS: { start: string; end: string }[] = [
+    { start: '\\[', end: '\\]' },
+    { start: '\\(', end: '\\)' },
+    { start: '$$', end: '$$' },
+];
 
-    if (textBefore.includes('\\[')) {
-        const lastOpen = textBefore.lastIndexOf('\\[');
-        const after = textBefore.substring(lastOpen + 2);
-        if (!after.includes('\\]')) {
-            return true;
+const ENV_REGEX = /\\begin\s*\{((?:equation|align|gather|multline|flalign|alignat|displaymath)\*?)\}/;
+
+function findMathOpenBefore(text: string): { start: number; prefixLen: number } | null {
+    for (const pair of MATH_OPENERS) {
+        const idx = text.lastIndexOf(pair.start);
+        if (idx >= 0) {
+            const after = text.substring(idx + pair.start.length);
+            if (!after.includes(pair.end)) {
+                return { start: idx, prefixLen: pair.start.length };
+            }
         }
     }
-    if (textBefore.includes('\\(')) {
-        const lastOpen = textBefore.lastIndexOf('\\(');
-        const after = textBefore.substring(lastOpen + 2);
-        if (!after.includes('\\)')) {
-            return true;
+
+    const envMatch = text.match(ENV_REGEX);
+    if (envMatch) {
+        const idx = envMatch.index!;
+        const after = text.substring(idx + envMatch[0].length);
+        if (!after.includes('\\end{' + envMatch[1] + '}')) {
+            return { start: idx, prefixLen: envMatch[0].length };
         }
     }
 
-    const beginMatch = textBefore.match(/\\begin\s*\{((?:equation|align|gather|multline|flalign|alignat|displaymath)\*?)\}/);
-    if (beginMatch) {
-        const envName = beginMatch[1];
-        const afterOpen = textBefore.substring(beginMatch.index! + beginMatch[0].length);
-        if (afterOpen.includes('\\end{' + envName + '}')) {
-            return false;
+    let count = 0;
+    let lastIdx = -1;
+    let i = 0;
+    while (i < text.length) {
+        if (text[i] === '$') {
+            if (i + 1 < text.length && text[i + 1] === '$') {
+                count += 2;
+                lastIdx = i;
+                i += 2;
+            } else {
+                count++;
+                lastIdx = i;
+                i++;
+            }
+        } else {
+            i++;
         }
-        return true;
+    }
+    if (count % 2 === 1) {
+        return { start: lastIdx, prefixLen: 1 };
     }
 
-    const dollarCount = (textBefore.match(/\$/g) || []).length;
-    if (dollarCount % 2 === 1) {
-        return true;
+    return null;
+}
+
+export function isInOpenMathEnv(document: vscode.TextDocument, pos: vscode.Position): boolean {
+    const startLine = Math.max(0, pos.line - 150);
+    let combined = '';
+
+    for (let l = startLine; l <= pos.line; l++) {
+        const lineText = document.lineAt(l).text;
+        const charLimit = (l === pos.line) ? pos.character : lineText.length;
+        combined += '\n' + lineText.substring(0, charLimit);
     }
 
-    return false;
+    return findMathOpenBefore(combined) !== null;
 }
 
 export function extractExprFromLine(
@@ -80,30 +112,49 @@ export function extractExprFromLine(
 
     for (let i = exprEnd - 1; i >= 0; i--) {
         const ch = line[i];
-        if (ch === '$' || ch === '\\') {
-            if (ch === '$') {
-                exprStart = i + 1;
+        if (ch === '$') {
+            if (i > 0 && line[i - 1] === '$') {
+                i--;
+            }
+            exprStart = i + 1;
+            break;
+        }
+        if (ch === '\\') {
+            if (line.startsWith('\\[', i) || line.startsWith('\\(', i)) {
+                exprStart = i + 2;
                 break;
             }
-            if (ch === '\\') {
-                if (line.substring(i, i + 2) === '\\[' || line.substring(i, i + 2) === '\\(') {
-                    exprStart = i + 2;
+            if (line.startsWith('\\begin', i)) {
+                const bracketStart = line.indexOf('{', i);
+                const bracketEnd = line.indexOf('}', bracketStart);
+                if (bracketStart > 0 && bracketEnd > bracketStart) {
+                    exprStart = bracketEnd + 1;
                     break;
                 }
-                if (line.substring(i, i + 6) === '\\begin') {
-                    const bracketStart = line.indexOf('{', i);
-                    const bracketEnd = line.indexOf('}', bracketStart);
-                    if (bracketStart > 0 && bracketEnd > bracketStart) {
-                        exprStart = bracketEnd + 1;
-                        break;
-                    }
-                }
-                exprStart = i;
-                break;
             }
         }
     }
 
     const expr = line.substring(exprStart, exprEnd).trim();
+    return expr || null;
+}
+
+export function extractExprFromDocument(
+    document: vscode.TextDocument,
+    pos: vscode.Position,
+    triggerLength: number
+): string | null {
+    const cursorOffset = document.offsetAt(pos);
+    const exprEnd = cursorOffset - triggerLength;
+    if (exprEnd <= 0) { return null; }
+
+    const startLine = Math.max(0, pos.line - 150);
+    const docStart = document.offsetAt(new vscode.Position(startLine, 0));
+    const beforeText = document.getText().substring(docStart, exprEnd);
+
+    const found = findMathOpenBefore(beforeText);
+    if (!found) { return null; }
+
+    const expr = beforeText.substring(found.start + found.prefixLen).trim();
     return expr || null;
 }

@@ -234,6 +234,70 @@ export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Positio
 }
 
 /**
+ * Finds the innermost unclosed \\begin{env} before the given position.
+ * Returns the environment name and the line where \\begin is located.
+ * Skips comments and verbatim environments.
+ */
+export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vscode.Position): { envName: string; beginLine: number } | null {
+    const offset = document.offsetAt(pos);
+    const fullText = document.getText();
+
+    // Build skip ranges (comments + verbatim)
+    const skipRanges: { start: number; end: number }[] = [];
+
+    const commentRegex = /%/g;
+    let commentMatch: RegExpExecArray | null;
+    while ((commentMatch = commentRegex.exec(fullText)) !== null) {
+        let backslashCount = 0;
+        for (let i = commentMatch.index - 1; i >= 0; i--) {
+            if (fullText[i] === '\\') { backslashCount++; } else { break; }
+        }
+        if (backslashCount % 2 === 0) {
+            const lineEnd = fullText.indexOf('\n', commentMatch.index);
+            const end = lineEnd === -1 ? fullText.length : lineEnd;
+            skipRanges.push({ start: commentMatch.index, end: end });
+            commentRegex.lastIndex = end;
+        }
+    }
+
+    const verbatimRegex = /\\begin\s*\{(verbatim|lstlisting|minted|comment|code)\}[\s\S]*?\\end\s*\{\1\}/g;
+    while ((commentMatch = verbatimRegex.exec(fullText)) !== null) {
+        skipRanges.push({ start: commentMatch.index, end: commentMatch.index + commentMatch[0].length });
+    }
+
+    const verbCmdRegex = /\\verb([^\s])[\s\S]*?\1/g;
+    while ((commentMatch = verbCmdRegex.exec(fullText)) !== null) {
+        skipRanges.push({ start: commentMatch.index, end: commentMatch.index + commentMatch[0].length });
+    }
+
+    const isSkipped = (idx: number) => skipRanges.some(r => idx >= r.start && idx < r.end);
+
+    const tagRegex = /\\(begin|end)\{([^}]+)\}/g;
+    const stack: { name: string; line: number; index: number }[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = tagRegex.exec(fullText)) !== null) {
+        if (match.index >= offset) { break; }
+        if (isSkipped(match.index)) { continue; }
+        const type = match[1] as 'begin' | 'end';
+        const name = match[2];
+        if (type === 'begin') {
+            const tagPos = document.positionAt(match.index);
+            stack.push({ name, line: tagPos.line, index: match.index });
+        } else {
+            for (let i = stack.length - 1; i >= 0; i--) {
+                if (stack[i].name === name) {
+                    stack.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+    if (stack.length === 0) { return null; }
+    const innermost = stack[stack.length - 1];
+    return { envName: innermost.name, beginLine: innermost.line };
+}
+
+/**
  * Splits a string by a delimiter only at the top level of bracket nesting.
  */
 export function splitTopLevel(text: string, delimiter: string): string[] {

@@ -23,6 +23,8 @@ import { registerImplicitSubscripts } from './core/implicitSubscripts';
 import { registerSmartNewline } from './core/smartNewline';
 import { registerMathLigatures } from './core/mathLigatures';
 import { registerRecentSymbols } from './core/recentSymbols';
+import { registerAutoEndEnv } from './core/autoEndEnv';
+import { registerIdxExpansion } from './core/idxExpansion';
 import { registerExtendedInput } from './core/extendedInput';
 import { registerSelectionExpansion } from './core/selectionExpansion';
 import { registerLinkedEditing } from './core/linkedEditing';
@@ -158,6 +160,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerSmartNewline(context);
     registerMathLigatures(context);
     registerRecentSymbols(context);
+    registerAutoEndEnv(context);
     registerExtendedInput(context);
     registerSelectionExpansion(context);
     registerLinkedEditing(context);
@@ -234,6 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerLabelDetection(context);
     registerMathAutoWrap(context);
     registerFractionShorthand(context);
+    registerIdxExpansion(context);
     registerScanPrevention(context);
 
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
