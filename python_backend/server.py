@@ -17,22 +17,25 @@ if 'typing.io' not in sys.modules:
     m.BinaryIO = io.BufferedIOBase
     sys.modules['typing.io'] = m
 
+from calc_engine import execute_calc
+
 def main():
+    # Signal that the server is ready to accept requests
+    sys.stdout.write(json.dumps({"status": "ready", "pid": os.getpid()}) + '\n')
+    sys.stdout.flush()
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
-            
+
         request_id = None
         try:
             req = json.loads(line)
             request_id = req.get('requestId')
-            
-            from calc_engine import execute_calc
+
             result_json_str = execute_calc(line)
-            
-            # If execute_calc returned a string that is already JSON, 
-            # and we have a requestId, ensure it's in that JSON.
+
             if request_id:
                 try:
                     res_obj = json.loads(result_json_str)
@@ -40,14 +43,14 @@ def main():
                         res_obj['requestId'] = request_id
                         result_json_str = json.dumps(res_obj)
                 except:
-                    pass # Not JSON or not a dict, keep as is
-            
+                    pass
+
             sys.stdout.write(result_json_str + '\n')
             sys.stdout.flush()
-            
+
         except Exception as e:
             error_msg = {
-                "status": "error", 
+                "status": "error",
                 "message": f"Server Error: {str(e)}"
             }
             if request_id:

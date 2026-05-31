@@ -17,12 +17,20 @@ suite('Math Ghost Calc Test Suite', function () {
 
     test('isInOpenMathEnv detects open inline math', async () => {
         const { isInOpenMathEnv } = require('../core/mathCalcUtils');
-        assert.ok(isInOpenMathEnv('$ x + 1 =', 8));
+        const doc = await vscode.workspace.openTextDocument({
+            language: 'latex',
+            content: '$ x + 1 = '
+        });
+        assert.ok(isInOpenMathEnv(doc, new vscode.Position(0, 8)));
     });
 
     test('isInOpenMathEnv returns false for closed math', async () => {
         const { isInOpenMathEnv } = require('../core/mathCalcUtils');
-        assert.ok(!isInOpenMathEnv('', 0));
+        const doc = await vscode.workspace.openTextDocument({
+            language: 'latex',
+            content: ''
+        });
+        assert.ok(!isInOpenMathEnv(doc, new vscode.Position(0, 0)));
     });
 
     test('detectOperation returns calc for derivatives', async () => {

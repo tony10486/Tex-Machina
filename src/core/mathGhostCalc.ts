@@ -13,12 +13,13 @@ class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
     async provideInlineCompletionItems(
         document: vscode.TextDocument,
         position: vscode.Position,
-        _context: vscode.InlineCompletionContext,
-        _token: vscode.CancellationToken
+        context: vscode.InlineCompletionContext,
+        token: vscode.CancellationToken
     ): Promise<vscode.InlineCompletionItem[]> {
         const config = vscode.workspace.getConfiguration('tex-machina');
         if (!config.get<boolean>('mathGhostCalc.enabled', true)) { return []; }
 
+        if (token.isCancellationRequested) { return []; }
         if (position.character < 1) { return []; }
 
         const line = document.lineAt(position.line).text;
@@ -27,7 +28,7 @@ class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
 
         if (position.character >= 2) {
             const c2 = line[position.character - 2];
-            if (['=', ':', '<', '>', '-', '!', '~'].includes(c2)) { return []; }
+            if (['=', ':', '<', '>', '-', '!', '~', '&'].includes(c2)) { return []; }
         }
 
         const inMath = findMathAtPos(document, position.translate(0, -1)) ||
@@ -38,16 +39,31 @@ class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
             extractExprFromDocument(document, position, 1);
         if (!expr) { return []; }
 
-        const exprMin = expr.replace(/\s/g, '');
-        if (!/[a-zA-Z\\]/.test(exprMin)) { return []; }
-
-        const cached = this.cache.get(exprMin);
+        const cachedKey = expr.replace(/\s/g, '');
+        const cached = this.cache.get(cachedKey);
         if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
             return [new vscode.InlineCompletionItem(' ' + cached.result)];
         }
 
         const op = detectOperation(expr);
-        const timeout = config.get<number>('mathGhostCalc.timeout', 10000);
+        const timeout = config.get<number>('mathGhostCalc.timeout', 20000);
+
+        const calcSettings = config.get<any>('calc.settings', {});
+        const requestConfig = {
+            laplace: {
+                source: calcSettings.laplaceSource || 't',
+                target: calcSettings.laplaceTarget || 's'
+            },
+            angleUnit: calcSettings.angleUnit || 'deg',
+            precision: calcSettings.precision,
+            imaginaryUnit: calcSettings.imaginaryUnit,
+            simplifyResult: calcSettings.simplifyResult,
+            defaultDomain: calcSettings.defaultDomain,
+            rationalNotation: calcSettings.rationalNotation,
+            autoFactor: calcSettings.autoFactor
+        };
+
+        console.log('[GhostCalc] provider called', { triggerKind: context.triggerKind, charBefore, inMath: !!inMath, expr, mainCommand: op.mainCommand });
 
         try {
             const response = await Promise.race([
@@ -55,24 +71,30 @@ class MathGhostCalcProvider implements vscode.InlineCompletionItemProvider {
                     mainCommand: op.mainCommand,
                     subCommands: op.subCommands,
                     rawSelection: expr,
-                    config: {}
+                    config: requestConfig
                 }),
                 new Promise<any>((_, reject) =>
                     setTimeout(() => reject(new Error('timeout')), timeout)
                 )
             ]);
 
+            if (token.isCancellationRequested) { return []; }
+
+            console.log('[GhostCalc] Python response', JSON.stringify(response));
+
             if (response.status === 'success' && response.latex) {
                 if (this.cache.size >= this.CACHE_MAX) {
                     const oldest = this.cache.keys().next().value;
                     if (oldest) { this.cache.delete(oldest); }
                 }
-                this.cache.set(exprMin, { result: response.latex, timestamp: Date.now() });
+                this.cache.set(cachedKey, { result: response.latex, timestamp: Date.now() });
 
                 return [new vscode.InlineCompletionItem(' ' + response.latex)];
+            } else {
+                console.log('[GhostCalc] unexpected response', JSON.stringify(response));
             }
-        } catch {
-            // Silently fail — no ghost text shown
+        } catch (e) {
+            console.log('[GhostCalc] error', e);
         }
 
         return [];
@@ -84,8 +106,10 @@ export function registerMathGhostCalc(context: vscode.ExtensionContext, pythonSe
 
     context.subscriptions.push(
         vscode.languages.registerInlineCompletionItemProvider(
-            { language: 'latex', scheme: 'file' },
+            { language: 'latex' },
             provider
         )
     );
+
+    console.log('[GhostCalc] provider registered for latex');
 }
