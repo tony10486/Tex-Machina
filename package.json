@@ -652,6 +652,16 @@
           "type": "boolean",
           "default": true,
           "description": "단일 문자 입력 후 자동 종료. true면 cmd+e 후 한 문자만 변환하고 모드가 자동 해제됩니다. false면 토글 모드(10초간 유지)로 동작합니다."
+        },
+        "tex-machina.shorthandMode.singleShot": {
+          "type": "boolean",
+          "default": true,
+          "description": "한 번 확장 후 자동 종료. true면 alt+g 후 Space로 한 번 확장하고 모드가 자동 해제됩니다. false면 연속 모드(10초간 유지)로 동작합니다."
+        },
+        "tex-machina.shorthandMode.mappings": {
+          "type": "object",
+          "default": {},
+          "description": "사용자 정의 단축어 매핑. 기본 매핑(bc→\\bigcup 등)을 확장 또는 덮어씁니다. 예: { \"bc\": \"\\\\bigcup\", \"bi\": \"\\\\bigcap\" }"
         }
       }
     },
@@ -763,6 +773,10 @@
       {
         "command": "tex-machina.toggleExtendedInput",
         "title": "LaTeX: Toggle Extended Input Mode"
+      },
+      {
+        "command": "tex-machina.toggleShorthandMode",
+        "title": "LaTeX: Toggle Shorthand Mode"
       },
       {
         "command": "tex-machina.matrix.resizeMenu",
@@ -956,6 +970,12 @@
         "command": "tex-machina.toggleExtendedInput",
         "key": "ctrl+e",
         "mac": "cmd+e",
+        "when": "editorTextFocus && editorLangId == 'latex'"
+      },
+      {
+        "command": "tex-machina.toggleShorthandMode",
+        "key": "alt+g",
+        "mac": "alt+g",
         "when": "editorTextFocus && editorLangId == 'latex'"
       },
       {

@@ -38,10 +38,13 @@ export function registerIdxExpansion(context: vscode.ExtensionContext) {
                 const groupIdxMatch = textBefore.match(/([A-Z])([A-Z])idx$/);
                 if (groupIdxMatch) {
                     const replacement = `[${groupIdxMatch[1]}:${groupIdxMatch[2]}]`;
+                    const groupLen = groupIdxMatch[0].length;
+                    const groupStart = pos.character - groupLen;
+                    const groupRange = new vscode.Range(new vscode.Position(pos.line, groupStart), pos);
                     await editor.edit(editBuilder => {
-                        editBuilder.replace(replaceRange, replacement);
+                        editBuilder.replace(groupRange, replacement);
                     }, { undoStopBefore: false, undoStopAfter: false });
-                    const newPos = new vscode.Position(pos.line, idxStart + replacement.length);
+                    const newPos = new vscode.Position(pos.line, groupStart + replacement.length);
                     editor.selection = new vscode.Selection(newPos, newPos);
                     return;
                 }

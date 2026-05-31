@@ -25,6 +25,7 @@ import { registerMathLigatures } from './core/mathLigatures';
 import { registerRecentSymbols } from './core/recentSymbols';
 import { registerAutoEndEnv } from './core/autoEndEnv';
 import { registerIdxExpansion } from './core/idxExpansion';
+import { registerShorthandMode } from './core/shorthandMode';
 import { registerExtendedInput } from './core/extendedInput';
 import { registerSelectionExpansion } from './core/selectionExpansion';
 import { registerLinkedEditing } from './core/linkedEditing';
@@ -162,6 +163,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerRecentSymbols(context);
     registerAutoEndEnv(context);
     registerExtendedInput(context);
+    registerShorthandMode(context);
     registerSelectionExpansion(context);
     registerLinkedEditing(context);
     registerSmartBackspace(context);
