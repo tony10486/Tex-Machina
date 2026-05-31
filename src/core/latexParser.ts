@@ -217,6 +217,20 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
         }
     }
 
+    for (const entry of stack) {
+        const isUnclosedInline = entry.type === '$';
+        const isUnclosedDisplay = entry.type === '$$' || entry.type === '\\[';
+        const isUnclosedParen = entry.type === '\\(';
+        if ((isUnclosedInline || isUnclosedDisplay || isUnclosedParen) && offset >= entry.start) {
+            candidates.push({
+                range: new vscode.Range(document.positionAt(entry.start), pos),
+                text: text.substring(entry.start - searchStartOffset, offset - searchStartOffset),
+                type: isUnclosedDisplay ? 'display' : 'inline',
+                content: text.substring(entry.start + entry.tagLen - searchStartOffset, offset - searchStartOffset),
+                prefixLen: entry.tagLen
+            });
+        }
+    }
 
     if (candidates.length === 0) {return null;}
 
@@ -233,12 +247,19 @@ export function findMathAtPos(document: vscode.TextDocument, pos: vscode.Positio
     return findInnermostEnvAtPos(document, pos);
 }
 
+export interface EnvContext {
+    envName: string;
+    beginLine: number;
+    remainingCount: number;
+}
+
 /**
  * Finds the innermost unclosed \\begin{env} before the given position.
- * Returns the environment name and the line where \\begin is located.
+ * Returns the environment name, line where \\begin is located,
+ * and the total number of unclosed environments remaining.
  * Skips comments and verbatim environments.
  */
-export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vscode.Position): { envName: string; beginLine: number } | null {
+export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vscode.Position): EnvContext | null {
     const offset = document.offsetAt(pos);
     const fullText = document.getText();
 
@@ -294,7 +315,7 @@ export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vsco
     }
     if (stack.length === 0) { return null; }
     const innermost = stack[stack.length - 1];
-    return { envName: innermost.name, beginLine: innermost.line };
+    return { envName: innermost.name, beginLine: innermost.line, remainingCount: stack.length };
 }
 
 /**

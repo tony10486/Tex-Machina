@@ -2,9 +2,10 @@ import * as vscode from 'vscode';
 import { findEnclosingEnvContext, isInsideComment, isInsideVerbatim } from './latexParser';
 
 export function registerAutoEndEnv(context: vscode.ExtensionContext) {
-    let suggestTimeout: NodeJS.Timeout | undefined;
+    let isProcessing = false;
 
-    const changeListener = vscode.workspace.onDidChangeTextDocument(event => {
+    const changeListener = vscode.workspace.onDidChangeTextDocument(async event => {
+        if (isProcessing) return;
         const doc = event.document;
         if (doc.languageId !== 'latex') return;
 
@@ -14,20 +15,43 @@ export function registerAutoEndEnv(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document !== doc) return;
 
-        for (const change of event.contentChanges) {
-            if (change.text.length === 0) continue;
+        isProcessing = true;
+        try {
+            for (const change of event.contentChanges) {
+                if (change.text.length === 0) continue;
 
-            const pos = change.range.end;
-            const lineText = doc.lineAt(pos.line).text;
-            const textBefore = lineText.substring(0, pos.character);
+                const pos = change.range.end;
+                const lineText = doc.lineAt(pos.line).text;
+                const textBefore = lineText.substring(0, pos.character);
 
-            if (!/(?:^|\s+)\\end(?:\{[^}]*)?$/.test(textBefore)) continue;
-            if (isInsideComment(doc, pos)) continue;
+                const match = textBefore.match(/(?:^|\s+)(\\end(?:\{([^}]*))?)$/);
+                if (!match) continue;
+                if (isInsideComment(doc, pos)) continue;
 
-            if (suggestTimeout) clearTimeout(suggestTimeout);
-            suggestTimeout = setTimeout(() => {
-                vscode.commands.executeCommand('editor.action.triggerSuggest');
-            }, 10);
+                const partialName = match[2];
+
+                const envCtx = findEnclosingEnvContext(doc, pos);
+                if (!envCtx) continue;
+
+                if (partialName !== undefined && !envCtx.envName.startsWith(partialName)) continue;
+
+                await editor.edit(editBuilder => {
+                    if (partialName === undefined) {
+                        editBuilder.insert(pos, `{${envCtx.envName}}`);
+                    } else if (partialName === '') {
+                        editBuilder.insert(pos, `${envCtx.envName}}`);
+                    } else {
+                        const replaceFrom = pos.translate(0, -partialName.length);
+                        editBuilder.replace(
+                            new vscode.Range(replaceFrom, pos),
+                            `${envCtx.envName}}`
+                        );
+                    }
+                }, { undoStopBefore: false, undoStopAfter: true });
+                return;
+            }
+        } finally {
+            isProcessing = false;
         }
     });
 
@@ -46,22 +70,20 @@ export function registerAutoEndEnv(context: vscode.ExtensionContext) {
                 const match = textBefore.match(/(?:^|\s+)(\\end(?:\{([^}]*))?)$/);
                 if (!match) return;
 
-                const fullMatch = match[1];
                 const partialName = match[2];
 
                 const envCtx = findEnclosingEnvContext(document, position);
                 if (!envCtx) return;
 
-                const envName = envCtx.envName;
+                if (partialName !== undefined && !envCtx.envName.startsWith(partialName)) return;
 
-                if (partialName !== undefined && !envName.startsWith(partialName)) return;
+                const envName = envCtx.envName;
+                const hasBrace = partialName !== undefined;
 
                 const item = new vscode.CompletionItem(
                     `\\end{${envName}}`,
                     vscode.CompletionItemKind.Snippet
                 );
-
-                const hasBrace = partialName !== undefined;
 
                 if (!hasBrace) {
                     item.range = new vscode.Range(position, position);
