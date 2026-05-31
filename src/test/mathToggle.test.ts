@@ -50,9 +50,23 @@ suite('Math Toggle Test Suite', () => {
         await closeEditor();
     });
 
-    test('Should break line when text precedes $$ on same line and toggle to equation', async () => {
-        const { document, editor } = await openDoc('text $$a = b$$');
-        editor.selection = new vscode.Selection(0, 8, 0, 8);
+    test('$ -> \\[ breaks line when text precedes on same line', async () => {
+        const { document, editor } = await openDoc('text $a = b$');
+        editor.selection = new vscode.Selection(0, 6, 0, 6);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForLine(document, 0, 'text '));
+        assert.ok(await waitForLine(document, 1, '\\['));
+        assert.ok(await waitForLine(document, 2, '    a = b'));
+        assert.ok(await waitForLine(document, 3, '\\]'));
+        await closeEditor();
+    });
+
+    test('\\[ -> equation breaks line and preserves indent', async () => {
+        const { document, editor } = await openDoc('text $a = b$');
+        editor.selection = new vscode.Selection(0, 6, 0, 6);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        await waitForIncludes(document, '\\[');
+        editor.selection = new vscode.Selection(1, 1, 1, 1);
         await vscode.commands.executeCommand('tex-machina.toggleMathMode');
         assert.ok(await waitForLine(document, 0, 'text '));
         assert.ok(await waitForLine(document, 1, '\\begin{equation}'));
@@ -61,25 +75,83 @@ suite('Math Toggle Test Suite', () => {
         await closeEditor();
     });
 
-    test('Should preserve indentation when $$ with surrounding text toggles to equation', async () => {
-        const { document, editor } = await openDoc('    text $$a = b$$');
-        editor.selection = new vscode.Selection(0, 12, 0, 12);
+    test('$$ -> equation (via fallback) breaks line with text before and after', async () => {
+        const { document, editor } = await openDoc('text $$a = b$$ more');
+        editor.selection = new vscode.Selection(0, 8, 0, 8);
         await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForLine(document, 0, 'text '));
+        assert.ok(await waitForLine(document, 1, '\\begin{equation}'));
+        assert.ok(await waitForLine(document, 2, '    a = b'));
+        assert.ok(await waitForLine(document, 3, '\\end{equation} more'));
+        await closeEditor();
+    });
+
+    test('Trailing text stays on same line as closing delimiter', async () => {
+        const { document, editor } = await openDoc('text $$a = b$$ and more');
+        editor.selection = new vscode.Selection(0, 8, 0, 8);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForIncludes(document, '\\end{equation} and more'));
+        await closeEditor();
+    });
+
+    test('Preserves indentation with $ -> \\[', async () => {
+        const { document, editor } = await openDoc('    text $a = b$');
+        editor.selection = new vscode.Selection(0, 10, 0, 10);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForLine(document, 0, '    text '));
+        assert.ok(await waitForLine(document, 1, '    \\['));
+        assert.ok(await waitForLine(document, 2, '        a = b'));
+        assert.ok(await waitForLine(document, 3, '    \\]'));
+        await closeEditor();
+    });
+
+    test('Preserves indentation with $ -> equation (two toggles)', async () => {
+        const { document, editor } = await openDoc('    text $a = b$');
+        editor.selection = new vscode.Selection(0, 10, 0, 10);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        await waitForIncludes(document, '\\[');
+        editor.selection = new vscode.Selection(1, 5, 1, 5);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForLine(document, 0, '    text '));
         assert.ok(await waitForLine(document, 1, '    \\begin{equation}'));
         assert.ok(await waitForLine(document, 2, '        a = b'));
         assert.ok(await waitForLine(document, 3, '    \\end{equation}'));
         await closeEditor();
     });
 
-    test('Should push trailing text to next line when text follows $$', async () => {
-        const { document, editor } = await openDoc('text $$a = b$$ more');
-        editor.selection = new vscode.Selection(0, 8, 0, 8);
+    test('$$ -> equation with indentation and trailing text', async () => {
+        const { document, editor } = await openDoc('    text $$a = b$$ end');
+        editor.selection = new vscode.Selection(0, 12, 0, 12);
         await vscode.commands.executeCommand('tex-machina.toggleMathMode');
-        assert.ok(await waitForLine(document, 4, 'more'));
+        assert.ok(await waitForLine(document, 0, '    text '));
+        assert.ok(await waitForLine(document, 1, '    \\begin{equation}'));
+        assert.ok(await waitForLine(document, 2, '        a = b'));
+        assert.ok(await waitForLine(document, 3, '    \\end{equation} end'));
         await closeEditor();
     });
 
-    test('Should join multiline equation into single inline $ when toggling back', async () => {
+    test('Inline $ with surrounding Korean text -> \\[', async () => {
+        const { document, editor } = await openDoc('$H$와 $K$를 군 $G$의 부분군이라 하자. 그러면 $[G : H \\cap K]$는 유한하고');
+        editor.selection = new vscode.Selection(0, 42, 0, 42);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForIncludes(document, '\\['));
+        assert.ok(await waitForIncludes(document, '그러면'));
+        assert.ok(await waitForLine(document, 1, '\\['));
+        await closeEditor();
+    });
+
+    test('Complex: $$ -> equation with Korean text before and after', async () => {
+        const { document, editor } = await openDoc('$H$와 $K$를 군 $G$의 유한 지표를 갖는 부분군이라 하자. 그러면 $$[G : H \\cap K]$$는 유한하고');
+        editor.selection = new vscode.Selection(0, 56, 0, 56);
+        await vscode.commands.executeCommand('tex-machina.toggleMathMode');
+        assert.ok(await waitForLine(document, 0, '$H$와 $K$를 군 $G$의 유한 지표를 갖는 부분군이라 하자. 그러면 '));
+        assert.ok(await waitForLine(document, 1, '\\begin{equation}'));
+        assert.ok(await waitForLine(document, 2, '    [G : H \\cap K]'));
+        assert.ok(await waitForLine(document, 3, '\\end{equation}는 유한하고'));
+        await closeEditor();
+    });
+
+    test('Join multiline equation into single inline $ when toggling back', async () => {
         const { document, editor } = await openDoc('\\begin{equation}\n    a = b\n\\end{equation}');
         editor.selection = new vscode.Selection(1, 4, 1, 4);
         await vscode.commands.executeCommand('tex-machina.toggleMathMode');
