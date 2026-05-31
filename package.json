@@ -201,12 +201,63 @@
         "tex-machina.mathLigatures.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\uc218\uc2dd \uc804\uc6a9 \ub9ac\uac00\ucc98 (Mathematical Ligatures) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. <=, -> \uac19\uc740 \uae30\ud638 \uc870\ud569\uc744 LaTeX \uba85\ub839\uc5b4\ub85c \uc790\ub3d9 \ubcc0\ud658\ud569\ub2c8\ub2e4."
+          "description": "수식 전용 리가처 (Mathematical Ligatures) 기능을 활성화합니다. <=, -> 같은 기호 조합을 LaTeX 명령어로 자동 변환합니다."
+        },
+        "tex-machina.mathLigatures.mappings": {
+          "type": "object",
+          "default": {
+            "->": "\\to ",
+            "=>": "\\implies ",
+            "<=": "\\le ",
+            ">=": "\\ge ",
+            "!=": "\\neq ",
+            "~=": "\\approx ",
+            "~~": "\\approx ",
+            "~": "\\sim ",
+            "<<": "\\ll ",
+            ">>": "\\gg ",
+            "==": "\\equiv ",
+            ":=": "\\coloneqq ",
+            "<-": "\\leftarrow ",
+            "<->": "\\leftrightarrow ",
+            "<=>": "\\iff ",
+            "|->": "\\mapsto ",
+            "&&": "\\land ",
+            "||": "\\lor ",
+            "+-": "\\pm ",
+            "<{}|": "\\bra{$1}",
+            "|{}>": "\\ket{$1}",
+            "<{}|{}>": "\\braket{$1}{$2}"
+          },
+          "description": "수식 리가처 매핑 사전 (Dictionary). 키=트리거 문자열, 값=LaTeX 치환 결과. {}는 내용을 캡처하는 와일드카드 (예: \"<{}|\" → \"\\bra{$1}\"). {}가 없는 키는 해당 마지막 문자 입력 시 즉시 변환되고, {}가 있는 키는 스페이스바 입력 시 변환됩니다."
+        },
+        "tex-machina.mathAutoCalc.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "수식 자동 계산 (Auto Calc) 기능을 활성화합니다. 수식 내에서 =.. 을 입력하면 SymPy로 계산한 결과로 =..를 자동 치환합니다."
+        },
+        "tex-machina.mathAutoCalc.defaultOperation": {
+          "type": "string",
+          "enum": ["auto", "expand", "simplify", "evaluate"],
+          "default": "auto",
+          "description": "=.. 자동 계산 시 사용할 기본 SymPy 연산입니다. 'auto'는 수식 내용에 따라 자동으로 최적의 연산을 선택합니다."
+        },
+        "tex-machina.mathGhostCalc.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "수식 고스트 텍스트 (Ghost Calc) 기능을 활성화합니다. 수식 내에서 =을 입력하면 계산 결과를 흐릿한 텍스트로 제안하고 Tab으로 삽입할 수 있습니다."
+        },
+        "tex-machina.mathGhostCalc.timeout": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 2000,
+          "maximum": 30000,
+          "description": "Ghost Calc의 Python 계산 타임아웃 (ms). 복잡한 계산일수록 더 긴 시간이 필요합니다. 사용자는 타임아웃이 걸려도 기다리지 않으며, 결과가 준비되면 즉시 Ghost Text로 표시됩니다."
         },
         "tex-machina.linkedEditing.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\ud658\uacbd \uc774\ub984 \ub3d9\uae30\ud654 \uc218\uc815 (Linked Editing for Environments) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \\begin{env}\uc758 \uc774\ub984\uc744 \uc218\uc815\ud558\uba74 \\end{env}\ub3c4 \uc790\ub3d9\uc73c\ub85c \ud568\uaed8 \ubc14\ub01d\ub2c8\ub2e4."
+          "description": "환경 이름 동기화 수정 (Linked Editing for Environments) 기능을 활성화합니다. \\begin{env}의 이름을 수정하면 \\end{env}도 자동으로 함께 바꿉니다."
         },
         "tex-machina.mathRefactor.enabled": {
           "type": "boolean",
@@ -432,7 +483,9 @@
                     "mathLigatures",
                     "linkedEditing",
                     "mathRefactor",
-                    "extendedInput"
+                    "extendedInput",
+                    "mathAutoCalc",
+                    "mathGhostCalc"
                   ],
                   "enumDescriptions": [
                     "암시적 첨자 (x1 -> x_1)",
@@ -448,7 +501,9 @@
                     "수식 전용 리가처",
                     "환경 이름 동기화",
                     "수학 변수 리팩토링 (멀티 커서)",
-                    "확장 문자 입력 모드 (그리스 문자, 기호)"
+                    "확장 문자 입력 모드 (그리스 문자, 기호)",
+                    "수식 자동 계산 (=.. -> = result)",
+                    "수식 고스트 텍스트 (= -> Tab으로 결과 삽입)"
                   ]
                 },
                 "description": "해당 프로필에서 활성화할 기능 목록"

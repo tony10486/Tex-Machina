@@ -75,6 +75,7 @@ let isExtendedInputActive = false;
 let remainingTime = 0;
 let timerId: NodeJS.Timeout | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+let autoCloseDisposable: vscode.Disposable | undefined;
 
 function updateStatusBar() {
     if (statusBarItem) {
@@ -88,6 +89,10 @@ function isSingleShotMode(): boolean {
 
 function activateExtendedInput() {
     isExtendedInputActive = true;
+
+    autoCloseDisposable = vscode.languages.setLanguageConfiguration('latex', {
+        autoClosingPairs: []
+    });
 
     if (!isSingleShotMode()) {
         const config = vscode.workspace.getConfiguration('tex-machina');
@@ -109,6 +114,10 @@ function deactivateExtendedInput() {
     remainingTime = 0;
     if (timerId) { clearInterval(timerId); timerId = undefined; }
     statusBarItem?.hide();
+    if (autoCloseDisposable) {
+        autoCloseDisposable.dispose();
+        autoCloseDisposable = undefined;
+    }
 }
 
 export function registerExtendedInput(context: vscode.ExtensionContext) {
@@ -170,13 +179,6 @@ export function registerExtendedInput(context: vscode.ExtensionContext) {
                 if (!replacement) { continue; }
 
                 editor.edit(eb => {
-                    if (char === '{') {
-                        const nextPos = pos.translate(0, 1);
-                        if (nextChar === '}') {
-                            eb.replace(new vscode.Range(pos, nextPos.translate(0, 1)), replacement);
-                            return;
-                        }
-                    }
                     eb.replace(new vscode.Range(pos, pos.translate(0, 1)), replacement);
                 }, { undoStopBefore: false, undoStopAfter: false });
                 expanded = true;
