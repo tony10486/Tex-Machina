@@ -45,6 +45,7 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
 
         const content = mathEnv.content;
         let newText = '';
+        let replaceRange = mathEnv.range;
 
         if (nextType === '$') {
             const singleLineContent = content.replace(/\s+/g, ' ').trim();
@@ -55,11 +56,49 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
             newText = `\\[\n    ${content}\n\\]`;
         } else {
             // Environment types (equation, align, gather, etc.)
-            newText = `\\begin{${nextType}}\n    ${content}\n\\end{${nextType}}`;
+            // Compute proper indentation from surrounding context
+            const startLine = mathEnv.range.start.line;
+            const endLine = mathEnv.range.end.line;
+            const lineText = document.lineAt(startLine).text;
+
+            const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
+            const baseIndent = lineText.match(/^\s*/)?.[0] || '';
+            const innerIndent = baseIndent + ' '.repeat(tabSize);
+
+            const cleanContent = content.trim();
+            const indentedContent = cleanContent.split('\n')
+                .map(l => {
+                    const s = l.trim();
+                    return s ? innerIndent + s : '';
+                })
+                .join('\n');
+
+            let envText = `\\begin{${nextType}}\n${indentedContent}\n${baseIndent}\\end{${nextType}}`;
+
+            const isSameLine = startLine === endLine;
+            if (isSameLine) {
+                const textBefore = lineText.substring(0, mathEnv.range.start.character);
+                const textAfter = lineText.substring(mathEnv.range.end.character);
+                const hasTextBefore = /\S/.test(textBefore);
+                const hasTextAfter = /\S/.test(textAfter);
+
+                if (hasTextBefore) {
+                    envText = '\n' + baseIndent + envText;
+                }
+                if (hasTextAfter) {
+                    envText = envText + '\n' + baseIndent + textAfter.replace(/^\s+/, '');
+                    replaceRange = new vscode.Range(
+                        mathEnv.range.start,
+                        new vscode.Position(startLine, lineText.length)
+                    );
+                }
+            }
+
+            newText = envText;
         }
 
         await editor.edit(editBuilder => {
-            editBuilder.replace(mathEnv.range, newText);
+            editBuilder.replace(replaceRange, newText);
         });
     });
 
