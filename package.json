@@ -252,18 +252,6 @@
           "default": "auto",
           "description": "=.. 자동 계산 시 사용할 기본 SymPy 연산입니다. 'auto'는 수식 내용에 따라 자동으로 최적의 연산을 선택합니다."
         },
-        "tex-machina.mathGhostCalc.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "수식 고스트 텍스트 (Ghost Calc) 기능을 활성화합니다. 수식 내에서 =을 입력하면 계산 결과를 흐릿한 텍스트로 제안하고 Tab으로 삽입할 수 있습니다."
-        },
-        "tex-machina.mathGhostCalc.timeout": {
-          "type": "number",
-          "default": 10000,
-          "minimum": 2000,
-          "maximum": 30000,
-          "description": "Ghost Calc의 Python 계산 타임아웃 (ms). 복잡한 계산일수록 더 긴 시간이 필요합니다. 사용자는 타임아웃이 걸려도 기다리지 않으며, 결과가 준비되면 즉시 Ghost Text로 표시됩니다."
-        },
         "tex-machina.linkedEditing.enabled": {
           "type": "boolean",
           "default": true,
@@ -494,8 +482,7 @@
                     "linkedEditing",
                     "mathRefactor",
                     "extendedInput",
-                    "mathAutoCalc",
-                    "mathGhostCalc"
+                    "mathAutoCalc"
                   ],
                   "enumDescriptions": [
                     "암시적 첨자 (x1 -> x_1)",

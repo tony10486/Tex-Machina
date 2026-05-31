@@ -35,7 +35,6 @@ import { registerMatrixResizer } from './core/matrixResizer';
 import { registerSelectionWrap } from './core/selectionWrap';
 import { registerMathRefactor } from './core/mathRefactor';
 import { registerMathAutoCalc } from './core/mathAutoCalc';
-import { registerMathGhostCalc } from './core/mathGhostCalc';
 import {
     PasteExternalDataProvider,
     smartPasteExternalData,
@@ -171,7 +170,6 @@ export async function activate(context: vscode.ExtensionContext) {
     registerSelectionWrap(context);
     registerMathRefactor(context);
     registerMathAutoCalc(context, pythonService);
-    registerMathGhostCalc(context, pythonService);
 
     // Paste External Data Provider
     if (typeof vscode.languages.registerDocumentPasteEditProvider === 'function') {
