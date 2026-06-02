@@ -19,6 +19,7 @@ const MATH_MACROS = [
 export function registerMathAutoWrap(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'autoMathWrap',
+        triggerChars: [' '],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // Trigger on space insertion

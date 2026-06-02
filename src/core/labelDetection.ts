@@ -308,9 +308,9 @@ export function registerLabelDetection(context: vscode.ExtensionContext) {
         }
     }, null, context.subscriptions);
 
-    vscode.workspace.onDidChangeTextDocument(event => {
+    vscode.workspace.onDidSaveTextDocument(doc => {
         const editor = vscode.window.activeTextEditor;
-        if (editor && event.document === editor.document) {
+        if (editor && doc === editor.document) {
             triggerUpdate(editor);
         }
     }, null, context.subscriptions);

@@ -104,22 +104,29 @@ function getEnvLinkedRanges(document: vscode.TextDocument, position: vscode.Posi
 
 function findMatchingEnd(document: vscode.TextDocument, startPos: vscode.Position, envName: string): vscode.Range | null {
     let depth = 0;
-    const docText = document.getText();
+    const startLine = startPos.line;
+    const endLine = Math.min(document.lineCount - 1, startLine + 500);
+    const range = new vscode.Range(
+        startPos,
+        new vscode.Position(endLine, document.lineAt(endLine).text.length)
+    );
+    const text = document.getText(range);
     const offset = document.offsetAt(startPos);
-    const remainingText = docText.substring(offset);
-    
+
     const beginPattern = `\\\\begin\\{${envName.replace(/\*/g, '\\*')}\\}`;
     const endPattern = `\\\\end\\{${envName.replace(/\*/g, '\\*')}\\}`;
     const regex = new RegExp(`(${beginPattern})|(${endPattern})`, 'g');
-    
+
     let match;
-    while ((match = regex.exec(remainingText)) !== null) {
-        if (match[1]) { depth++; } 
+    while ((match = regex.exec(text)) !== null) {
+        const absPos = offset + match.index;
+        if (match[1]) { depth++; }
         else if (match[2]) {
             if (depth === 0) {
-                const matchStart = offset + match.index;
-                const matchEnd = matchStart + match[0].length;
-                return new vscode.Range(document.positionAt(matchStart), document.positionAt(matchEnd));
+                return new vscode.Range(
+                    document.positionAt(absPos),
+                    document.positionAt(absPos + match[0].length)
+                );
             }
             depth--;
         }
@@ -129,28 +136,34 @@ function findMatchingEnd(document: vscode.TextDocument, startPos: vscode.Positio
 
 function findMatchingBegin(document: vscode.TextDocument, startPos: vscode.Position, envName: string): vscode.Range | null {
     let depth = 0;
-    const docText = document.getText();
-    const offset = document.offsetAt(startPos);
-    const precedingText = docText.substring(0, offset);
-    
+    const startLine = startPos.line;
+    const endLine = Math.max(0, startLine - 500);
+    const range = new vscode.Range(
+        new vscode.Position(endLine, 0),
+        startPos
+    );
+    const text = document.getText(range);
+    const windowStart = document.offsetAt(new vscode.Position(endLine, 0));
+
     const beginPattern = `\\\\begin\\{${envName.replace(/\*/g, '\\*')}\\}`;
     const endPattern = `\\\\end\\{${envName.replace(/\*/g, '\\*')}\\}`;
     const regex = new RegExp(`(${beginPattern})|(${endPattern})`, 'g');
-    
-    const matches = [];
+
+    const matches: Array<{ match: RegExpExecArray; absPos: number }> = [];
     let match;
-    while ((match = regex.exec(precedingText)) !== null) {
-        matches.push(match);
+    while ((match = regex.exec(text)) !== null) {
+        matches.push({ match, absPos: windowStart + match.index });
     }
 
     for (let i = matches.length - 1; i >= 0; i--) {
-        const m = matches[i];
-        if (m[2]) { depth++; } // Found an \end
-        else if (m[1]) { // Found a \begin
+        const { match: m, absPos } = matches[i];
+        if (m[2]) { depth++; }
+        else if (m[1]) {
             if (depth === 0) {
-                const matchStart = m.index;
-                const matchEnd = matchStart + m[0].length;
-                return new vscode.Range(document.positionAt(matchStart), document.positionAt(matchEnd));
+                return new vscode.Range(
+                    document.positionAt(absPos),
+                    document.positionAt(absPos + m[0].length)
+                );
             }
             depth--;
         }

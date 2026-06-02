@@ -43,6 +43,7 @@ function findMatchingOpen(textBefore: string, closeChar: string): number {
 export function registerAutoLeftRight(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'autoLeftRight',
+        triggerChars: [')', ']', '}'],
         onTextChange: async (event, editor) => {
             const enabled = vscode.workspace.getConfiguration('tex-machina').get<boolean>('autoLeftRight.enabled', true);
             if (!enabled) { return; }

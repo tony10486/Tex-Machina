@@ -4,6 +4,7 @@ import { registerToggleFeature } from './toggleMode';
 export function registerSmartQuotes(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'smartQuotes',
+        triggerChars: ['"'],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // Check if the inserted text is exactly a double quote

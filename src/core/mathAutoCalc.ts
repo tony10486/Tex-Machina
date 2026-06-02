@@ -12,6 +12,7 @@ import {
 export function registerMathAutoCalc(context: vscode.ExtensionContext, pythonService: PythonService) {
     registerToggleFeature({
         name: 'mathAutoCalc',
+        triggerChars: ['.'],
         onTextChange: async (event, editor) => {
             const config = vscode.workspace.getConfiguration('tex-machina');
             const enabled = config.get<boolean>('mathAutoCalc.enabled', true);

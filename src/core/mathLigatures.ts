@@ -18,6 +18,7 @@ function buildPatternRegex(trigger: string): RegExp {
 export function registerMathLigatures(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'mathLigatures',
+        triggerChars: [' ', '-', '=', '<', '>', '!', '~', ':', '|', '+', '&'],
         onTextChange: async (event, editor) => {
             const config = vscode.workspace.getConfiguration('tex-machina');
             const enabled = config.get<boolean>('mathLigatures.enabled', true);

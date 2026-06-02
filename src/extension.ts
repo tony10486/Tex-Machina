@@ -274,12 +274,9 @@ export async function activate(context: vscode.ExtensionContext) {
         pythonService.send(payload);
     }));
 
-    let labelUpdateTimeout: NodeJS.Timeout | undefined;
-    vscode.workspace.onDidChangeTextDocument(event => {
-        const editor = vscode.window.activeTextEditor;
-        if (editor && event.document === editor.document && event.document.fileName.endsWith('.tex')) {
-            if (labelUpdateTimeout) { clearTimeout(labelUpdateTimeout); }
-            labelUpdateTimeout = setTimeout(() => { vscode.commands.executeCommand('tex-machina.discoverLabels'); }, 1000);
+    vscode.workspace.onDidSaveTextDocument(doc => {
+        if (doc.fileName.endsWith('.tex')) {
+            vscode.commands.executeCommand('tex-machina.discoverLabels');
         }
     }, null, context.subscriptions);
 

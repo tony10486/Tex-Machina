@@ -43,6 +43,7 @@ export function getSubscriptReplacement(textBefore: string): string | null {
 export function registerImplicitSubscripts() {
     registerToggleFeature({
         name: 'implicitSubscripts',
+        triggerChars: ['0','1','2','3','4','5','6','7','8','9'],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // Only trigger on typing a single digit to prevent lag on pasting or multi-character insertion

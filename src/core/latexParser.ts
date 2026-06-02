@@ -261,34 +261,39 @@ export interface EnvContext {
  */
 export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vscode.Position): EnvContext | null {
     const offset = document.offsetAt(pos);
-    const fullText = document.getText();
+    const startLine = Math.max(0, pos.line - 200);
+    const windowStart = document.offsetAt(new vscode.Position(startLine, 0));
+    const text = document.getText(new vscode.Range(
+        new vscode.Position(startLine, 0),
+        pos
+    ));
 
-    // Build skip ranges (comments + verbatim)
+    // Build skip ranges (comments + verbatim) within the window
     const skipRanges: { start: number; end: number }[] = [];
 
     const commentRegex = /%/g;
     let commentMatch: RegExpExecArray | null;
-    while ((commentMatch = commentRegex.exec(fullText)) !== null) {
+    while ((commentMatch = commentRegex.exec(text)) !== null) {
         let backslashCount = 0;
         for (let i = commentMatch.index - 1; i >= 0; i--) {
-            if (fullText[i] === '\\') { backslashCount++; } else { break; }
+            if (text[i] === '\\') { backslashCount++; } else { break; }
         }
         if (backslashCount % 2 === 0) {
-            const lineEnd = fullText.indexOf('\n', commentMatch.index);
-            const end = lineEnd === -1 ? fullText.length : lineEnd;
-            skipRanges.push({ start: commentMatch.index, end: end });
+            const lineEnd = text.indexOf('\n', commentMatch.index);
+            const end = lineEnd === -1 ? text.length : lineEnd;
+            skipRanges.push({ start: windowStart + commentMatch.index, end: windowStart + end });
             commentRegex.lastIndex = end;
         }
     }
 
     const verbatimRegex = /\\begin\s*\{(verbatim|lstlisting|minted|comment|code)\}[\s\S]*?\\end\s*\{\1\}/g;
-    while ((commentMatch = verbatimRegex.exec(fullText)) !== null) {
-        skipRanges.push({ start: commentMatch.index, end: commentMatch.index + commentMatch[0].length });
+    while ((commentMatch = verbatimRegex.exec(text)) !== null) {
+        skipRanges.push({ start: windowStart + commentMatch.index, end: windowStart + commentMatch.index + commentMatch[0].length });
     }
 
     const verbCmdRegex = /\\verb([^\s])[\s\S]*?\1/g;
-    while ((commentMatch = verbCmdRegex.exec(fullText)) !== null) {
-        skipRanges.push({ start: commentMatch.index, end: commentMatch.index + commentMatch[0].length });
+    while ((commentMatch = verbCmdRegex.exec(text)) !== null) {
+        skipRanges.push({ start: windowStart + commentMatch.index, end: windowStart + commentMatch.index + commentMatch[0].length });
     }
 
     const isSkipped = (idx: number) => skipRanges.some(r => idx >= r.start && idx < r.end);
@@ -296,14 +301,14 @@ export function findEnclosingEnvContext(document: vscode.TextDocument, pos: vsco
     const tagRegex = /\\(begin|end)\{([^}]+)\}/g;
     const stack: { name: string; line: number; index: number }[] = [];
     let match: RegExpExecArray | null;
-    while ((match = tagRegex.exec(fullText)) !== null) {
-        if (match.index >= offset) { break; }
-        if (isSkipped(match.index)) { continue; }
+    while ((match = tagRegex.exec(text)) !== null) {
+        const absIdx = windowStart + match.index;
+        if (absIdx >= offset) { break; }
+        if (isSkipped(absIdx)) { continue; }
         const type = match[1] as 'begin' | 'end';
         const name = match[2];
         if (type === 'begin') {
-            const tagPos = document.positionAt(match.index);
-            stack.push({ name, line: tagPos.line, index: match.index });
+            stack.push({ name, line: document.positionAt(absIdx).line, index: absIdx });
         } else {
             for (let i = stack.length - 1; i >= 0; i--) {
                 if (stack[i].name === name) {

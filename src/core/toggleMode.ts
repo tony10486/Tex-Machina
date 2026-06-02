@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 export interface ToggleFeature {
     name: string;
+    triggerChars?: string[];
     onTextChange?: (event: vscode.TextDocumentChangeEvent, editor: vscode.TextEditor) => Promise<void> | void;
     onSelectionChange?: (event: vscode.TextEditorSelectionChangeEvent, editor: vscode.TextEditor) => Promise<void> | void;
     onActivate?: () => Promise<void> | void;
@@ -106,7 +107,6 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // Only run inside LaTeX files
             if (editor.document.languageId !== 'latex') {
                 return;
             }
@@ -116,22 +116,32 @@ export function registerToggleMode(context: vscode.ExtensionContext) {
             }
 
             textChangeTimeout = setTimeout(async () => {
-                // Execute all active registered toggle features
+                const config = vscode.workspace.getConfiguration('tex-machina');
+
                 for (const feature of registeredFeatures) {
                     if (!feature.onTextChange) {
                         continue;
                     }
 
-                    // A feature runs if it's globally enabled OR if it's active in the current toggle profile
-                    const config = vscode.workspace.getConfiguration('tex-machina');
                     const isGloballyEnabled = config.get(`${feature.name}.enabled`, false);
+                    if (!isGloballyEnabled && !isFeatureActive(feature.name)) {
+                        continue;
+                    }
 
-                    if (isGloballyEnabled || isFeatureActive(feature.name)) {
-                        try {
-                            await feature.onTextChange(event, editor);
-                        } catch (e) {
-                            console.error(`Error in toggle feature ${feature.name}:`, e);
+                    if (feature.triggerChars) {
+                        const hasTrigger = event.contentChanges.some(change =>
+                            change.text.length > 0 &&
+                            feature.triggerChars!.some(ch => change.text.includes(ch))
+                        );
+                        if (!hasTrigger) {
+                            continue;
                         }
+                    }
+
+                    try {
+                        await feature.onTextChange(event, editor);
+                    } catch (e) {
+                        console.error(`Error in toggle feature ${feature.name}:`, e);
                     }
                 }
             }, 50);

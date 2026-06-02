@@ -5,6 +5,7 @@ import { isInsideComment, isInsideVerbatim } from './latexParser';
 export function registerMarkdownLatex(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'markdownLatex',
+        triggerChars: [' '],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 // We are looking for space insertion

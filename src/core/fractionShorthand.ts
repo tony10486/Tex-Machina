@@ -5,6 +5,7 @@ import { registerToggleFeature } from './toggleMode';
 export function registerFractionShorthand(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'fractionShorthand',
+        triggerChars: [' '],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
                 if (change.text !== ' ') {continue;}

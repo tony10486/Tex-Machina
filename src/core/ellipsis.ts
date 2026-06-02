@@ -4,6 +4,7 @@ import { registerToggleFeature } from './toggleMode';
 export function registerEllipsis(context: vscode.ExtensionContext) {
     registerToggleFeature({
         name: 'ellipsis',
+        triggerChars: ['.'],
         onTextChange: async (event, editor) => {
             const config = vscode.workspace.getConfiguration('tex-machina');
             
