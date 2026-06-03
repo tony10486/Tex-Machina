@@ -54,6 +54,18 @@ export async function waitForCondition(fn: () => boolean, timeout = 500): Promis
     return fn();
 }
 
+export async function waitForExtension(timeout = 15000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+        const commands = await vscode.commands.getCommands(true);
+        if (commands.includes('tex-machina.smartBackspace')) {
+            return;
+        }
+        await sleep(100);
+    }
+    throw new Error('Extension activation timed out: tex-machina.smartBackspace command not found');
+}
+
 export async function insertAt(editor: vscode.TextEditor, line: number, char: number, text: string): Promise<void> {
     await editor.edit(eb => eb.insert(new vscode.Position(line, char), text));
 }

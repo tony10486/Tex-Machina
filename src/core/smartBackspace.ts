@@ -12,14 +12,12 @@ export function registerSmartBackspace(context: vscode.ExtensionContext) {
         const pos = selection.active;
         const document = editor.document;
         const line = document.lineAt(pos.line).text;
-        
+
         let commandStartPos: vscode.Position | undefined;
 
-        // Case 1: Cursor is at the backslash (|\frac)
         if (pos.character < line.length && line[pos.character] === '\\') {
             commandStartPos = pos;
-        } 
-        // Case 2: Cursor is immediately after the backslash (\|frac)
+        }
         else if (pos.character > 0 && line[pos.character - 1] === '\\') {
             commandStartPos = pos.translate(0, -1);
         }
@@ -34,7 +32,6 @@ export function registerSmartBackspace(context: vscode.ExtensionContext) {
             }
         }
 
-        // Fallback to default backspace behavior
         await vscode.commands.executeCommand('deleteLeft');
     });
 

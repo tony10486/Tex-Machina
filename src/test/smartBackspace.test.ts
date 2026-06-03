@@ -1,8 +1,16 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { openDoc, closeEditor, waitForCondition, sleep } from './testUtils';
+import { openDoc, closeEditor, waitForCondition, sleep, waitForExtension } from './testUtils';
 
 suite('Smart Backspace Test Suite', () => {
+    suiteSetup(async function () {
+        this.timeout(30000);
+        const doc = await vscode.workspace.openTextDocument({ language: 'latex', content: '' });
+        await vscode.window.showTextDocument(doc);
+        await waitForExtension();
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
     test('Should delete entire empty \\frac{}{}', async () => {
         const { document, editor } = await openDoc('\\frac{}{}');
         editor.selection = new vscode.Selection(0, 0, 0, 0);

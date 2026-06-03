@@ -774,6 +774,10 @@
         "title": "LaTeX: Wrap Selection with Superscript (^)"
       },
       {
+        "command": "tex-machina.smartBackspace",
+        "title": "LaTeX: Smart Backspace"
+      },
+      {
         "command": "tex-machina.navigateArgumentForward",
         "title": "LaTeX: Navigate to Next Command Argument"
       },
