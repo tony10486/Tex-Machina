@@ -649,6 +649,17 @@
           "type": "object",
           "default": {},
           "description": "사용자 정의 단축어 매핑. 기본 매핑(bc→\\bigcup 등)을 확장 또는 덮어씁니다. 예: { \"bc\": \"\\\\bigcup\", \"bi\": \"\\\\bigcap\" }"
+        },
+        "tex-machina.structureWrap.titleBehavior": {
+          "type": "string",
+          "enum": ["none", "cursor"],
+          "default": "none",
+          "description": "Title argument behavior for environment wrapping. 'none': no title argument. 'cursor': add empty title brackets and place cursor inside."
+        },
+        "tex-machina.structureWrap.environments": {
+          "type": "object",
+          "default": {},
+          "description": "Custom environment mappings for wrap feature. Key is the short identifier, value has 'name' (LaTeX env name) and 'hasTitle' (boolean). Merged with built-in environments (thm, lemma, proof, defn, cor, prop, box, remark, example)."
         }
       }
     },
@@ -796,6 +807,10 @@
       {
         "command": "tex-machina.pasteExternalData.tabular",
         "title": "LaTeX: Paste External Data as Tabular"
+      },
+      {
+        "command": "tex-machina.wrapStructure",
+        "title": "LaTeX: Wrap with Environment"
       }
     ],
     "viewsContainers": {

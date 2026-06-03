@@ -33,6 +33,7 @@ import { registerArgumentNavigation } from './core/argumentNavigation';
 import { registerMathToggle } from './core/mathToggle';
 import { registerMatrixResizer } from './core/matrixResizer';
 import { registerSelectionWrap } from './core/selectionWrap';
+import { registerStructureWrap } from './core/structureWrap';
 import { registerMathRefactor } from './core/mathRefactor';
 import { registerMathAutoCalc } from './core/mathAutoCalc';
 import {
@@ -168,6 +169,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerMathToggle(context);
     registerMatrixResizer(context);
     registerSelectionWrap(context);
+    registerStructureWrap(context);
     registerMathRefactor(context);
     registerMathAutoCalc(context, pythonService);
 
@@ -388,6 +390,17 @@ export async function activate(context: vscode.ExtensionContext) {
             analyze: [
                 { label: "analyze > split", description: "수식 자동 분할 (= 기준)" },
                 { label: "analyze > split / plus", description: "수식 자동 분할 (=, +, - 기준)" }
+            ],
+            wrap: [
+                { label: "wrap > thm", description: "Wrap with theorem environment" },
+                { label: "wrap > lemma", description: "Wrap with lemma environment" },
+                { label: "wrap > proof", description: "Wrap with proof environment" },
+                { label: "wrap > defn", description: "Wrap with definition environment" },
+                { label: "wrap > cor", description: "Wrap with corollary environment" },
+                { label: "wrap > prop", description: "Wrap with proposition environment" },
+                { label: "wrap > box", description: "Wrap with tcolorbox environment" },
+                { label: "wrap > remark", description: "Wrap with remark environment" },
+                { label: "wrap > example", description: "Wrap with example environment" },
             ]
         };
 
@@ -399,6 +412,7 @@ export async function activate(context: vscode.ExtensionContext) {
             else if (/^plot\s*>/.test(value)) { quickPick.items = commandLib.plot; }
             else if (/^cite\s*>/.test(value)) { quickPick.items = commandLib.cite; }
             else if (/^analyze\s*>/.test(value)) { quickPick.items = commandLib.analyze; }
+            else if (/^wrap\s*>/.test(value)) { quickPick.items = commandLib.wrap; }
             else if (value === "") { quickPick.items = commandLib.root; }
         });
 
@@ -429,6 +443,13 @@ export async function activate(context: vscode.ExtensionContext) {
             if (userInput.startsWith("analyze > split")) {
                 const splitAtPlus = userInput.includes("/ plus");
                 vscode.commands.executeCommand('tex-machina.splitMath', { splitAtPlus });
+                return;
+            }
+            if (userInput.startsWith("wrap > ")) {
+                const envId = userInput.replace("wrap > ", "").trim();
+                if (envId) {
+                    vscode.commands.executeCommand('tex-machina.wrapStructure', envId);
+                }
                 return;
             }
             if (userInput === "labels") { vscode.commands.executeCommand('tex-machina.discoverLabels'); return; }
