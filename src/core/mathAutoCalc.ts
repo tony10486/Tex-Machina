@@ -57,7 +57,7 @@ export function registerMathAutoCalc(context: vscode.ExtensionContext, pythonSer
                         }, { undoStopBefore: false, undoStopAfter: false });
                     }
                 } catch {
-                    // Silently fail — leave =.. as-is
+                    console.debug('mathAutoCalc: async calc failed');
                 }
             }
         }

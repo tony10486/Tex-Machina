@@ -649,7 +649,7 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                     let content = "";
                     try {
                         content = await fsPromises.readFile(bibPath, 'utf8');
-                    } catch (err) {}
+                    } catch { /* file may not exist */ }
                     if (!content.includes(response.cite_key)) {
                         await fsPromises.appendFile(bibPath, `\n\n${response.bibtex}`);
                         vscode.window.showInformationMessage(`BibTeX이 ${bibFile}에 추가되었습니다.`);

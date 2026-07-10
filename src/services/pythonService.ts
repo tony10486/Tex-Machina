@@ -8,7 +8,6 @@ export class PythonService {
     private pythonProcess: ChildProcess | null = null;
     private resolvers: Map<string, (response: any) => void> = new Map();
     private stdoutBuffer: string = "";
-    private useShell: boolean = false;
     private startupResolver: (() => void) | null = null;
     private startupTimeout: NodeJS.Timeout | null = null;
 
@@ -18,15 +17,12 @@ export class PythonService {
         try {
             const result = spawnSync(cmd, ['-c', 'import sympy'], { stdio: 'ignore', timeout: 3000 });
             return result.status === 0;
-        } catch (e: any) {
-            console.log('[PythonService] tryPython error for', cmd, ':', e.message);
+        } catch {
             return false;
         }
     }
 
     private findPythonCommand(): string | null {
-        console.log('[PythonService] findPythonCommand called, SHELL=', process.env.SHELL);
-
         // Fast path: try common python commands directly
         const candidates = process.platform === 'win32'
             ? ['python', 'python3', 'py']
@@ -50,11 +46,8 @@ export class PythonService {
         // 2. Try to find python3 via login shell (respects pyenv, conda, asdf)
         const shell = process.env.SHELL || '/bin/zsh';
         try {
-            console.log('[PythonService] resolving via login shell:', shell);
             const result = spawnSync(shell, ['-l', '-c', 'which python3'], { encoding: 'utf8', timeout: 5000 });
-            console.log('[PythonService] shell exit code:', result.status);
             const resolved = (result.stdout || '').toString().trim();
-            console.log('[PythonService] shell resolved to:', resolved || '(empty)');
             if (resolved && this.tryPython(resolved)) {
                 console.log('[PythonService] login shell resolved to', resolved);
                 return resolved;

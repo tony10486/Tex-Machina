@@ -119,8 +119,8 @@ export function registerEnvAutoDelete(context: vscode.ExtensionContext) {
                 }
 
                 lastDocumentState.set(uriStr, workingLines);
-            } catch (err) {
-                // Silent fail in production
+            } catch {
+                // envAutoDelete error is non-critical
             }
         })
     );

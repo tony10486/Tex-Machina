@@ -115,6 +115,7 @@ class LabelTracker {
     private fileRefCache: Map<string, Set<string>> = new Map();
     private globalRefCounts: Map<string, number> = new Map();
     private isInitialized = false;
+    private isInitializing = false;
 
     public getGlobalRefs(): Set<string> {
         return new Set(this.globalRefCounts.keys());
@@ -122,7 +123,8 @@ class LabelTracker {
 
     async syncWorkspaceRefs(affectedUri?: vscode.Uri) {
         if (!this.isInitialized && !affectedUri) {
-            const texFiles = await vscode.workspace.findFiles('**/*.tex');
+            const excludePattern = '{**/node_modules/**,**/venv/**,**/.git/**,**/dist/**,**/out/**}';
+            const texFiles = await vscode.workspace.findFiles('**/*.tex', excludePattern);
             for (const file of texFiles) {
                 await this.updateFileRefCache(file);
             }
@@ -187,13 +189,18 @@ class LabelTracker {
     }
 
     async initialize() {
-        if (this.isInitialized) { return; }
-        await this.syncWorkspaceRefs();
-        
-        for (const doc of vscode.workspace.textDocuments) {
-            if (doc.languageId === 'latex') {
-                this.recordDocumentState(doc);
+        if (this.isInitialized || this.isInitializing) { return; }
+        this.isInitializing = true;
+        try {
+            await this.syncWorkspaceRefs();
+            
+            for (const doc of vscode.workspace.textDocuments) {
+                if (doc.languageId === 'latex') {
+                    this.recordDocumentState(doc);
+                }
             }
+        } finally {
+            this.isInitializing = false;
         }
     }
 
