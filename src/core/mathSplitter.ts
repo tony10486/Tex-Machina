@@ -96,10 +96,10 @@ export function splitMathString(text: string, splitAtPlus: boolean = false): str
             i += 3;
         } else if (inner.substring(i).startsWith('\\left')) {
             depth++;
-            i += 5;
+            i += 4;
         } else if (inner.substring(i).startsWith('\\right')) {
             depth--;
-            i += 6;
+            i += 5;
         } else if (depth === 0) {
             // Check for '='
             if (char === '=') {

@@ -59,7 +59,7 @@ export function findContentRange(document: vscode.TextDocument, pos: vscode.Posi
         if (closeTags.includes(endTag)) {
             const openTag = endTag === '$$' ? '$$' : (endTag === '\\]' ? '\\[' : '\\(');
             const openIdx = textBeforePos.lastIndexOf(openTag, lastMatch.index - 1);
-            if (openIdx !== -1 && openTag === endTag ? true : openIdx < lastMatch.index) {
+            if (openIdx !== -1 && openIdx < lastMatch.index && !(openTag === endTag && openIdx === lastMatch.index)) {
                 const openPos = document.positionAt(openIdx);
                 const endPos = document.positionAt(lastMatch.index + endTag.length);
                 const envType = endTag === '$$' ? 'display' : (endTag === '\\]' ? 'display' : 'inline');

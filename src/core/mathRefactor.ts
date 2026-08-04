@@ -318,7 +318,7 @@ export function refactorInMath(mathText: string, oldSym: string, newSym: string)
         content = mathText.substring(1, mathText.length - 1);
     } else if (mathText.startsWith('\\begin')) {
         const beginMatch = mathText.match(/^\\begin\{[a-zA-Z]+\*?\}/);
-        const endMatch = mathText.match(/\\end\{[a-zA-Z]+\*?\}$/);
+        const endMatch = mathText.match(/\\end\{[a-zA-Z]+\*?\}\s*$/);
         if (beginMatch && endMatch) {
             prefix = beginMatch[0];
             suffix = endMatch[0];

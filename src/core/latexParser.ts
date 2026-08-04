@@ -13,7 +13,8 @@ export interface MathEnvironment {
  * Checks if the given position is inside a LaTeX comment.
  */
 export function isInsideComment(document: vscode.TextDocument, pos: vscode.Position): boolean {
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const textBefore = lineText.substring(0, pos.character);
     
     // Find unescaped %
@@ -42,7 +43,8 @@ export function isInsideVerbatim(document: vscode.TextDocument, pos: vscode.Posi
     const offset = document.offsetAt(pos);
     const startLine = Math.max(0, pos.line - 150);
     const endLine = Math.min(document.lineCount - 1, pos.line + 150);
-    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(endLine).text.length));
+    const safeEndLine = Math.max(0, Math.min(endLine, document.lineCount - 1));
+    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(safeEndLine).text.length));
     const text = document.getText(range);
     const searchStartOffset = document.offsetAt(range.start);
 
@@ -83,9 +85,10 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     const startLine = Math.max(0, pos.line - 150);
     const endLine = Math.min(lineCount - 1, pos.line + 150);
     
+    const safeEndLine = Math.max(0, Math.min(endLine, lineCount - 1));
     const rangeToSearch = new vscode.Range(
         new vscode.Position(startLine, 0),
-        new vscode.Position(endLine, document.lineAt(endLine).text.length)
+        new vscode.Position(endLine, document.lineAt(safeEndLine).text.length)
     );
     const text = document.getText(rangeToSearch);
     const searchStartOffset = document.offsetAt(rangeToSearch.start);
@@ -354,7 +357,8 @@ export function splitTopLevel(text: string, delimiter: string): string[] {
  * Uses a manual scan to avoid ReDoS and support nested braces.
  */
 export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.Position): { range: vscode.Range, text: string } | null {
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const restOfLine = lineText.substring(pos.character);
 
     if (!restOfLine.startsWith('\\')) {

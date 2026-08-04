@@ -100,26 +100,39 @@ async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' 
     // Clean rows: remove the trailing empty string if the content ended with \\
     let rows = rawRows.map(r => r.trim()).filter((r, i) => r !== '' || i < rawRows.length - 1);
 
+    // Parse cols to handle asymmetric matrices
+    let parsedRows = rows.map(r => splitTopLevel(r, '&'));
+    let maxCols = parsedRows.reduce((max, cols) => Math.max(max, cols.length), 1);
+
+    // Pad missing '&'
+    parsedRows = parsedRows.map(cols => {
+        while (cols.length < maxCols) {
+            cols.push(' ');
+        }
+        return cols;
+    });
+
     if (action === 'addRow') {
-        const colCount = rows.length > 0 ? splitTopLevel(rows[0], '&').length : 1;
-        const newRow = new Array(colCount).fill('').join(' & ');
-        rows.push(newRow);
+        const newRow = new Array(maxCols).fill(' ');
+        parsedRows.push(newRow);
     } else if (action === 'removeRow') {
-        if (rows.length > 1) {rows.pop();}
+        if (parsedRows.length > 1) {parsedRows.pop();}
     } else if (action === 'addCol') {
-        rows = rows.map(row => {
-            return row + ' & ';
+        parsedRows = parsedRows.map(cols => {
+            cols.push(' ');
+            return cols;
         });
     } else if (action === 'removeCol') {
-        rows = rows.map(row => {
-            const cols = splitTopLevel(row, '&');
+        parsedRows = parsedRows.map(cols => {
             if (cols.length > 1) {
                 cols.pop();
-                return cols.join(' & ').trim();
             }
-            return row;
+            return cols;
         });
     }
+
+    // Join back
+    rows = parsedRows.map(cols => cols.join(' & '));
 
     // Reconstruct with consistent formatting (always end rows with \\ for clarity)
     const indent = getIndentation(editor);

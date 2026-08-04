@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { registerToggleFeature } from './toggleMode';
+import { registerToggleFeature, unregisterToggleFeature } from './toggleMode';
 import { findMathAtPos, isInsideComment, isInsideVerbatim, isInsideTextMode } from './latexParser';
 
 /**
@@ -32,19 +32,18 @@ export function getSubscriptReplacement(textBefore: string): string | null {
     if (match) {
         const variable = match[1];
         const typedDigit = match[2];
-        // Special case: don't transform if it looks like a command name being typed (e.g., \alpha1 is okay, but \label1 might be part of \label{fig1})
-        // Actually, rule1 already matches \alpha1. 
         return `${variable}_${typedDigit}`;
     }
 
     return null;
 }
 
-export function registerImplicitSubscripts() {
-    registerToggleFeature({
+export function registerImplicitSubscripts(): vscode.Disposable {
+    const feature = {
         name: 'implicitSubscripts',
         triggerChars: ['0','1','2','3','4','5','6','7','8','9'],
-        onTextChange: async (event, editor) => {
+        onTextChange: async (event: vscode.TextDocumentChangeEvent, editor: vscode.TextEditor) => {
+
             for (const change of event.contentChanges) {
                 // Only trigger on typing a single digit to prevent lag on pasting or multi-character insertion
                 if (!/^\d$/.test(change.text)) {
@@ -107,5 +106,10 @@ export function registerImplicitSubscripts() {
                 }
             }
         }
+    };
+    registerToggleFeature(feature);
+    return new vscode.Disposable(() => {
+        unregisterToggleFeature('implicitSubscripts');
     });
 }
+

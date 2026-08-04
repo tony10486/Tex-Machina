@@ -13,6 +13,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(webviewView: vscode.WebviewView) {
         this._view = webviewView;
+        webviewView.onDidDispose(() => {
+            this._view = undefined;
+        });
         webviewView.webview.options = { 
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
@@ -850,17 +853,20 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         };
                     }
 
-                    if (!labelNetwork) {
-                        const container = document.getElementById('viz');
-                        const options = {
-                            physics: physicsOptions,
-                            interaction: { 
-                                hover: true,
-                                tooltipDelay: 200,
-                                hideEdgesOnDrag: false
-                            }
-                        };
-                        labelNetwork = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
+                    if (labelNetwork) {
+                        labelNetwork.destroy();
+                        labelNetwork = null;
+                    }
+                    const container = document.getElementById('viz');
+                    const options = {
+                        physics: physicsOptions,
+                        interaction: { 
+                            hover: true,
+                            tooltipDelay: 200,
+                            hideEdgesOnDrag: false
+                        }
+                    };
+                    labelNetwork = new vis.Network(container, { nodes: visNodes, edges: visEdges }, options);
 
                         let lastFitTime = 0;
                         labelNetwork.on("render", () => {

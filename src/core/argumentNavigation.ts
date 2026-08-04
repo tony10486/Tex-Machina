@@ -118,7 +118,8 @@ function findTableEnvAtPos(document: vscode.TextDocument, pos: vscode.Position):
     const offset = document.offsetAt(pos);
     const startLine = Math.max(0, pos.line - 50);
     const endLine = Math.min(document.lineCount - 1, pos.line + 50);
-    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(endLine).text.length));
+    const safeEndLine = Math.max(0, Math.min(endLine, document.lineCount - 1));
+    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(safeEndLine).text.length));
     const text = document.getText(range);
     const baseOffset = document.offsetAt(range.start);
 
@@ -256,7 +257,8 @@ function smartTabForward(editor: vscode.TextEditor): boolean {
         return false;
     }
 
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const charPos = editor.selection.start.character;
     const ampersands = findTopLevelAmpersands(lineText);
     const rowEnd = findTopLevelRowEnd(lineText);
@@ -282,7 +284,8 @@ function smartTabForward(editor: vscode.TextEditor): boolean {
         return false;
     }
     for (let nextLine = pos.line + 1; nextLine <= envRange.end.line; nextLine++) {
-        const nextLineText = document.lineAt(nextLine).text;
+        const safeNextLine = Math.max(0, Math.min(nextLine, document.lineCount - 1));
+        const nextLineText = document.lineAt(safeNextLine).text;
         if (nextLineText.trim().length === 0 || nextLineText.trim().startsWith('%')) {
             continue;
         }
@@ -319,7 +322,8 @@ function smartTabBackward(editor: vscode.TextEditor): boolean {
         return false;
     }
 
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const charPos = editor.selection.start.character;
     const ampersands = findTopLevelAmpersands(lineText);
     const rowEnd = findTopLevelRowEnd(lineText);
@@ -335,7 +339,8 @@ function smartTabBackward(editor: vscode.TextEditor): boolean {
 
     const prevLineNum = pos.line - 1;
     if (prevLineNum < 0) { return false; }
-    const prevLineText = document.lineAt(prevLineNum).text;
+    const safePrevLine = Math.max(0, Math.min(prevLineNum, document.lineCount - 1));
+    const prevLineText = document.lineAt(safePrevLine).text;
     const prevAmps = findTopLevelAmpersands(prevLineText);
     const prevRowEnd = findTopLevelRowEnd(prevLineText);
     const lastCellIdx = prevAmps.length;
@@ -439,7 +444,8 @@ function findCurrentArg(
     position: vscode.Position
 ): CommandArg | null {
     const offset = document.offsetAt(position);
-    const lineText = document.lineAt(position.line).text;
+    const lineNum = Math.max(0, Math.min(position.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const cmdRegex = /\\[a-zA-Z]+\*?/g;
     let match: RegExpExecArray | null;
 
@@ -479,7 +485,8 @@ function* scanCommands(
 ): Generator<CommandInfo> {
     if (reverse) {
         for (let lineNum = endLine; lineNum >= startLine; lineNum--) {
-            const lineText = document.lineAt(lineNum).text;
+            const safeLineNum = Math.max(0, Math.min(lineNum, document.lineCount - 1));
+            const lineText = document.lineAt(safeLineNum).text;
             if (isLineCommented(lineText)) {
                 continue;
             }
@@ -506,7 +513,8 @@ function* scanCommands(
         }
     } else {
         for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
-            const lineText = document.lineAt(lineNum).text;
+            const safeLineNum = Math.max(0, Math.min(lineNum, document.lineCount - 1));
+            const lineText = document.lineAt(safeLineNum).text;
             if (isLineCommented(lineText)) {
                 continue;
             }
@@ -530,7 +538,8 @@ function* scanCommands(
 }
 
 function getCurrentCommandEndOffset(document: vscode.TextDocument, pos: vscode.Position): number {
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const lineOffset = document.offsetAt(new vscode.Position(pos.line, 0));
     const cursorOffset = document.offsetAt(pos);
     const cmdRegex = /\\[a-zA-Z]+\*?/g;
@@ -551,7 +560,8 @@ function getCurrentCommandEndOffset(document: vscode.TextDocument, pos: vscode.P
 }
 
 function getCurrentCommandStartOffset(document: vscode.TextDocument, pos: vscode.Position): number {
-    const lineText = document.lineAt(pos.line).text;
+    const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
+    const lineText = document.lineAt(lineNum).text;
     const lineOffset = document.offsetAt(new vscode.Position(pos.line, 0));
     const cursorOffset = document.offsetAt(pos);
     const cmdRegex = /\\[a-zA-Z]+\*?/g;
@@ -587,9 +597,11 @@ function navigateArgumentForward(editor: vscode.TextEditor): boolean {
     const targetBracketType = currentArg.bracketType;
     const currentCmdEndOffset = getCurrentCommandEndOffset(document, pos);
 
-    const lineCount = document.lineCount;
+    const currentLine = pos.line;
+    const startLine = Math.max(0, currentLine - 50);
+    const endLine = Math.min(document.lineCount - 1, currentLine + 50);
 
-    for (const cmdInfo of scanCommands(document, 0, lineCount - 1, false)) {
+    for (const cmdInfo of scanCommands(document, startLine, endLine, false)) {
         const cmdStartOffset = document.offsetAt(cmdInfo.range.start);
         if (cmdStartOffset <= currentCmdEndOffset) {
             continue;
@@ -612,7 +624,7 @@ function navigateArgumentForward(editor: vscode.TextEditor): boolean {
         }
     }
 
-    for (const cmdInfo of scanCommands(document, 0, lineCount - 1, false)) {
+    for (const cmdInfo of scanCommands(document, startLine, endLine, false)) {
         const cmdPos = document.positionAt(document.offsetAt(cmdInfo.range.start));
         if (isInsideMathEnv(document, cmdPos)) {
             continue;
@@ -648,9 +660,11 @@ function navigateArgumentBackward(editor: vscode.TextEditor): boolean {
     const targetBracketType = currentArg.bracketType;
     const currentCmdStartOffset = getCurrentCommandStartOffset(document, pos);
 
-    const lineCount = document.lineCount;
+    const currentLine = pos.line;
+    const startLine = Math.max(0, currentLine - 50);
+    const endLine = Math.min(document.lineCount - 1, currentLine + 50);
 
-    for (const cmdInfo of scanCommands(document, 0, lineCount - 1, true)) {
+    for (const cmdInfo of scanCommands(document, startLine, endLine, true)) {
         const cmdEndOffset = document.offsetAt(cmdInfo.range.end);
         if (cmdEndOffset > currentCmdStartOffset) {
             continue;
@@ -674,7 +688,7 @@ function navigateArgumentBackward(editor: vscode.TextEditor): boolean {
         }
     }
 
-    for (const cmdInfo of scanCommands(document, 0, lineCount - 1, true)) {
+    for (const cmdInfo of scanCommands(document, startLine, endLine, true)) {
         const cmdPos = document.positionAt(document.offsetAt(cmdInfo.range.start));
         if (isInsideMathEnv(document, cmdPos)) {
             continue;

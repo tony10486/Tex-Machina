@@ -55,6 +55,12 @@ def safe_parse_expr(expr_str, local_dict=None, evaluate=False):
     if not expr_str:
         return None
     
+    expr_s = str(expr_str)
+    forbidden_keywords = ['__', 'import', 'exec', 'eval']
+    for kw in forbidden_keywords:
+        if kw in expr_s:
+            raise ValueError(f"Forbidden keyword '{kw}' detected in expression: {expr_s}")
+
     # 공통적으로 사용할 수 있는 local_dict 설정
     combined_locals = {}
     if local_dict:
@@ -63,11 +69,13 @@ def safe_parse_expr(expr_str, local_dict=None, evaluate=False):
     try:
         # parse_expr는 내부적으로 eval을 사용하므로 global_dict를 엄격히 제한하는 것이 중요합니다.
         return parse_expr(
-            str(expr_str), 
+            expr_s, 
             global_dict=SAFE_SYMPY_DICT, 
             local_dict=combined_locals, 
             evaluate=evaluate
         )
+    except ValueError:
+        raise
     except Exception as e:
         # 파싱 실패 시 예외를 발생시키거나 안전한 폴백을 수행합니다.
         raise ValueError(f"Safe parsing failed for expression '{expr_str}': {str(e)}")

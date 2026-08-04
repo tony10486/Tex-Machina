@@ -15,6 +15,14 @@ export function registerToggleFeature(feature: ToggleFeature) {
     registeredFeatures.push(feature);
 }
 
+export function unregisterToggleFeature(featureName: string) {
+    const idx = registeredFeatures.findIndex(f => f.name === featureName);
+    if (idx !== -1) {
+        registeredFeatures.splice(idx, 1);
+    }
+}
+
+
 let isToggleActive = false;
 let activeProfile: string | null = null; // "unconditional" or a number string like "1", "2"
 let remainingTime = 0;

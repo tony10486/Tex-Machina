@@ -196,29 +196,39 @@ export async function smartPasteExternalData() {
         ? (isInsideMath ? 'matrix' : 'tabular')
         : cfg.defaultMode as 'matrix' | 'tabular';
 
+    let selectedMatrixEnv = cfg.matrixType;
+    let selectedTabularStyle = cfg.tabularStyle;
+
     if (cfg.alwaysAskMode) {
-        const pick = await vscode.window.showQuickPick<ModePickItem>([
-            { label: 'Matrix (수식 환경)', value: 'matrix' as const },
-            { label: 'Tabular (텍스트 환경)', value: 'tabular' as const },
-        ], { placeHolder: '붙여넣기 형식을 선택하세요.' });
+        const options: (vscode.QuickPickItem & { mode: 'matrix' | 'tabular', style: string })[] = [
+            { label: 'tabular (Array)', description: '기본 텍스트 표', mode: 'tabular', style: 'array' },
+            { label: 'tabular (Booktabs)', description: '깔끔한 텍스트 표', mode: 'tabular', style: 'booktabs' },
+            { label: 'bmatrix', description: '[] 행렬', mode: 'matrix', style: 'bmatrix' },
+            { label: 'pmatrix', description: '() 행렬', mode: 'matrix', style: 'pmatrix' },
+            { label: 'vmatrix', description: '|| 행렬', mode: 'matrix', style: 'vmatrix' },
+            { label: 'matrix', description: '테두리 없는 행렬', mode: 'matrix', style: 'matrix' },
+        ];
+        
+        const pick = await vscode.window.showQuickPick(options, { placeHolder: '붙여넣기 스타일을 선택하세요.' });
         if (!pick) { return; }
-        mode = pick.value;
+        
+        mode = pick.mode;
+        if (mode === 'matrix') {
+            selectedMatrixEnv = pick.style;
+        } else {
+            selectedTabularStyle = pick.style as 'array' | 'booktabs';
+        }
     }
 
     const indent = getIndentation(editor.document, editor.selection.active);
 
     if (mode === 'matrix') {
-        const matrixOptions = ['pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix', 'Bmatrix', 'matrix'];
-        const selected = cfg.alwaysAskMode
-            ? await vscode.window.showQuickPick(matrixOptions, { placeHolder: '행렬 환경을 선택하세요.' })
-            : cfg.matrixType;
-        if (!selected) { return; }
-        const latex = generateMatrixLatex(rows, selected, indent, cfg.escapeMode);
+        const latex = generateMatrixLatex(rows, selectedMatrixEnv, indent, cfg.escapeMode);
         if (cfg.showPreview) {
             const preview = buildPreview(rows);
             const confirm = await vscode.window.showQuickPick<ConfirmPickItem>(
                 [
-                    { label: `$(check) 삽입 (${selected})`, description: 'LaTeX 코드를 에디터에 삽입합니다.', value: 'insert' },
+                    { label: `$(check) 삽입 (${selectedMatrixEnv})`, description: 'LaTeX 코드를 에디터에 삽입합니다.', value: 'insert' },
                     { label: `$(copy) 미리보기`, description: preview.replace(/\n/g, ' | '), value: 'preview' },
                     { label: `$(x) 취소`, description: '취소합니다.', value: 'cancel' },
                 ],
@@ -234,7 +244,7 @@ export async function smartPasteExternalData() {
         const latex = generateTabularLatex(
             rows,
             alignments,
-            cfg.tabularStyle,
+            selectedTabularStyle,
             cfg.hasBorders,
             hasHeader,
             indent,
@@ -244,7 +254,7 @@ export async function smartPasteExternalData() {
             const preview = buildPreview(rows);
             const confirm = await vscode.window.showQuickPick<ConfirmPickItem>(
                 [
-                    { label: `$(check) 삽입 (${cfg.tabularStyle})`, description: 'LaTeX 코드를 에디터에 삽입합니다.', value: 'insert' },
+                    { label: `$(check) 삽입 (${selectedTabularStyle})`, description: 'LaTeX 코드를 에디터에 삽입합니다.', value: 'insert' },
                     { label: `$(copy) 미리보기`, description: preview.replace(/\n/g, ' | '), value: 'preview' },
                     { label: `$(x) 취소`, description: '취소합니다.', value: 'cancel' },
                 ],

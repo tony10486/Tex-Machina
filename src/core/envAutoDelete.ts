@@ -71,6 +71,12 @@ export function registerEnvAutoDelete(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.workspace.onDidCloseTextDocument(doc => {
+            lastDocumentState.delete(doc.uri.toString());
+        })
+    );
+
+    context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(async (event) => {
             try {
                 const config = vscode.workspace.getConfiguration('tex-machina');

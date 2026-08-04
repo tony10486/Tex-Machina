@@ -112,6 +112,8 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
             }
 
             const restIsOnlyEnd = /^\s*\\end\{[^}]+\}\s*$/.test(textAfterCursor);
+            const isListEnv = envCtx && ['itemize', 'enumerate', 'description'].includes(envCtx.envName);
+            const insertItem = isListEnv ? '\\item ' : '';
 
             if (isRightAfterBegin && restIsOnlyEnd) {
                 const endMatch = textAfterCursor.match(/\\end\{([^}]+)\}/);
@@ -123,20 +125,20 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
                     await editor.edit(editBuilder => {
                         editBuilder.replace(
                             new vscode.Range(pos.line, 0, pos.line, currentLineText.length),
-                            `${leadingContent}\n${beginCmd}\n${contentIndent}\n${beginIndent}${endTag}`
+                            `${leadingContent}\n${beginCmd}\n${contentIndent}${insertItem}\n${beginIndent}${endTag}`
                         );
                     });
                     editor.selection = new vscode.Selection(
-                        pos.line + 2, contentIndent.length, pos.line + 2, contentIndent.length
+                        pos.line + 2, contentIndent.length + insertItem.length, pos.line + 2, contentIndent.length + insertItem.length
                     );
                 } else {
                     await editor.edit(editBuilder => {
                         editBuilder.replace(
                             new vscode.Range(pos.line, pos.character, pos.line, currentLineText.length),
-                            `\n${contentIndent}\n${beginIndent}${endTag}`
+                            `\n${contentIndent}${insertItem}\n${beginIndent}${endTag}`
                         );
                     });
-                    editor.selection = new vscode.Selection(pos.line + 1, contentIndent.length, pos.line + 1, contentIndent.length);
+                    editor.selection = new vscode.Selection(pos.line + 1, contentIndent.length + insertItem.length, pos.line + 1, contentIndent.length + insertItem.length);
                 }
             } else if (isRightAfterBegin) {
                 const nextLineNum = pos.line + 1;
@@ -153,9 +155,9 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
                     await editor.edit(editBuilder => {
                         editBuilder.replace(
                             new vscode.Range(pos.line, 0, pos.line, currentLineText.length),
-                            `${leadingContent}\n${beginCmd}\n${contentIndent}`
+                            `${leadingContent}\n${beginCmd}\n${contentIndent}${insertItem}`
                         );
-                        if (nextLineIsEnd) {
+                        if (nextLineIsEnd && nextLineNum + 1 < document.lineCount) {
                             const endLine = document.lineAt(nextLineNum + 1);
                             const endIndent = endLine.text.match(/^(\s*)/)![1];
                             if (endIndent !== beginIndent) {
@@ -167,11 +169,11 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
                         }
                     });
                     editor.selection = new vscode.Selection(
-                        pos.line + 2, contentIndent.length, pos.line + 2, contentIndent.length
+                        pos.line + 2, contentIndent.length + insertItem.length, pos.line + 2, contentIndent.length + insertItem.length
                     );
                 } else {
                     await editor.edit(editBuilder => {
-                        editBuilder.insert(pos, `\n${contentIndent}`);
+                        editBuilder.insert(pos, `\n${contentIndent}${insertItem}`);
                         if (nextLineIsEnd) {
                             const endLine = document.lineAt(nextLineNum);
                             const endIndent = endLine.text.match(/^(\s*)/)![1];
@@ -183,7 +185,7 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
                             }
                         }
                     });
-                    editor.selection = new vscode.Selection(pos.line + 1, contentIndent.length, pos.line + 1, contentIndent.length);
+                    editor.selection = new vscode.Selection(pos.line + 1, contentIndent.length + insertItem.length, pos.line + 1, contentIndent.length + insertItem.length);
                 }
             } else if (cursorBeforeEndOnEndLine) {
                 const endMatch = currentLineText.match(/\\end\{([^}]+)\}/);
@@ -191,12 +193,41 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
                 await editor.edit(editBuilder => {
                     editBuilder.replace(
                         new vscode.Range(pos.line, 0, pos.line, currentLineText.length),
-                        `${contentIndent}\n${beginIndent}${endTag}`
+                        `${contentIndent}${insertItem}\n${beginIndent}${endTag}`
                     );
                 });
-                editor.selection = new vscode.Selection(pos.line, contentIndent.length, pos.line, contentIndent.length);
+                editor.selection = new vscode.Selection(pos.line, contentIndent.length + insertItem.length, pos.line, contentIndent.length + insertItem.length);
             }
             return;
+        }
+
+        // 2.5 Normal Enter inside list envs
+        const envCtx = findEnclosingEnvContext(document, pos);
+        if (envCtx && ['itemize', 'enumerate', 'description'].includes(envCtx.envName)) {
+            const indent = getIndentation(editor);
+            const lineText = document.lineAt(pos.line).text;
+            // Check if current line is an empty \item (to allow breaking out of list)
+            if (/^\s*\\item\s*$/.test(lineText)) {
+                // If it's just \item, remove it and insert a normal newline
+                await editor.edit(editBuilder => {
+                    editBuilder.replace(
+                        new vscode.Range(pos.line, 0, pos.line, lineText.length),
+                        ''
+                    );
+                    editBuilder.insert(pos, '\n');
+                });
+                return;
+            } else {
+                let beginIndent = '';
+                const beginLineText = document.lineAt(envCtx.beginLine).text;
+                beginIndent = beginLineText.match(/^(\s*)/)![1];
+                const contentIndent = beginIndent + indent;
+
+                await editor.edit(editBuilder => {
+                    editBuilder.insert(pos, `\n${contentIndent}\\item `);
+                }, { undoStopBefore: true, undoStopAfter: true });
+                return;
+            }
         }
 
         // 3. Default Enter

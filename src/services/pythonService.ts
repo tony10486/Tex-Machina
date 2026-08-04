@@ -3,11 +3,13 @@ import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { StringDecoder } from 'string_decoder';
 
-export class PythonService {
+export class PythonService implements vscode.Disposable {
     private pythonProcess: ChildProcess | null = null;
     private resolvers: Map<string, (response: any) => void> = new Map();
     private stdoutBuffer: string = "";
+    private decoder = new StringDecoder('utf8');
     private startupResolver: (() => void) | null = null;
     private startupTimeout: NodeJS.Timeout | null = null;
 
@@ -157,6 +159,20 @@ export class PythonService {
             );
         });
 
+        const handleProcessExit = (code: number | null, signal: string | null) => {
+            console.log(`[PythonService] process terminated (code: ${code}, signal: ${signal})`);
+            for (const [reqId, resolver] of this.resolvers.entries()) {
+                try {
+                    resolver({ status: 'error', message: 'Python 프로세스가 비정상 종료되었습니다.' });
+                } catch { /* ignore */ }
+            }
+            this.resolvers.clear();
+            this.pythonProcess = null;
+        };
+
+        this.pythonProcess.on('exit', handleProcessExit);
+        this.pythonProcess.on('close', handleProcessExit);
+
         this.pythonProcess.stderr?.on('data', (data: Buffer) => {
             console.error(`Python Error: ${data.toString()}`);
         });
@@ -182,7 +198,7 @@ export class PythonService {
     }
 
     private handleStdout(data: Buffer): void {
-        this.stdoutBuffer += data.toString();
+        this.stdoutBuffer += this.decoder.write(data);
         let lines = this.stdoutBuffer.split('\n');
         this.stdoutBuffer = lines.pop() || "";
 
@@ -219,8 +235,6 @@ export class PythonService {
     }
 
     private emitResponse(response: any): void {
-        // Emit to a central dispatcher or via an EventEmitter
-        // For now, we'll use a callback registered by the extension
         if (this.onResponseCallback) {
             this.onResponseCallback(response);
         }
@@ -238,7 +252,7 @@ export class PythonService {
     }
 
     public sendAndWait(payload: any): Promise<any> {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             if (!this.pythonProcess?.stdin) {
                 resolve({ status: 'error', message: 'Python process is not running' });
                 return;
@@ -246,7 +260,16 @@ export class PythonService {
             
             const requestId = crypto.randomUUID();
             payload.requestId = requestId;
-            this.resolvers.set(requestId, resolve);
+
+            const timer = setTimeout(() => {
+                this.resolvers.delete(requestId);
+                reject(new Error(`Python request timed out (15s, requestId: ${requestId})`));
+            }, 15000);
+
+            this.resolvers.set(requestId, (response: any) => {
+                clearTimeout(timer);
+                resolve(response);
+            });
             
             this.pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
         });
@@ -255,6 +278,18 @@ export class PythonService {
     public stop(): void {
         if (this.pythonProcess) {
             this.pythonProcess.kill();
+            this.pythonProcess = null;
         }
+        this.resolvers.clear();
+        if (this.startupTimeout) {
+            clearTimeout(this.startupTimeout);
+            this.startupTimeout = null;
+        }
+        this.decoder = new StringDecoder('utf8');
+    }
+
+    public dispose(): void {
+        this.stop();
     }
 }
+

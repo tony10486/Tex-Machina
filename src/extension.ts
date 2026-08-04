@@ -45,21 +45,23 @@ import {
 import { PythonService } from './services/pythonService';
 
 let pythonService: PythonService;
-let currentEditor: vscode.TextEditor | undefined;
-let currentSelection: vscode.Selection | undefined;
-let currentOriginalText: string = "";
-let currentMainCommand: string = "";
-let currentParallels: string[] = [];
-let isExportingPdf: boolean = false;
-let pdfTargetDir: string = "";
 let macroManager: MacroManager;
 
-let lastLabelNodes: any[] = [];
-let lastLabelEdges: any[] = [];
+interface RequestContext {
+    editor?: vscode.TextEditor;
+    selection?: vscode.Selection;
+    originalText?: string;
+    mainCommand?: string;
+    parallelOptions?: string[];
+    isExportingPdf?: boolean;
+    pdfTargetDir?: string;
+}
 
 async function executeChain(chain: string[], initialSelection: string, editor: vscode.TextEditor, selection: vscode.Selection) {
     let currentInput = initialSelection;
     let lastResponse: any = null;
+    let lastMainCommand = "";
+    let lastParallels: string[] = [];
 
     const config = vscode.workspace.getConfiguration('tex-machina');
     const calcSettings = config.get<any>('calc.settings', {});
@@ -76,8 +78,8 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
         const cmdStr = chain[i];
         const parsed = parseUserCommand(cmdStr, currentInput);
         
-        currentMainCommand = parsed.mainCommand;
-        currentParallels = parsed.parallelOptions;
+        lastMainCommand = parsed.mainCommand;
+        lastParallels = parsed.parallelOptions;
 
         const payload = {
             ...parsed,
@@ -116,21 +118,21 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
         const resultLatex = lastResponse.latex;
         let outputText = "";
 
-        if (currentMainCommand === "matrix") {
+        if (lastMainCommand === "matrix") {
             outputText = resultLatex;
-        } else if (currentMainCommand === "plot") {
+        } else if (lastMainCommand === "plot") {
             if (lastResponse.latex.includes("tikzpicture")) {
                 outputText = resultLatex;
             } else {
                 outputText = initialSelection;
             }
-        } else if (currentParallels.includes("newline")) {
+        } else if (lastParallels.includes("newline")) {
             outputText = `${initialSelection}\n\n\\[\n${resultLatex}\n\\]`;
         } else {
             outputText = `${initialSelection} = ${resultLatex}`;
         }
 
-        if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && lastResponse.latex.includes("tikzpicture"))) {
+        if (lastMainCommand !== "plot" || (lastMainCommand === "plot" && lastResponse.latex.includes("tikzpicture"))) {
             await editor.edit(editBuilder => {
                 editBuilder.replace(selection, outputText);
             });
@@ -142,36 +144,52 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log('TeX-Machina 활성화 완료!');
 
     pythonService = new PythonService(context);
+    context.subscriptions.push(pythonService);
     await pythonService.start();
 
-    registerImplicitSubscripts();
-    registerToggleMode(context);
     macroManager = new MacroManager(context);
-    registerNodeNavigation(context);
-    registerAutoBracing(context);
-    registerAutoLeftRight(context);
-    registerEnvAutoDelete(context);
-    registerMathSplitter(context);
-    registerUnitExpander(context);
-    registerMarkdownLatex(context);
-    registerSmartQuotes(context);
-    registerEllipsis(context);
-    registerDiacritics(context);
-    registerSmartNewline(context);
-    registerMathLigatures(context);
-    registerAutoEndEnv(context);
-    registerExtendedInput(context);
-    registerShorthandMode(context);
-    registerSelectionExpansion(context);
-    registerLinkedEditing(context);
-    registerSmartBackspace(context);
-    registerArgumentNavigation(context);
-    registerMathToggle(context);
-    registerMatrixResizer(context);
-    registerSelectionWrap(context);
-    registerStructureWrap(context);
-    registerMathRefactor(context);
-    registerMathAutoCalc(context, pythonService);
+
+    const registerFunctions: Array<() => vscode.Disposable | void> = [
+        () => registerImplicitSubscripts(),
+        () => registerToggleMode(context),
+        () => registerNodeNavigation(context),
+        () => registerAutoBracing(context),
+        () => registerAutoLeftRight(context),
+        () => registerEnvAutoDelete(context),
+        () => registerMathSplitter(context),
+        () => registerUnitExpander(context),
+        () => registerMarkdownLatex(context),
+        () => registerSmartQuotes(context),
+        () => registerEllipsis(context),
+        () => registerDiacritics(context),
+        () => registerSmartNewline(context),
+        () => registerMathLigatures(context),
+        () => registerAutoEndEnv(context),
+        () => registerExtendedInput(context),
+        () => registerShorthandMode(context),
+        () => registerSelectionExpansion(context),
+        () => registerLinkedEditing(context),
+        () => registerSmartBackspace(context),
+        () => registerArgumentNavigation(context),
+        () => registerMathToggle(context),
+        () => registerMatrixResizer(context),
+        () => registerSelectionWrap(context),
+        () => registerStructureWrap(context),
+        () => registerMathRefactor(context),
+        () => registerMathAutoCalc(context, pythonService),
+        () => registerLabelDetection(context),
+        () => registerMathAutoWrap(context),
+        () => registerFractionShorthand(context),
+        () => registerIdxExpansion(context),
+        () => registerScanPrevention(context),
+    ];
+
+    for (const fn of registerFunctions) {
+        const disposable = fn();
+        if (disposable && typeof disposable.dispose === 'function') {
+            context.subscriptions.push(disposable);
+        }
+    }
 
     // Paste External Data Provider
     if (typeof vscode.languages.registerDocumentPasteEditProvider === 'function') {
@@ -192,8 +210,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.addLabelDependency', async (args: {line: number, startChar: number, endChar: number, sourceLabel: string}) => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {return;}
-        const range = new vscode.Range(new vscode.Position(args.line, args.startChar), new vscode.Position(args.line, args.endChar));
+        if (!editor || editor.document.isClosed) {return;}
+        if (args.line < 0 || args.line >= editor.document.lineCount) return;
+        const lineText = editor.document.lineAt(args.line).text;
+        const startChar = Math.max(0, Math.min(args.startChar, lineText.length));
+        const endChar = Math.max(0, Math.min(args.endChar, lineText.length));
+        const range = new vscode.Range(new vscode.Position(args.line, startChar), new vscode.Position(args.line, endChar));
         await editor.edit(editBuilder => {
             editBuilder.insert(range.end, `%(from:${args.sourceLabel})`);
         });
@@ -234,19 +256,13 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    registerLabelDetection(context);
-    registerMathAutoWrap(context);
-    registerFractionShorthand(context);
-    registerIdxExpansion(context);
-    registerScanPrevention(context);
-
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(TeXMachinaWebviewProvider.viewType, provider));
     provider.updateMacros(macroManager.getMacros());
 
-    pythonService.onResponse(async (response) => {
+    context.subscriptions.push(pythonService.onResponse(async (response) => {
         await handlePythonResponse(response, provider);
-    });
+    }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.defineMacro', async (name: string, chain: string) => {
         await macroManager.defineMacro(name, chain);
@@ -273,7 +289,10 @@ export async function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor;
         if (!editor || !editor.document.fileName.endsWith('.tex')) { return; }
         const payload = { mainCommand: "labels", config: { filepath: editor.document.uri.fsPath } };
-        pythonService.send(payload);
+        const response = await pythonService.sendAndWait(payload);
+        if (response.status === 'success' && response.mainCommand === 'labels' && response.nodes) {
+            provider.updateLabels(response.nodes, response.edges);
+        }
     }));
 
     vscode.workspace.onDidSaveTextDocument(doc => {
@@ -284,21 +303,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor && editor.document.fileName.endsWith('.tex')) {
-            lastLabelNodes = [];
-            lastLabelEdges = [];
             vscode.commands.executeCommand('tex-machina.discoverLabels');
         }
     }, null, context.subscriptions);
 
-	context.subscriptions.push(vscode.commands.registerCommand('tex-machina.openCLI', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {return;}
-        currentEditor = editor;
-        currentSelection = editor.selection;
-        currentOriginalText = editor.document.getText(currentSelection);
+    context.subscriptions.push(vscode.commands.registerCommand('tex-machina.openCLI', async () => {
+        try {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const selection = editor.selection;
+            const originalText = editor.document.getText(selection);
 
         const quickPick = vscode.window.createQuickPick();
         quickPick.placeholder = "명령어를 입력하세요 (예: calc >, matrix >)";
+        quickPick.onDidHide(() => quickPick.dispose());
         
         const commandLib = {
             root: [
@@ -357,7 +375,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 { label: "calc > tensor_expand", description: "텐서의 확장" }
             ],
             oeis: [
-                ...(currentOriginalText ? [{ label: `oeis > ${currentOriginalText}`, description: "선택한 영역으로 수열 검색" }] : []) as vscode.QuickPickItem[],
+                ...(originalText ? [{ label: `oeis > ${originalText}`, description: "선택한 영역으로 수열 검색" }] : []) as vscode.QuickPickItem[],
                 { label: "oeis > 1,1,2,3,5,8", description: "피보나치 수열 검색" },
                 { label: "oeis > 2,3,5,7,11", description: "소수 수열 검색" },
                 { label: "oeis > A000045", description: "수열 번호(ID)로 검색" }
@@ -366,8 +384,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 { label: "matrix > p >", description: "소괄호 (pmatrix) - ( )" },
                 { label: "matrix > b >", description: "대괄호 (bmatrix) - [ ] (기본값)" },
                 { label: "matrix > v >", description: "수직바 (vmatrix) - | | (행렬식)" },
-				{ label: "matrix > V >", description: "이중 수직바 (Vmatrix) - || ||" },
-		        { label: "matrix > B >", description: "중괄호 (Bmatrix) - { }" },
+                { label: "matrix > V >", description: "이중 수직바 (Vmatrix) - || ||" },
+                { label: "matrix > B >", description: "중괄호 (Bmatrix) - { }" },
                 { label: "matrix > transform > [각도]", description: "회전변환 행렬 생성 (예: transform > \\pi/2)" },
                 { label: "matrix > [데이터]", description: "데이터 바로 입력 (예: matrix > 1,2/3,4)" },
                 { label: "matrix > ... / analyze", description: "행렬 분석 (행렬식, 역행렬, RREF 결과 표시)" },
@@ -418,8 +436,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
         quickPick.show();
         quickPick.onDidAccept(async () => {
-            const selected = quickPick.selectedItems[0];
-            let userInput = selected ? selected.label : quickPick.value;
+            try {
+                const selected = quickPick.selectedItems[0];
+                let userInput = selected ? selected.label : quickPick.value;
             if (selected && quickPick.value.length > selected.label.length) { userInput = quickPick.value; }
             if (selected && selected.label.endsWith(" >") && quickPick.value) {
                 const lastGTIndex = selected.label.lastIndexOf(" >");
@@ -432,8 +451,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 quickPick.selectedItems = [];
                 return;
             }
-            quickPick.hide();
-            if (!userInput) {return;}
+            quickPick.dispose();
+            if (!userInput) { return; }
             const macroDef = macroManager.parseDefinition(userInput);
             if (macroDef) {
                 await macroManager.defineMacro(macroDef.name, macroDef.chain);
@@ -457,7 +476,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const delimiter = cliConfig.get<string>('cli.chainDelimiter', '&&');
             const chain = splitChain(userInput, delimiter);
             if (chain.length > 1) {
-                if (currentEditor && currentSelection) { await executeChain(chain, currentOriginalText, currentEditor, currentSelection); }
+                await executeChain(chain, originalText, editor, selection);
                 return;
             }
             if (userInput.includes("matrix")) {
@@ -479,17 +498,16 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                 }
             }
-            const parsed = parseUserCommand(userInput, currentOriginalText);
-            currentMainCommand = parsed.mainCommand;
-            currentParallels = parsed.parallelOptions;
-            if (currentMainCommand === 'plot' && parsed.subCommands.includes('3d')) {
-                const zDetected = /[^a-zA-Z]z[^a-zA-Z]|^z[^a-zA-Z]|[^a-zA-Z]z$|^z$/.test(currentOriginalText);
-                if (zDetected && !currentParallels.some(p => p.includes('complex'))) {
+            const parsed = parseUserCommand(userInput, originalText);
+            let parallelOptions = parsed.parallelOptions;
+            if (parsed.mainCommand === 'plot' && parsed.subCommands.includes('3d')) {
+                const zDetected = /[^a-zA-Z]z[^a-zA-Z]|^z[^a-zA-Z]|[^a-zA-Z]z$|^z$/.test(originalText);
+                if (zDetected && !parallelOptions.some(p => p.includes('complex'))) {
                     const answer = await vscode.window.showInformationMessage("변수 'z'가 감지되었습니다. 복소 평면 시각화(Complex Mode)를 활성화할까요?", "예 (Abs|Phase)", "아니오");
                     if (answer === "예 (Abs|Phase)") {
                         userInput += " / complex=abs_phase";
-                        const updatedParsed = parseUserCommand(userInput, currentOriginalText);
-                        currentParallels = updatedParsed.parallelOptions;
+                        const updatedParsed = parseUserCommand(userInput, originalText);
+                        parallelOptions = updatedParsed.parallelOptions;
                         parsed.parallelOptions = updatedParsed.parallelOptions;
                     }
                 }
@@ -508,13 +526,27 @@ export async function activate(context: vscode.ExtensionContext) {
                 if (match) { currentIndentation = match[1]; }
             }
             const payload = { ...parsed, config: { laplace: laplaceConfig, angleUnit: angleUnit, precision: calcSettings.precision, imaginaryUnit: calcSettings.imaginaryUnit, simplifyResult: calcSettings.simplifyResult, datDensity: datDensity, yMultiplier: yMultiplier, lineColor: lineColor, indentation: currentIndentation, workspaceDir: path.dirname(editor.document.uri.fsPath) } };
-            pythonService.send(payload);
+            const response = await pythonService.sendAndWait(payload);
+            await handlePythonResponse(response, provider, {
+                editor,
+                selection,
+                originalText,
+                mainCommand: parsed.mainCommand,
+                parallelOptions: parsed.parallelOptions
+            });
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`명령어 처리 중 오류 발생: ${err.message}`);
+            }
         });
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`CLI 실행 중 오류 발생: ${err.message}`);
+        }
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.rerenderPlot', async (exprLatex: string, samples: string, options?: any) => {
-        let userInput = `plot > 3d / samples=${samples}`;
-        if (options) {
+        try {
+            let userInput = `plot > 3d / samples=${samples}`;
+            if (options) {
             if (options.x) {userInput += ` / x=${options.x}`;}
             if (options.y) {userInput += ` / y=${options.y}`;}
             if (options.z) {userInput += ` / z=${options.z}`;}
@@ -528,20 +560,30 @@ export async function activate(context: vscode.ExtensionContext) {
             if (options.axis) {userInput += ` / axis=${options.axis}`;}
         }
         const parsed = parseUserCommand(userInput, exprLatex);
-        currentMainCommand = parsed.mainCommand;
-        currentParallels = parsed.parallelOptions;
+        const editor = vscode.window.activeTextEditor;
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined } };
-        pythonService.send(payload);
+        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: editor ? path.dirname(editor.document.uri.fsPath) : undefined } };
+        const response = await pythonService.sendAndWait(payload);
+        await handlePythonResponse(response, provider, {
+            editor,
+            selection: editor?.selection,
+            originalText: exprLatex,
+            mainCommand: parsed.mainCommand,
+            parallelOptions: parsed.parallelOptions
+        });
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`그래프 다시 그리기 중 오류 발생: ${err.message}`);
+        }
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.export3dPlot', async (exprLatex: string, samples: string, color: string, options?: any) => {
-        if (!currentEditor) {return;}
+        try {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {return;}
         const fmt = (options && options.export) || 'pdf';
         const answer = await vscode.window.showInformationMessage(`현재 3D 그래프를 ${fmt.toUpperCase()}로 저장하고 Figure를 삽입하시겠습니까?`, "예 (images 폴더 생성 및 저장)", "아니오");
         if (answer !== "예 (images 폴더 생성 및 저장)") {return;}
-        isExportingPdf = true;
-        pdfTargetDir = path.dirname(currentEditor.document.uri.fsPath);
+        const pdfTargetDir = path.dirname(editor.document.uri.fsPath);
         let userInput = `plot > 3d / samples=${samples}`;
         if (options) {
             if (options.x) {userInput += ` / x=${options.x}`;}
@@ -561,13 +603,26 @@ export async function activate(context: vscode.ExtensionContext) {
         } else { userInput += ` / color=${color} / export`; }
         const parsed = parseUserCommand(userInput, exprLatex);
         const config = vscode.workspace.getConfiguration('tex-machina');
-        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: currentEditor ? path.dirname(currentEditor.document.uri.fsPath) : undefined } };
-        pythonService.send(payload);
+        const payload = { ...parsed, config: { angleUnit: config.get('angleUnit', 'deg'), datDensity: config.get('plot.datDensity', 500), workspaceDir: path.dirname(editor.document.uri.fsPath) } };
+        const response = await pythonService.sendAndWait(payload);
+        await handlePythonResponse(response, provider, {
+            editor,
+            selection: editor.selection,
+            originalText: exprLatex,
+            mainCommand: parsed.mainCommand,
+            parallelOptions: parsed.parallelOptions,
+            isExportingPdf: true,
+            pdfTargetDir
+        });
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`그래프 내보내기 중 오류 발생: ${err.message}`);
+        }
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.internalSaveWebviewImage', async (buffer: Buffer, format: string, expr: string) => {
-        if (!currentEditor) {return;}
-        const targetDir = path.dirname(currentEditor.document.uri.fsPath);
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {return;}
+        const targetDir = path.dirname(editor.document.uri.fsPath);
         const imagesDir = path.join(targetDir, 'images');
         const ext = format || 'png';
         const timestamp = new Date().getTime();
@@ -577,9 +632,8 @@ export async function activate(context: vscode.ExtensionContext) {
             await fsPromises.mkdir(imagesDir, { recursive: true });
             await fsPromises.writeFile(exportPath, buffer);
             const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${expr}$}\n\\label{fig:plot_3d_${timestamp}}\n\\end{figure}\n`;
-            await currentEditor.edit(editBuilder => {
-                if (currentSelection) { editBuilder.replace(currentSelection, figureCode); }
-                else { editBuilder.insert(currentEditor!.selection.end, figureCode); }
+            await editor.edit(editBuilder => {
+                editBuilder.replace(editor.selection, figureCode);
             });
             vscode.window.showInformationMessage(`웹뷰 화면이 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
         } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
@@ -608,7 +662,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }));
 }
 
-async function handlePythonResponse(response: any, provider: TeXMachinaWebviewProvider) {
+async function handlePythonResponse(response: any, provider: TeXMachinaWebviewProvider, reqCtx?: RequestContext) {
     try {
         if (response.status === 'oeis_results') {
             const selected = await vscode.window.showQuickPick(response.results as vscode.QuickPickItem[], { placeHolder: `'${response.query}' 검색 결과 (15개까지 표시)` });
@@ -616,7 +670,13 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                 const s = selected as any;
                 const options = [ { label: "ID만 삽입", detail: s.id, value: s.id }, { label: "수열 데이터 삽입", detail: s.data, value: s.data }, { label: "ID와 이름 삽입", detail: `${s.id}: ${s.full_name}`, value: `${s.id}: ${s.full_name}` } ];
                 const insertType = await vscode.window.showQuickPick(options, { placeHolder: "어떤 형식으로 삽입할까요?" }) as any;
-                if (insertType && currentEditor) { await currentEditor.edit(editBuilder => { editBuilder.insert(currentEditor!.selection.active, insertType.value); }); }
+                const editor = reqCtx?.editor || vscode.window.activeTextEditor;
+                if (insertType && editor) {
+                    await editor.edit(editBuilder => {
+                        const targetSel = reqCtx?.selection || editor.selection;
+                        editBuilder.insert(targetSel.active, insertType.value);
+                    });
+                }
             }
             return;
         }
@@ -624,23 +684,18 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
             const selected = await vscode.window.showQuickPick(response.results, { placeHolder: "인용할 논문을 선택하세요" });
             if (selected && (selected as any).doi) {
                 const payload = { mainCommand: "cite", subCommands: [(selected as any).doi], parallelOptions: [], rawSelection: "", config: {} };
-                pythonService.send(payload);
+                const res2 = await pythonService.sendAndWait(payload);
+                await handlePythonResponse(res2, provider, reqCtx);
             }
             return;
         }
         if (response.status === 'success') {
             if (response.mainCommand === 'labels' && response.nodes) {
-                const nodesJson = JSON.stringify(response.nodes);
-                const edgesJson = JSON.stringify(response.edges);
-                if (nodesJson !== JSON.stringify(lastLabelNodes) || edgesJson !== JSON.stringify(lastLabelEdges)) {
-                    lastLabelNodes = response.nodes;
-                    lastLabelEdges = response.edges;
-                    provider.updateLabels(response.nodes, response.edges);
-                }
+                provider.updateLabels(response.nodes, response.edges);
                 return;
             }
             if (response.bibtex && response.cite_key) {
-                const editor = vscode.window.activeTextEditor;
+                const editor = reqCtx?.editor || vscode.window.activeTextEditor;
                 if (editor) {
                     const texDir = path.dirname(editor.document.uri.fsPath);
                     const files = await fsPromises.readdir(texDir);
@@ -658,30 +713,39 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                 }
                 return;
             }
-            const shouldShowWebview = currentMainCommand === 'plot';
+            const mainCommand = reqCtx?.mainCommand || response.mainCommand;
+            const parallelOptions = reqCtx?.parallelOptions || [];
+            const originalText = reqCtx?.originalText || "";
+            const shouldShowWebview = mainCommand === 'plot';
+
             provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex, shouldShowWebview);
-            const isRerender = currentParallels.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
-            if (currentEditor && currentSelection) {
-                if (isExportingPdf && response.export_content) {
+            const isRerender = parallelOptions.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
+            
+            const targetEditor = reqCtx?.editor || vscode.window.activeTextEditor;
+            if (!targetEditor || targetEditor.document.isClosed) return;
+            const targetSelection = reqCtx?.selection || targetEditor?.selection;
+            
+            if (targetEditor && targetSelection) {
+                if (reqCtx?.isExportingPdf && response.export_content && reqCtx.pdfTargetDir) {
                     const exportBuffer = Buffer.from(response.export_content, 'base64');
-                    const imagesDir = path.join(pdfTargetDir, 'images');
+                    const imagesDir = path.join(reqCtx.pdfTargetDir, 'images');
                     const ext = response.export_format || 'pdf';
                     const filename = `plot_3d.${ext}`;
                     const exportPath = path.join(imagesDir, filename);
                     try {
                         await fsPromises.mkdir(imagesDir, { recursive: true });
                         await fsPromises.writeFile(exportPath, exportBuffer);
-                        const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data.expr}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
-                        await currentEditor.edit(editBuilder => { editBuilder.replace(currentSelection!, figureCode); });                                    
+                        const figureCode = `\\begin{figure}[ht]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{images/${filename}}\n\\caption{3D Plot of $${response.x3d_data?.expr || ''}$}\n\\label{fig:plot_3d}\n\\end{figure}\n`;
+                        await targetEditor.edit(editBuilder => { editBuilder.replace(targetSelection, figureCode); });
                         vscode.window.showInformationMessage(`그래프가 ${ext.toUpperCase()}로 저장되고 Figure가 삽입되었습니다: images/${filename}`);
-                    } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); } finally { isExportingPdf = false; }
+                    } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
                     return;
                 }
                 if (!isRerender) {
                     const resultLatex = response.latex;
                     let outputText = "";
                     if (response.dat_content) {
-                        const texDir = path.dirname(currentEditor.document.uri.fsPath);
+                        const texDir = path.dirname(targetEditor.document.uri.fsPath);
                         const dataDir = path.join(texDir, 'data');
                         const datFilename = response.dat_filename || 'plot_data.dat';
                         const datPath = path.join(dataDir, datFilename);
@@ -690,19 +754,18 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                             await fsPromises.writeFile(datPath, response.dat_content); 
                         } catch (err: any) { vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`); }
                     }
-                    if (currentMainCommand === "matrix") { outputText = resultLatex; }
-                    else if (currentMainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : currentOriginalText; }
-                    else if (currentParallels.includes("newline")) { outputText = `${currentOriginalText}\n\n\\[\n${resultLatex}\n\\]`; }
-                    else { outputText = `${currentOriginalText} = ${resultLatex}`; }
-                    if (currentMainCommand !== "plot" || (currentMainCommand === "plot" && response.latex.includes("tikzpicture"))) {
-                        await currentEditor.edit(editBuilder => { editBuilder.replace(currentSelection!, outputText); });
+                    if (mainCommand === "matrix") { outputText = resultLatex; }
+                    else if (mainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : originalText; }
+                    else if (parallelOptions.includes("newline")) { outputText = `${originalText}\n\n\\[\n${resultLatex}\n\\]`; }
+                    else { outputText = `${originalText} = ${resultLatex}`; }
+                    if (mainCommand !== "plot" || (mainCommand === "plot" && response.latex.includes("tikzpicture"))) {
+                        await targetEditor.edit(editBuilder => { editBuilder.replace(targetSelection, outputText); });
                     }
                 }
             }
             if (response.warning) { vscode.window.showWarningMessage(response.warning); }
         } else if (response.status === 'error') {
             vscode.window.showErrorMessage(`연산 실패: ${response.message}`);
-            isExportingPdf = false;
         }
     } catch (e) { console.error("결과 처리 중 오류:", e); }
 }

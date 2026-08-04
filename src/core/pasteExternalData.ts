@@ -128,7 +128,7 @@ export function parseClipboardData(text: string, preferredDelimiter?: string): s
     if (filtered.length === 0) { return []; }
 
     // Pad all rows to the same column count
-    const maxCols = Math.max(...filtered.map(r => r.length));
+    const maxCols = filtered.map(r => r.length).reduce((max, cur) => Math.max(max, cur), 0);
     return filtered.map(r => {
         while (r.length < maxCols) { r.push(''); }
         return r;

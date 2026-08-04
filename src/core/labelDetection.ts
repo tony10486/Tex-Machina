@@ -107,6 +107,16 @@ export async function updateLabelDecorations(editor: vscode.TextEditor) {
     editor.setDecorations(unusedLabelDecorationType, decorations);
 }
 
+export function findIncludes(text: string): string[] {
+    const includes: string[] = [];
+    const regex = /\\(?:input|include)\{([^}]+)\}/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        includes.push(match[1]);
+    }
+    return includes;
+}
+
 /**
  * Tracks label changes and notifies if referenced labels are modified or removed.
  */
@@ -125,20 +135,25 @@ class LabelTracker {
         if (!this.isInitialized && !affectedUri) {
             const excludePattern = '{**/node_modules/**,**/venv/**,**/.git/**,**/dist/**,**/out/**}';
             const texFiles = await vscode.workspace.findFiles('**/*.tex', excludePattern);
+            const processed = new Set<string>();
             for (const file of texFiles) {
-                await this.updateFileRefCache(file);
+                await this.updateFileRefCache(file, processed);
             }
             this.isInitialized = true;
             return;
         }
 
         if (affectedUri) {
-            await this.updateFileRefCache(affectedUri);
+            const processed = new Set<string>();
+            await this.updateFileRefCache(affectedUri, processed);
         }
     }
 
-    private async updateFileRefCache(uri: vscode.Uri) {
+    private async updateFileRefCache(uri: vscode.Uri, processed: Set<string>) {
         const uriStr = uri.toString();
+        if (processed.has(uriStr)) return;
+        processed.add(uriStr);
+
         const oldRefs = this.fileRefCache.get(uriStr) || new Set<string>();
         
         try {
@@ -164,6 +179,29 @@ class LabelTracker {
                 if (!oldRefs.has(ref)) {
                     this.incrementRefCount(ref);
                 }
+            }
+
+            // Extract labels (globally) from this file
+            const labelRegex = /\\label\{([^}]+)\}/g;
+            let match;
+            const currentLabelMap = new Map<string, string>();
+            while ((match = labelRegex.exec(text)) !== null) {
+                // simple context fallback for non-doc
+                currentLabelMap.set(match[1], '');
+            }
+            // Keep previous Labels updated for non-open documents too if not already tracked
+            if (!this.previousLabels.has(uriStr) && currentLabelMap.size > 0) {
+                this.previousLabels.set(uriStr, currentLabelMap);
+            }
+
+            // Recursively process included files
+            const includes = findIncludes(text);
+            const dir = vscode.Uri.joinPath(uri, '..');
+            for (const inc of includes) {
+                let filename = inc;
+                if (!filename.endsWith('.tex')) filename += '.tex';
+                const incUri = vscode.Uri.joinPath(dir, filename);
+                await this.updateFileRefCache(incUri, processed);
             }
         } catch (e) {
             // File deleted or inaccessible
@@ -234,7 +272,7 @@ class LabelTracker {
                     }
                 } else {
                     const newContext = currentLabelMap.get(label);
-                    if (newContext !== oldContext) {
+                    if (newContext !== oldContext && oldContext !== '') {
                         if (globalRefs.has(label)) {
                             vscode.window.showInformationMessage(`참조된 라벨 '${label}'의 내용(수식/정리 등)이 수정되었습니다.`);
                         }
@@ -244,6 +282,18 @@ class LabelTracker {
         }
 
         this.previousLabels.set(uri, currentLabelMap);
+    }
+
+    public removeDocument(uri: vscode.Uri) {
+        const uriStr = uri.toString();
+        this.previousLabels.delete(uriStr);
+        const oldRefs = this.fileRefCache.get(uriStr);
+        if (oldRefs) {
+            for (const ref of oldRefs) {
+                this.decrementRefCount(ref);
+            }
+            this.fileRefCache.delete(uriStr);
+        }
     }
 }
 
@@ -320,6 +370,10 @@ export function registerLabelDetection(context: vscode.ExtensionContext) {
         if (editor && doc === editor.document) {
             triggerUpdate(editor);
         }
+    }, null, context.subscriptions);
+
+    vscode.workspace.onDidCloseTextDocument(doc => {
+        labelTracker.removeDocument(doc.uri);
     }, null, context.subscriptions);
 
     // Initial update
