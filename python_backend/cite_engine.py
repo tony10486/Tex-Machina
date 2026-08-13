@@ -1,5 +1,4 @@
 import requests
-import json
 import re
 import xml.etree.ElementTree as ET
 
@@ -53,7 +52,6 @@ def fetch_arxiv(arxiv_id):
 
 def fetch_doi(doi):
     """DOI를 통해 BibTeX 정보를 가져옵니다."""
-    # DOI 정규화
     doi = doi.replace("https://doi.org/", "").replace("doi.org/", "")
     url = f"https://doi.org/{doi}"
     headers = {"Accept": "application/x-bibtex"}
@@ -98,14 +96,12 @@ def search_crossref(query):
             title = item.get("title", ["Unknown Title"])[0]
             doi = item.get("DOI")
             
-            # 저널명 추출
             journal = item.get("container-title", ["Unknown Journal"])[0]
-            
+
             authors_list = item.get("author", [])
             authors = ", ".join([f"{a.get('family', '')} {a.get('given', '')}" for a in authors_list[:2]])
             if len(authors_list) > 2: authors += " et al."
-            
-            # 출판년도 추출
+
             year_parts = item.get("published-print", item.get("published-online", {})).get("date-parts", [[None]])
             year = year_parts[0][0] if year_parts and year_parts[0] else "n.d."
             
@@ -162,7 +158,7 @@ def search_semantic_scholar(query):
                 "cite_key": re.search(r'@[a-zA-Z]+\{([^,]+),', bibtex).group(1) if bibtex else None
             })
         return results
-    except:
+    except Exception:
         return []
 
 def handle_cite(args):
@@ -208,5 +204,5 @@ def handle_cite(args):
         
     return {
         "status": "search_results",
-        "results": combined[:8] # 상위 8개 결과 반환
+        "results": combined[:8]
     }

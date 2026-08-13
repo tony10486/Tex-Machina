@@ -1,11 +1,9 @@
 import sys
 import os
 import json
-import traceback
 import io
 import types
 
-# Absolute path of the directory containing this script
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -42,7 +40,7 @@ def main():
                     if isinstance(res_obj, dict):
                         res_obj['requestId'] = request_id
                         result_json_str = json.dumps(res_obj)
-                except:
+                except Exception:
                     pass
 
             sys.stdout.write(result_json_str + '\n')

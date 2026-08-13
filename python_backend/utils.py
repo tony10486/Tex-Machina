@@ -37,7 +37,6 @@ ALLOWED_SYMPY_FUNCTIONS = [
     'pi', 'E', 'I', 'oo', 'nan', 'S'
 ]
 
-# 안전한 SymPy 딕셔너리 생성
 def get_safe_sympy_dict():
     safe_dict = {'__builtins__': {}}
     for name in ALLOWED_SYMPY_FUNCTIONS:
@@ -61,7 +60,6 @@ def safe_parse_expr(expr_str, local_dict=None, evaluate=False):
         if kw in expr_s:
             raise ValueError(f"Forbidden keyword '{kw}' detected in expression: {expr_s}")
 
-    # 공통적으로 사용할 수 있는 local_dict 설정
     combined_locals = {}
     if local_dict:
         combined_locals.update(local_dict)
@@ -77,7 +75,6 @@ def safe_parse_expr(expr_str, local_dict=None, evaluate=False):
     except ValueError:
         raise
     except Exception as e:
-        # 파싱 실패 시 예외를 발생시키거나 안전한 폴백을 수행합니다.
         raise ValueError(f"Safe parsing failed for expression '{expr_str}': {str(e)}")
 
 def strip_latex_delimiters(text):

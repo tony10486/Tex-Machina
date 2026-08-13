@@ -1,12 +1,9 @@
 import json
 import sympy as sp
 import re
-from utils import SAFE_SYMPY_DICT, safe_parse_expr
+from utils import safe_parse_expr
 
 def handle_matrix(sub_cmds, parallels, config=None):
-    """
-    제안서의 행렬 입력 기능(matrix)을 처리하는 함수입니다.
-    """
     try:
         if config is None: config = {}
         global_unit = config.get('angleUnit', 'deg')
@@ -67,7 +64,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
                         unit_override = 'rad'
                         expr_str = expr_str[:-3].strip()
 
-                    # 그리스 문자 전처리
                     s_expr_str = expr_str.replace(r'\pi', 'pi')
                     s_expr_str = s_expr_str.replace(r'\theta', 'theta').replace(r'\phi', 'phi')
                     s_expr_str = s_expr_str.replace(r'\alpha', 'alpha').replace(r'\beta', 'beta').replace(r'\gamma', 'gamma')
@@ -89,11 +85,11 @@ def handle_matrix(sub_cmds, parallels, config=None):
                         else:
                             from sympy.parsing.latex import parse_latex
                             expr = parse_latex(expr_str)
-                    except:
+                    except Exception:
                         try:
                             from sympy.parsing.latex import parse_latex
                             expr = parse_latex(expr_str)
-                        except:
+                        except Exception:
                             expr = sp.Symbol(s_expr_str)
 
                     # 각도 단위 변환 (순수 숫자인 경우에만)
@@ -105,7 +101,7 @@ def handle_matrix(sub_cmds, parallels, config=None):
                         if current_unit == 'deg':
                             try:
                                 return expr * sp.pi / 180
-                            except:
+                            except Exception:
                                 return expr
                             
                     return expr
@@ -151,7 +147,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
                     rx = sp.Matrix([[1, 0, 0], [0, sp.cos(ax), -sp.sin(ax)], [0, sp.sin(ax), sp.cos(ax)]])
                     ry = sp.Matrix([[sp.cos(ay), 0, sp.sin(ay)], [0, 1, 0], [-sp.sin(ay), 0, sp.cos(ay)]])
                     rz = sp.Matrix([[sp.cos(az), -sp.sin(az), 0], [sp.sin(az), sp.cos(az), 0], [0, 0, 1]])
-                    # 행렬 곱셈 수행
                     sp_mat = rz * ry * rx
 
                 # 4) Older rot3 format
@@ -197,7 +192,7 @@ def handle_matrix(sub_cmds, parallels, config=None):
                             # 수치값(sin(pi/2) 등)만 정리하고 심볼릭은 최대한 유지
                             if not val.free_symbols:
                                 try: val = sp.simplify(val)
-                                except: pass
+                                except Exception: pass
                             row_data.append(sp.latex(val))
                         matrix_data.append(row_data)
                 else:
@@ -206,7 +201,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
             except Exception as e:
                 return json.dumps({"status": "error", "message": f"Transformation error: {str(e)}"})
         
-        # 2.6 일반 행렬 데이터 파싱
         elif full_content == 'id':
             for i in range(rows):
                 matrix_data.append(["1" if i == j else "0" for j in range(cols)])
@@ -246,7 +240,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
             else:
                 matrix_data = [[""] * cols for _ in range(rows)]
 
-        # 4. 스마트 생략 기호 및 빈 공간 처리
         if not is_special:
             def is_real_val(v):
                 dots = [r'.', r'..', r'...', r'\vdots', r'\cdots', r'\ddots']
@@ -283,7 +276,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
                         else:
                             matrix_data[i][j] = r"\ddots" if fill_dots and (0 < i < rows-1 or 0 < j < cols-1) else "0"
 
-        # 5. LaTeX 코드 조립
         env = bracket_map.get(b_type, 'bmatrix')
         base_indent = config.get('indentation', '')
         row_indent = base_indent + "    "
@@ -303,7 +295,6 @@ def handle_matrix(sub_cmds, parallels, config=None):
                 latex_str += row_indent + " & ".join(r) + " \\\\\n"
             latex_str += base_indent + f"\\end{{{env}}}"
 
-        # 6. 행렬 분석
         analysis_data = None
         if analyze_mode:
             try:
@@ -312,9 +303,9 @@ def handle_matrix(sub_cmds, parallels, config=None):
                 if sp_mat_anal.is_square:
                     analysis_data['det'] = sp.latex(sp_mat_anal.det())
                     try: analysis_data['inv'] = sp.latex(sp_mat_anal.inv())
-                    except: analysis_data['inv'] = "\\text{Not invertible}"
+                    except Exception: analysis_data['inv'] = "\\text{Not invertible}"
                 analysis_data['rref'] = sp.latex(sp_mat_anal.rref()[0])
-            except:
+            except Exception:
                 analysis_data = {"error": "분석 실패"}
 
         return json.dumps({

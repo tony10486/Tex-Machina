@@ -1,5 +1,6 @@
 import re
-import json
+
+MUTATION_OPS = ('>>', '<->', ':=', '+=', '-=', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
 
 class QueryLexer:
     def __init__(self, text):
@@ -13,7 +14,7 @@ class QueryLexer:
             '<=>', '^^', 'vv', '&&', '->', '==', '!=', '<=', '>=', 
             '::', '...', '_{', '_[', '_{#', '.|', '|.'
         ]
-        single_ops = list('+-*/|!$()>~?,:=.[]{}|') # Added | as single op too
+        single_ops = list('+-*/|!$()>~?,:=.[]{}') # Added | as single op too
         self.all_ops = sorted(list(set(ops + single_ops)), key=len, reverse=True)
         self.ops_pattern = '|'.join(re.escape(op) for op in self.all_ops)
 
@@ -50,7 +51,7 @@ class QueryLexer:
                 quote = text[self.pos]
                 end = self.pos + 1
                 while end < len(text):
-                    if text[end] == quote and (end == 0 or text[end-1] != '\\'):
+                    if text[end] == quote and text[end-1] != '\\':
                         break
                     end += 1
                 self.tokens.append(('STRING', text[self.pos:end+1]))
@@ -135,7 +136,7 @@ class QueryParser:
             if not t or t[1] in ('&', '&&', ',', '|', ';', ')^', '}'): break
             
             # New operators: <->, :=, +=, -=, >>, etc.
-            if t[1] in ('>>', '<->', ':=', '+=', '-=', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv'):
+            if t[1] in MUTATION_OPS:
                 stmt['operator'] = self.consume()[1]
                 stmt['action'] = self.parse_action_block()
             
@@ -284,12 +285,11 @@ class QueryParser:
     def parse_natural_condition(self):
         keyword = self.consume()[1]
         expr = []
-        mutation_ops = ('>>', '<->', ':=', '+=', '-=', '+>', '<+', '>+<', '><>', '><', '<>', '**', '</>', '<=>', '^^', 'vv')
         while self.pos < len(self.tokens):
             t = self.peek()
             if not t or t[1] in ('&', '&&', ',', '|', ';', '->', ')^', '}', 'order', 'to', 'at', '{'): break
             if t[0] == 'REGISTER_OP' or t[0] == 'ALIAS': break
-            if t[1] in mutation_ops: break
+            if t[1] in MUTATION_OPS: break
             if t[0] == 'KEYWORD' and t[1] not in ('and', 'or', 'not'): break
             expr.append(self.consume()[1])
         return {"type": "natural", "keyword": keyword, "value": " ".join(expr)}

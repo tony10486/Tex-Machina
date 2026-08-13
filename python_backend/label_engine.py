@@ -1,11 +1,9 @@
 import re
-import json
 import os
 from collections import Counter
 
 class LabelEngine:
     def __init__(self):
-        # Patterns
         self.re_label = re.compile(r'\\label\{([^}]+)\}(?:%?\s*\(from:([^)]+)\))?')
         self.re_ref = re.compile(r'\\ref\{([^}]+)\}')
         self.re_section = re.compile(r'\\(section|subsection|subsubsection)\*?\{([^}]+)\}')
@@ -111,11 +109,9 @@ class LabelEngine:
                             edges.append({"from": source, "to": r})
                             ref_counts[r] += 1
 
-            # Add reference counts to nodes
             for node_id in nodes:
                 nodes[node_id]["refCount"] = ref_counts[node_id]
 
-            # Final filtering
             valid_node_ids = set(nodes.keys())
             edges = [e for e in edges if e["to"] in valid_node_ids]
 

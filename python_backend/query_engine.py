@@ -8,7 +8,7 @@ from query_parser import parse_tex_machina_query
 class LatexNode:
     def __init__(self, ntype, name, start, end):
         self.ntype = ntype; self.name = name; self.start = start; self.end = end
-        self.children = []; self.args = []; self.opts = []
+        self.children = []
         self.cursor_pos = None
     def add_child(self, child): child.parent = self; self.children.append(child)
     def get_text(self, text): return text[self.start:self.end]
@@ -29,12 +29,12 @@ class SimpleScanner:
                     e = self._find_matching(pos, '[', ']')
                     if e != -1:
                         opt = LatexNode('opt', None, pos + 1, e - 1)
-                        self._scan_properties(opt); node.opts.append(opt); node.add_child(opt); pos = e; continue
+                        self._scan_properties(opt); node.add_child(opt); pos = e; continue
                 if self.text[pos] == '{':
                     e = self._find_matching(pos, '{', '}')
                     if e != -1:
                         arg = LatexNode('arg', None, pos + 1, e - 1)
-                        node.args.append(arg); node.add_child(arg); pos = e; continue
+                        node.add_child(arg); pos = e; continue
                 break
             node.end = pos
             root.add_child(node); occupied.append((node.start, node.end))
@@ -91,7 +91,6 @@ class QueryExecutor:
         return {"status": "success", "text": self.text, "targets": []}
 
     def run_pipeline(self, pipeline, context_nodes):
-        if not pipeline: return
         scanner = SimpleScanner(self.text); root = scanner.scan()
         base_pool = context_nodes if context_nodes else root.children
 

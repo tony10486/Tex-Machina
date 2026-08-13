@@ -1,11 +1,9 @@
 import os
-import json
 import warnings
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 import base64
-import sys
 import re
 from io import BytesIO
 from typing import Dict, Any, List, Tuple
@@ -20,10 +18,6 @@ try:
 except ImportError:
     from sympy.parsing.latex import parse_latex as latex2sympy
 
-# ---------------------------------------------------------------------------
-# [1] 코어 유틸리티 및 수학적 분석 모듈
-# ---------------------------------------------------------------------------
-
 PGF_SUPPORTED_FUNCS = (
     sp.sin, sp.cos, sp.tan, sp.asin, sp.acos, sp.atan, sp.atan2,
     sp.sinh, sp.cosh, sp.tanh,
@@ -35,10 +29,8 @@ PGF_SUPPORTED_FUNCS = (
 def _safe_latex_parse(raw_latex: str) -> sp.Expr:
     """LaTeX 문자열을 SymPy 객체로 안전하게 변환합니다."""
     try:
-        # i를 I로, j를 I로 전처리 (허수 단위 대응)
         processed_latex = raw_latex
         
-        # 1. 기본적인 LaTeX 명령어 보정
         # \Gamma{\left(z \right)} -> \Gamma(z) 형태로 변환 (parse_latex가 Mul로 오인하는 것 방지)
         # 모든 그리스 문자나 함수 이름 뒤의 {\left( ... \right)} 패턴을 찾아 (...)로 치환
         processed_latex = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', processed_latex)
@@ -61,13 +53,11 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
 
 def sympy_to_pgfplots_str(expr: sp.Expr) -> str:
     """SymPy 수식을 PGFPlots가 이해할 수 있는 대수적 문자열로 변환합니다."""
-    # SymPy 객체 문자열을 PGFPlots 수식 문법으로 변환
     expr_str = str(expr)
     
-    # 1. 거듭제곱 및 상수 변환
     expr_str = expr_str.replace('**', '^')
     
-    # 2. 함수 이름 및 특수 기호 매핑 (Word boundary 고려)
+    # 함수 이름 및 특수 기호 매핑 (Word boundary 고려)
     replacements = {
         r'\bAbs\(': 'abs(',
         r'\bceiling\(': 'ceil(',
@@ -90,7 +80,6 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     """구간 내의 특이점(Singularities)을 탐색합니다."""
     sings_found = set()
     
-    # 1. SymPy 내장 탐색
     try:
         sings = sp.calculus.singularities(expr, var)
         if hasattr(sings, '__iter__'):
@@ -99,7 +88,7 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
                     sings_found.add(float(s.evalf()))
     except: pass
     
-    # 2. 분모가 0인 점 (Fallback)
+    # 분모가 0인 점 (Fallback)
     numer, denom = expr.as_numer_denom()
     if denom != 1:
         try:
@@ -109,7 +98,7 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
                     sings_found.add(float(s.evalf()))
         except: pass
 
-    # 3. Gamma/Zeta 등 특수 함수의 폴(Pole) 수동 탐색
+    # Gamma/Zeta 등 특수 함수의 폴(Pole) 수동 탐색
     # parse_latex 결과물이 sp.gamma와 타입이 다를 수 있으므로 이름으로도 확인
     is_gamma = expr.has(sp.gamma) or any(f.func.__name__.lower() == 'gamma' for f in expr.atoms(sp.Function))
     if is_gamma:
@@ -120,7 +109,7 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
             if n <= 0 and domain[0] <= n <= domain[1]:
                 sings_found.add(float(n))
 
-    # 4. tan(x) 특이점 (pi/2 + n*pi)
+    # tan(x) 특이점 (pi/2 + n*pi)
     if expr.has(sp.tan):
         start = int(np.floor(domain[0] / np.pi - 0.5))
         end = int(np.ceil(domain[1] / np.pi - 0.5))
@@ -129,7 +118,7 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
             if domain[0] <= s <= domain[1]:
                 sings_found.add(float(s))
 
-    # 5. 수치적 스캔 (급격한 변화 탐지)
+    # 수치적 스캔 (급격한 변화 탐지)
     f = sp.lambdify(var, expr, modules=['numpy', 'scipy'])
     x_scan = np.linspace(domain[0], domain[1], 1000)
     with warnings.catch_warnings():
@@ -146,13 +135,8 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
         
     return sorted(list(sings_found))
 
-# ---------------------------------------------------------------------------
-# [2] 2D PGFPlots 엔진 (도메인 분할 & Data Off-loading)
-# ---------------------------------------------------------------------------
-
 def is_pgfplots_compatible(expr: sp.Expr) -> bool:
     """PGFPlots 네이티브 엔진이 지원하는 함수인지 검사합니다."""
-    # 모든 함수 원자(atoms)를 추출하여 화이트리스트와 비교
     funcs = expr.atoms(sp.Function)
     
     # 함수 이름(소문자) 기반 화이트리스트 (더 견고함)
@@ -165,18 +149,16 @@ def is_pgfplots_compatible(expr: sp.Expr) -> bool:
     }
     
     for f in funcs:
-        # 1. f.func의 이름을 통한 체크
         func_name = getattr(f.func, '__name__', str(f.func)).lower()
         if func_name in SUPPORTED_NAMES:
             continue
             
-        # 2. 타입 직접 체크 (Fallback)
+        # 타입 직접 체크 (Fallback)
         if type(f) in PGF_SUPPORTED_FUNCS:
             continue
             
-        # 3. isinstance로 한 번 더 확인 (상속 관계 대응)
+        # isinstance로 한 번 더 확인 (상속 관계 대응)
         try:
-            # PGF_SUPPORTED_FUNCS 중 타입(class)인 것들만 골라내어 isinstance 체크
             types_only = tuple(t for t in PGF_SUPPORTED_FUNCS if isinstance(t, type))
             if isinstance(f, types_only):
                 continue
@@ -188,7 +170,6 @@ def is_pgfplots_compatible(expr: sp.Expr) -> bool:
 
 def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
     """비호환 함수를 exp나 기본 삼각함수로 재작성 시도합니다 (예: sinh -> exp)."""
-    # 이미 호환되면 그대로 반환
     if is_pgfplots_compatible(expr):
         return expr
     
@@ -216,13 +197,11 @@ def generate_numerical_data(expr: sp.Expr, var: sp.Symbol, intervals: List[Tuple
             warnings.simplefilter("ignore")
             try:
                 y_vals = f(x_vals)
-                # 스칼라 결과가 나올 경우 배열로 확장
                 if np.isscalar(y_vals):
                     y_vals = np.full(x_vals.shape, y_vals)
             except:
                 y_vals = np.full(x_vals.shape, np.nan)
         
-        # .dat 파일 세그먼트 생성
         for x, y in zip(x_vals, y_vals):
             if np.isfinite(y) and np.isreal(y):
                 y_val = float(y.real)
@@ -263,7 +242,6 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
             try: dat_samples = int(p.split("=")[1])
             except: pass
 
-    # 1. 특이점 탐색 및 구간 분할
     sings = detect_singularities(expr, var, domain)
     intervals = []
     current_min = domain[0]
@@ -283,10 +261,9 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     # 구간당 샘플 수 계산 (동일 분배)
     samples_per_interval = max(10, dat_samples // len(intervals))
 
-    # 2. 재작성 시도 (sinh -> exp 등)
     target_expr = try_rewrite_for_pgfplots(expr)
     
-    # 3. PGFPlots 호환성 검사 및 데이터 파일 사용 여부 결정 (Whitelist 기반)
+    # PGFPlots 호환성 검사 및 데이터 파일 사용 여부 결정 (Whitelist 기반)
     needs_dat = False
     if not is_pgfplots_compatible(target_expr):
         needs_dat = True
@@ -316,7 +293,6 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
             
         return latex_code, warning_msg, dat_content, preview_img
 
-    # Native PGFPlots: 구간별로 addplot 생성 (separate)
     expr_str = sympy_to_pgfplots_str(target_expr)
     _, preview_img = generate_numerical_data(target_expr, var, intervals, samples_per_interval, y_limit)
     
@@ -326,16 +302,10 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
         
     return latex_code, warning_msg, None, preview_img
 
-# ---------------------------------------------------------------------------
-# [3] 3D 및 복소 그래프 엔진 (x3dom & Domain Coloring)
-# ---------------------------------------------------------------------------
-
 def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, Any]) -> Dict[str, Any]:
     """3D 그래프 데이터를 생성합니다 (x3dom용 메시 데이터)."""
-    workspace_dir = params.get("workspaceDir", os.getcwd())
     parallels = params.get("parallelOptions", [])
     
-    # 해상도 설정
     grid_res = 50
     x_range = [-5.0, 5.0]
     y_range = [-5.0, 5.0]
@@ -345,11 +315,9 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     labels = {"x": "x", "y": "y", "z": "z", "font": "SANS"}
     bg_color = "#ffffff"
     
-    # 복소수 맵핑 옵션
     complex_mode = "abs_phase" # height_color mapping
     # i(I)가 수식에 포함되었거나 변수 z가 포함되어 있으면 복소 그래프 모드로 동작 제안
-    is_complex = expr.has(sp.I) or any(s.name == 'z' for s in expr.free_symbols) or expr.has(sp.Symbol('i'))
-    
+    is_complex = expr.has(sp.I) or any(s.name == 'z' for s in expr.free_symbols) or expr.has(sp.Symbol('i'))    
     # [i 허수 단위 기호 보정]
     # 'i'가 수식에 포함되어 있고, 이것이 독립 변수가 아니라면 허수 단위로 취급
     if sp.Symbol('i') in expr.free_symbols:
@@ -358,11 +326,9 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             # 수식에서 i가 제거되었을 수 있으므로 is_complex 재설정
             is_complex = expr.has(sp.I) or any(s.name == 'z' for s in expr.free_symbols)
     
-    # 그라디언트 스탑 ([(pos, color), ...])
     color_stops = []
     preset_name = None
 
-    # First pass to get basic parameters
     for p in parallels:
         p = p.strip()
         if p.startswith("samples="):
@@ -403,9 +369,8 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
                     k, v = lp.split(":", 1)
                     labels[k.strip().lower()] = v.strip()
 
-    # Finalize color scheme based on available data
+    # stops가 있으면 gradient나 height/custom 모드로 동작
     if color_stops:
-        # stops가 있으면 gradient나 height/custom 모드로 동작
         if color_scheme not in ["gradient", "height"]:
             color_scheme = "custom"
     elif preset_name:
@@ -435,7 +400,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             # 가시화용 변수 이름 (라벨용)
             var_list = [v1, v2]
         elif len(var_list) >= 2:
-            # 이미 x, y가 있는 경우
             v1 = next((s for s in var_list if s.name == 'x'), var_list[0])
             v2 = next((s for s in var_list if s.name == 'y'), var_list[1])
             f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
@@ -445,7 +409,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
             is_single_complex_input = False
     else:
-        # 일반 실수 그래프
         is_single_complex_input = False
         if len(var_list) >= 2:
             v1, v2 = var_list[0], var_list[1]
@@ -474,11 +437,9 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         if np.isscalar(W):
             W = np.full(X.shape, W)
 
-    # 복소수 처리
     if np.iscomplexobj(W) or is_complex:
         # Ensure W is a numerical complex array for angle/abs calculation
         try:
-            # Try direct conversion (fastest)
             W_num = np.asarray(W, dtype=np.complex128)
         except Exception:
             # Fallback: manually convert each element to complex (handles SymPy objects)
@@ -493,7 +454,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             
             W_num = np.vectorize(_to_complex)(W)
 
-        # Ensure we have a numerical array for calculations
         W_num = np.asarray(W_num, dtype=np.complex128)
         
         if complex_mode == "abs_phase":
@@ -525,7 +485,6 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     Z = np.nan_to_num(Z, nan=0.0, posinf=z_limit_up, neginf=z_limit_down)
     Z = np.clip(Z, z_limit_down, z_limit_up)
     
-    # x3dom 데이터 형식
     points = []
     colors = []
     axis_style = "cross" # 기본값
@@ -536,12 +495,10 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             hex_color = ''.join([c*2 for c in hex_color])
         return [int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
 
-    # 축 스타일 파싱
     for p in parallels:
         if p.startswith("axis="):
             axis_style = p.split("=")[1].lower()
 
-    # [컬러 스키마 계산 최적화]
     # 실제 데이터의 유효 범위를 먼저 계산하고, 필요시 가시 범위로 클리핑하여 대비를 높임
     finite_c_full = C_val[np.isfinite(C_val)]
     if len(finite_c_full) > 0:
@@ -724,7 +681,6 @@ def handle_plot_complex(expr: sp.Expr, var: sp.Symbol, params: Dict[str, Any]) -
     mag = np.abs(W)
     v = mag / (1 + mag) # Normalize magnitude to [0, 1]
     
-    # 간단한 색상 맵핑 (HSV -> RGB)
     from matplotlib.colors import hsv_to_rgb
     hsv = np.zeros((res, res, 3))
     hsv[..., 0] = phase
@@ -741,10 +697,6 @@ def handle_plot_complex(expr: sp.Expr, var: sp.Symbol, params: Dict[str, Any]) -
         "latex": f"\\begin{{figure}}[ht]\n\\centering\n\\includegraphics[width=0.5\\textwidth]{{images/complex_plot.png}}\n\\caption{{Domain Coloring of ${sp.latex(expr)}$}}\n\\end{{figure}}",
         "status": "success"
     }
-
-# ---------------------------------------------------------------------------
-# [4] 메인 라우터
-# ---------------------------------------------------------------------------
 
 def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], config: Dict[str, Any], workspace_dir: str) -> Dict[str, Any]:
     """Plot 명령어 통합 핸들러."""
@@ -771,9 +723,7 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         var = free_symbols[0] if free_symbols else sp.Symbol('z')
         return handle_plot_complex(expr, var, params)
     else:
-        # 2D Default
         domain = (-10.0, 10.0)
-        # sub_cmds에서 쉼표가 포함된 문자열(범위) 찾기
         for cmd in sub_cmds:
             if "," in cmd:
                 try:
@@ -786,7 +736,6 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         var = free_symbols[0] if free_symbols else sp.Symbol('x')
         dat_samples = config.get('datDensity', 500)
         
-        # y축 범위 옵션 파싱 (기본값 -15:15)
         ymin, ymax = -15, 15
         y_multiplier = config.get('yMultiplier', 5.0)
         for p in parallels:
@@ -800,7 +749,6 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
                 try: y_multiplier = float(p.split("=")[1])
                 except: pass
         
-        # 데이터 파일 계산 범위 (y_limit) 동적 설정
         y_limit = max(abs(ymin), abs(ymax)) * y_multiplier
         line_color = config.get('lineColor', 'blue')
         
@@ -811,7 +759,6 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         
         pgf_code, warning_msg, dat_content, preview_img = generate_2d_pgfplots(expr, var, domain, parallels, dat_samples, y_limit)
         
-        # PGFPlots 코드 내의 파일 경로 및 색상 수정
         pgf_code = pgf_code.replace("data/plot_data.dat", f"data/{dat_filename}")
         if line_color != "blue":
             pgf_code = pgf_code.replace("\\addplot[", f"\\addplot[{line_color}, ")

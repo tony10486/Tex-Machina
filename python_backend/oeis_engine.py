@@ -1,10 +1,6 @@
 import requests
-import json
 
 def handle_oeis(sub_cmds):
-    """
-    OEIS 수열 검색을 처리합니다.
-    """
     if not sub_cmds:
         return {"status": "error", "message": "검색어를 입력하세요."}
     

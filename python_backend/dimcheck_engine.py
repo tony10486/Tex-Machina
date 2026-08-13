@@ -1,7 +1,6 @@
 import sympy as sp
-from typing import Dict, Any, Union
-import re
-from utils import SAFE_SYMPY_DICT, safe_parse_expr
+from typing import Dict, Any
+from utils import safe_parse_expr
 
 # Vol 1. 5.1장 규격에 따른 안전한 파서
 from sympy.parsing.latex import parse_latex as latex2sympy

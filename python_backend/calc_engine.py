@@ -88,12 +88,7 @@ def op_tensor_expand(expr, args, parallels=[], selection=None):
             except: pass
         return res_expr
 
-# ==========================================
-# 1. 특수 연산 및 단계별 풀이 (Step-by-Step)
-# ==========================================
-
 def format_step(text, latex_expr, level, target_level):
-    """레벨에 따른 단계 포맷팅"""
     if target_level >= level:
         if latex_expr:
             return f"\\text{{{text}}}: {sp.latex(latex_expr)}"
@@ -106,7 +101,6 @@ def get_solve_steps(expr, var, level):
     equation = expr if isinstance(expr, sp.Equality) else sp.Eq(expr, 0)
     lhs = sp.expand(equation.lhs - equation.rhs)
     
-    # 1. 유형 판별
     degree = sp.degree(lhs, var)
     
     if level >= 1:
@@ -181,7 +175,6 @@ def get_int_steps(expr, var, level):
 
         rule_tree = integral_steps(expr, var)
         
-        # 트리 재귀 탐색
         def extract_steps(rule):
             res = []
             f = format_rule(rule)
@@ -228,7 +221,6 @@ def get_diff_steps(expr, var, level):
             var = expr.variables[0]
             expr = expr.expr
 
-    # 단순 미분 분해
     if level >= 1:
         steps.append(f"\\text{{Step 1: Differentiate }}{sp.latex(expr)}\\text{{ with respect to }}{sp.latex(var)}")
     
@@ -247,7 +239,6 @@ def get_diff_steps(expr, var, level):
     return steps
 
 def op_diff(expr, args):
-    """다변수 편미분 및 일반 미분 처리"""
     # 이미 Derivative 객체인 경우 (LaTeX에 \frac{d}{dx} 등이 포함됨)
     if isinstance(expr, sp.Derivative):
         if not args:
@@ -273,7 +264,6 @@ def op_diff(expr, args):
 
 def op_taylor(expr, args, parallels):
     """테일러 급수 전개: taylor / [차수] 또는 taylor > [변수], [차수], [지점]"""
-    # 1. 대상 변수 결정
     symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
     var = sp.Symbol(args[0]) if args else (symbols[0] if symbols else sp.Symbol('x'))
     
@@ -338,7 +328,6 @@ def op_taylor(expr, args, parallels):
     return "".join(latex_parts)
 
 def op_int(expr, args):
-    """부정적분 및 정적분 처리"""
     # 이미 Integral 객체인 경우 (LaTeX에 \int 가 포함됨)
     if isinstance(expr, sp.Integral):
         if not args:
@@ -444,7 +433,6 @@ def preprocess_latex_ode(latex_str):
 
 def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     """파싱된 SymPy 수식을 ODE 풀이가 가능한 형태로 변환합니다."""
-    # 0. e를 sp.E로 변환
     if sp.Symbol('e') in expr.free_symbols:
         expr = expr.subs(sp.Symbol('e'), sp.E)
 
@@ -499,9 +487,7 @@ def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     def is_target_deriv(e):
         if not isinstance(e, sp.Derivative): return False
         sub_expr = e.expr
-        # theta 형태
         if getattr(sub_expr, 'name', None) == dep_var_name: return True
-        # theta(t) 형태
         if hasattr(sub_expr, 'func') and getattr(sub_expr.func, 'name', None) == dep_var_name: return True
         return False
 
@@ -518,13 +504,11 @@ def parse_ics(ics_str, funcs, x):
     if not ics_str:
         return ics
         
-    # funcs가 단일 객체인 경우 리스트로 변환
     if not isinstance(funcs, (list, tuple)):
         funcs_list = [funcs]
     else:
         funcs_list = funcs
         
-    # 함수 이름 매핑 생성
     func_map = {}
     for f in funcs_list:
         if hasattr(f, 'func'):
@@ -611,14 +595,12 @@ def op_ode(expr, args, indep_var_name=None):
         found_vars = {name.replace('\\', '') for name in existing_funcs if name}
         
         if not found_vars:
-            # 그리스 문자 포함 확장
             potential_dep_vars = {'y', 'u', 'v', 'w', 'z', 'theta', 'phi', 'psi', 'eta', 'xi', 'omega'}
             found_vars = {sym.name.replace('\\', '') for sym in expr.free_symbols if sym.name.replace('\\', '') in potential_dep_vars}
             
     if not found_vars:
         found_vars = {'y'}
             
-    # 연립 방정식 처리 (여러 변수가 발견된 경우)
     if len(found_vars) > 1:
         fixed_exprs, funcs, t = fix_system_ode([expr], list(found_vars), indep_var_name or 't')
         try:
@@ -626,7 +608,6 @@ def op_ode(expr, args, indep_var_name=None):
         except Exception as e:
             return f"\\text{{System ODE solver failed: }}{sp.latex(str(e))}"
 
-    # 단일 방정식 처리
     dep_var = list(found_vars)[0]
     fixed_expr, y, x = fix_ode_expression(expr, dep_var_name=dep_var, indep_var_name=indep_var_name)
     
@@ -654,8 +635,6 @@ def op_ode(expr, args, indep_var_name=None):
 
 def op_dimcheck_wrapper(expr, args, parallels, selection):
     """차원 및 단위 검사기 (Dimensional Analysis Check)"""
-    # selection: 원본 LaTeX 수식
-    # parallels: 병렬 옵션 (예: set=v:L/T)
     params = {
         "rawSelection": selection,
         "parallelOptions": parallels
@@ -667,7 +646,6 @@ def op_dimcheck_wrapper(expr, args, parallels, selection):
     return res["latex"]
 
 def op_error_prop(expr, args, parallels):
-    """실험물리학자를 위한 오차 전파 계산기"""
     # parallels에서 err=x:0.1,y:0.2 파싱
     err_dict = {}
     for p in parallels:
@@ -688,8 +666,6 @@ def op_error_prop(expr, args, parallels):
     return sp.sqrt(variance)
 
 def fix_pde_expression(expr, dep_var_name='u'):
-    """u(x, t) 등 다변수 함수가 포함된 PDE 표현식을 보정합니다."""
-    # 0. e를 sp.E로 변환
     if sp.Symbol('e') in expr.free_symbols:
         expr = expr.subs(sp.Symbol('e'), sp.E)
 
@@ -704,9 +680,8 @@ def fix_pde_expression(expr, dep_var_name='u'):
         # 독립 변수가 감지되지 않으면 기본값 x, y 설정
         indep_vars = [sp.Symbol('x'), sp.Symbol('y')]
     else:
-        # 일관성을 위해 정렬
         indep_vars = sorted(indep_vars, key=lambda s: s.name)
-        
+
     u = sp.Function(dep_var_name)(*indep_vars)
     
     substitutions = {}
@@ -726,7 +701,6 @@ import base64
 from io import BytesIO
 
 def op_num_solve(expr, args):
-    """ODE를 수치적으로 풀고 결과를 반환하거나 그래프를 생성합니다."""
     # 1. 초기 조건 및 범위 파싱
     ics_dict = {}
     t_span = [0, 10]
@@ -757,10 +731,8 @@ def op_num_solve(expr, args):
     if not ics_dict:
         return "Error: Numerical solving requires initial conditions (e.g., ic=y(0):1)"
 
-    # 2. ODE 변환
     fixed_expr, y_func, t_var = fix_ode_expression(expr)
     
-    # y'에 대해 정리
     y_prime = y_func.diff(t_var)
     sol_expr = sp.solve(fixed_expr, y_prime)
     if not sol_expr:
@@ -770,7 +742,6 @@ def op_num_solve(expr, args):
     f_np = sp.lambdify((t_var, y_func), sol_expr[0], 'numpy')
     def odefun(t, y): return f_np(t, y[0])
     
-    # 3. 수치적 통합
     t0_val = list(ics_dict.keys())[0]
     y0 = [ics_dict[t0_val]]
     t_eval = np.linspace(t_span[0], t_span[1], num_points)
@@ -781,7 +752,6 @@ def op_num_solve(expr, args):
         return f"Error in numerical solver: {str(e)}"
     
     if show_plot:
-        # 그래프 생성
         plt.figure(figsize=(6, 4))
         plt.plot(sol.t, sol.y[0], 'b-', label='y(t)')
         plt.title(f'Numerical Solution: ${sp.latex(expr)}$')
@@ -812,7 +782,6 @@ def op_num_solve(expr, args):
         return " \\\\ ".join(res_parts)
 
 def op_pde(expr, args):
-    """편미분방정식(PDE) 해 도출"""
     dep_var_name = 'u'
     for sym in expr.free_symbols:
         if sym.name in ['u', 'v', 'w']:
@@ -848,21 +817,15 @@ from oeis_engine import handle_oeis
 from query_engine import execute_query_on_text
 from label_engine import LabelEngine
 
-# ==========================================
-# 2. 메인 계산 라우터 (Command Dictionary)
-# ==========================================
-
 def run_fast_op(op_name, expr, *args):
     """SymEngine을 사용하여 연산을 가속합니다. 지원하지 않는 경우 SymPy로 폴백합니다."""
     if not HAS_SYMENGINE:
         return None
     
     try:
-        # SymPy 객체를 SymEngine 객체로 변환
         se_expr = symengine.sympify(expr)
         
         if op_name == "diff":
-            # args[0] is the variable
             var = symengine.Symbol(str(args[0]))
             res = se_expr.diff(var)
             return sp.sympify(res) # 다시 SymPy로 변환하여 후속 처리(latex 등) 호환성 유지
@@ -875,7 +838,6 @@ def run_fast_op(op_name, expr, *args):
                 res = se_expr.simplify()
                 return sp.sympify(res)
         elif op_name == "det":
-            # Matrix인 경우
             se_mtx = symengine.Matrix(expr.tolist())
             res = se_mtx.det()
             return sp.sympify(res)
@@ -884,7 +846,6 @@ def run_fast_op(op_name, expr, *args):
     return None
 
 def get_calc_operations():
-    """제안서에 명시된 모든 연산자를 매핑하는 딕셔너리 """
     return {
         # 0. 행렬 및 인용
         "matrix": lambda x, v, p, c, s: handle_matrix(v, p),
@@ -911,7 +872,7 @@ def get_calc_operations():
         "int": lambda x, v, p, c, s: op_int(x, v),
         "limit": lambda x, v, p, c, s: op_limit(x, v),
         "taylor": lambda x, v, p, c, s: op_taylor(x, v, p),
-        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(), # 점근 전개
+        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(),
         
         # 4. 선형대수 행렬 연산
         "det": lambda x, v, p, c, s: run_fast_op("det", x) or sp.Matrix(x).det(),
@@ -922,8 +883,8 @@ def get_calc_operations():
         "trace": lambda x, v, p, c, s: sp.Matrix(x).trace(),
         "transpose": lambda x, v, p, c, s: sp.Matrix(x).T,
         "nullspace": lambda x, v, p, c, s: sp.Matrix(x).nullspace(),
-        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x, # 야코비 행렬
-        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)), # 헤세 행렬
+        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x,
+        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)),
         
         # 5. 미분방정식 및 변환
         "ode": lambda x, v, p, c, s: op_ode(x, v),
@@ -933,7 +894,7 @@ def get_calc_operations():
         "ilaplace": lambda x, v, p, c, s: sp.inverse_laplace_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('s'), sp.Symbol('t'), noconds=True),
         "fourier": lambda x, v, p, c, s: sp.fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('x'), sp.Symbol('k')),
         "ifourier": lambda x, v, p, c, s: sp.inverse_fourier_transform(x, sp.Symbol(v[0]) if v else sp.Symbol('k'), sp.Symbol('x')),
-        "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(), # Z-변환
+        "ztrans": lambda x, v, p, c, s: sp.Sum(x * sp.Symbol('z')**(-sp.Symbol('n')), (sp.Symbol('n'), 0, sp.oo)).doit(),
         
         # 6. 복소해석학
         "residue": lambda x, v, p, c, s: sp.residue(x, sp.Symbol(v[0]), safe_parse_expr(v[1], evaluate=False) if len(v)>1 else 0),
@@ -945,7 +906,7 @@ def get_calc_operations():
         # 7. 정수론 및 이산수학
         "prime": lambda x, v, p, c, s: sp.isprime(int(sp.simplify(x))),
         "factorint": lambda x, v, p, c, s: sp.factorint(int(sp.simplify(x))),
-        "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'), # 복잡한 논리식 최소화
+        "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'),
         
         # 8. 물리 / 공학 유틸리티
         "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
@@ -956,16 +917,10 @@ def get_calc_operations():
         "plot": lambda x, v, p, c, s: handle_plot(s, v, p, c, os.getcwd())
     }
 
-# ==========================================
-# 3. 메인 핸들러 (Node.js 통신 엔트리)
-# ==========================================
-
-
 def preprocess_matrix_latex(latex_str):
     r"""
     \begin{bmatrix} ... \end{bmatrix} 형태를 SymPy Matrix 문자열로 변환합니다.
     """
-    # 1. 행렬 환경을 먼저 Matrix()로 변환
     def repl(match):
         content = match.group(1).strip()
         # [Fix] 단일 백슬래시가 아닌 \\ (줄바꿈)으로 분리
@@ -1021,7 +976,6 @@ def execute_calc(parsed_json_str):
         selection = req.get('rawSelection', '').strip()
         selection = strip_latex_delimiters(selection)
 
-        # [NEW] 라벨 분석 기능 처리
         if main_cmd == "labels":
             filepath = config.get('filepath')
             if not filepath:
@@ -1029,7 +983,6 @@ def execute_calc(parsed_json_str):
             engine = LabelEngine()
             return json.dumps(engine.parse_file(filepath))
 
-        # [NEW] 쿼리 기능 처리
         if main_cmd == "?":
             full_text = req.get('fullText', '')
             # sub_cmds[0] should contain the query without '?'
@@ -1043,7 +996,6 @@ def execute_calc(parsed_json_str):
                     "latex": ""
                 })
             return json.dumps(res)
-        # 1. 수식 전처리 및 액션 결정
         if main_cmd == "calc" and sub_cmds:
             action = sub_cmds.pop(0)
         elif main_cmd:
@@ -1077,6 +1029,26 @@ def execute_calc(parsed_json_str):
             # oeis 명령도 인터넷 검색이 필요함
             oeis_res = handle_oeis(sub_cmds)
             return json.dumps(oeis_res)
+
+        if action == "snippet":
+            # 사용자 정의 스니펫 스크립트 실행 (사용자 자신의 코드이므로 신뢰함)
+            code = sub_cmds[0] if sub_cmds else ""
+            if not code:
+                return json.dumps({"status": "error", "message": "Snippet script 코드가 비어 있습니다."})
+            ns = {
+                "selection": selection,
+                "sp": sp,
+                "parse_expr": safe_parse_expr,
+                "to_latex": lambda expr: sp.latex(expr),
+            }
+            try:
+                exec(code, ns)
+            except Exception as e:
+                return json.dumps({"status": "error", "message": f"Snippet script 오류: {type(e).__name__}: {e}"})
+            result = ns.get("result")
+            if result is None:
+                return json.dumps({"status": "error", "message": "Snippet script에서 'result' 변수를 설정해야 합니다."})
+            return json.dumps({"status": "success", "latex": str(result)})
 
         if action == "plot":
             # Plot 명령도 전용 핸들러에서 직접 파싱 및 처리
@@ -1222,13 +1194,11 @@ def execute_calc(parsed_json_str):
 
             if exprs: # [Fix] found_vars 여부와 상관없이 exprs가 있으면 시도
                 if len(exprs) > 1 or len(found_vars) > 1:
-                    # 연립 미분방정식 처리
                     if not found_vars: found_vars = {'y'}
                     fixed_exprs, funcs, t = fix_system_ode(exprs, list(found_vars), main_indep or 't')
                     while len(fixed_exprs) < len(funcs):
                         fixed_exprs.append(sp.Eq(0, 0))
                     
-                    # 초기 조건 수집
                     ics = {}
                     for arg in ode_args:
                         if 'ic=' in arg:
@@ -1236,13 +1206,11 @@ def execute_calc(parsed_json_str):
                     
                     result = sp.dsolve(fixed_exprs, funcs, ics=ics if ics else None)
                 else:
-                    # 단일 미분방정식 처리
                     if not found_vars: found_vars = {'y'}
                     result = op_ode(exprs[0], ode_args, indep_var_name=main_indep)
             else:
                 return json.dumps({"status": "error", "message": "No ODE expression found"})
         else:
-            # 2. 일반 수식 파싱
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
             if 'matrix' in selection:
                 processed_selection = preprocess_matrix_latex(selection)
@@ -1275,20 +1243,16 @@ def execute_calc(parsed_json_str):
                 if sp.Symbol('e') in expr.free_symbols:
                     expr = expr.subs(sp.Symbol('e'), sp.E)
             
-            # 3. 명령어 실행
             ops = get_calc_operations()
             if action not in ops:
                 raise ValueError(f"Unknown action: {action}")
             result = ops[action](expr, sub_cmds, parallels, config, selection)
         
-        # 4. 결과 포맷팅
         final_latex = result if isinstance(result, str) else sp.latex(result)
             
-        # 5. 단계별 풀이 (Step-by-Step)
         steps = []
         step_level = next((int(p.split('=')[1]) for p in parallels if p.startswith('step=')), 0)
         
-        # 변수 목록 추출
         if action in ["ode", "pde", "num_solve"]:
             # 연립 방정식인 경우 모든 변수 합치기
             all_vars = set()
