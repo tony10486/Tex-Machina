@@ -660,6 +660,21 @@
           "type": "object",
           "default": {},
           "description": "Custom environment mappings for wrap feature. Key is the short identifier, value has 'name' (LaTeX env name) and 'hasTitle' (boolean). Merged with built-in environments (thm, lemma, proof, defn, cor, prop, box, remark, example)."
+        },
+        "tex-machina.snippets.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "사용자 정의 스니펫 시스템 활성화 여부"
+        },
+        "tex-machina.snippets.triggerChar": {
+          "type": "string",
+          "default": ";",
+          "description": "스니펫 타이핑 트리거 문자 (예: ';' → ';frac' 입력 시 분수 스니펫 확장)"
+        },
+        "tex-machina.snippets.autoInsertEnv": {
+          "type": "boolean",
+          "default": false,
+          "description": "\\begin{env} 입력 완료 시 해당 환경용 스니펫 본문을 자동 삽입합니다"
         }
       }
     },
@@ -811,7 +826,13 @@
       {
         "command": "tex-machina.wrapStructure",
         "title": "LaTeX: Wrap with Environment"
-      }
+      },
+      { "command": "tex-machina.snippets.insert", "title": "LaTeX: Insert Snippet" },
+      { "command": "tex-machina.snippets.create", "title": "LaTeX: Create Snippet" },
+      { "command": "tex-machina.snippets.edit", "title": "LaTeX: Edit Snippet" },
+      { "command": "tex-machina.snippets.delete", "title": "LaTeX: Delete Snippet" },
+      { "command": "tex-machina.snippets.export", "title": "LaTeX: Export Snippets" },
+      { "command": "tex-machina.snippets.import", "title": "LaTeX: Import Snippets" }
     ],
     "viewsContainers": {
       "activitybar": [

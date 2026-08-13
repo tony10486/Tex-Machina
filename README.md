@@ -356,6 +356,57 @@ LaTeX 명령어를 직접 입력하지 않고, 약어(Abbreviation) + Space로 �
 ## 스니펫 
 - 인덱스 : 수식 환경 내에서 `idx`를 입력하면 `{i \in I}`로 자동 변환됩니다. `GHidx`와 같이 두 대문자 뒤에 `idx`를 입력하면 군론에서 사용하는 `[G:H]` (부분군 지수) 표기로 변환됩니다.
 
+### 사용자 정의 스니펫 시스템
+플레이스홀더(탭 정지점), 컨텍스트 인지 트리거, JS/Python 스크립트, 환경 연동을 지원하는 강력한 사용자 정의 스니펫 시스템입니다. 사이드바의 📝 스니펫 패널 또는 명령 팔레트에서 관리할 수 있습니다.
+
+#### 기본 동작: 타이핑 트리거
+`;스니펫이름`을 입력하면 해당 스니펫 본문이 즉시 확장됩니다.
+- 예: `;frac` → `\frac{$1}{$2}$0` (커서가 `$1`로 이동, `Tab`으로 `$2` → `$0` 순서 이동)
+- 트리거 문자는 설정 `tex-machina.snippets.triggerChar`(기본 `;`)에서 변경 가능합니다.
+- 접두어(prefix) 별칭도 지원합니다. 예: `;fr` 입력 시 `frac` 스니펫의 접두어 매칭으로 확장.
+- 선택 영역이 있을 때 `$TM_SELECTED_TEXT`는 선택된 텍스트로 대체됩니다.
+
+#### 스니펫 형식
+각 스니펫은 다음 필드를 가집니다:
+| 필드 | 설명 |
+| :--- | :--- |
+| `name` | 고유 이름 (`;name`으로 트리거). 영문/숫자/`_`/`-` 허용 |
+| `body` | 삽입할 본문. `$1`, `${2:기본값}`, `$0`, `$TM_SELECTED_TEXT` 등 VS Code 스니펫 문법 지원 |
+| `scope` | `any`(기본) / `math`(수식 내) / `text`(수식 밖) — 컨텍스트 인지 트리거 |
+| `envs` | 제한할 환경 이름 목록 (예: `["align"]` — align 환경 안에서만 확장) |
+| `contextRegex` | 현재 줄(`contextScope: "line"`) 또는 커서 주변 텍스트(`"around"`)에 대한 정규식 조건 |
+| `prefix` | `;` 완성 시 이름 대신 사용할 별칭 목록 |
+| `script` | 동적 스니펫 (아래 참조) |
+| `autoInsertEnv` | `true` 시 `\begin{env}` 완성/자동 삽입에 사용 |
+| `enabled` | `false` 시 비활성화 |
+
+#### 동적/스크립트 스니펫
+정적 본문 대신 스크립트로 삽입 내용을 계산할 수 있습니다.
+- **JS**: `script: { "type": "js", "code": "return selection.toUpperCase()" }` — `selection`과 `context`(isMath, envName, lineText 등)를 받아 문자열을 반환하는 함수 본문.
+- **Python**: `script: { "type": "python", "code": "result = to_latex(sp.integrate(sp.Symbol('x')**2, sp.Symbol('x')))" }` — `selection`, `sp`(sympy), `parse_expr`, `to_latex` 사용 가능, `result` 변수에 삽입할 문자열 지정.
+
+#### 환경 연동 (`\begin{env}`)
+- `autoInsertEnv: true` 스니펫은 `\begin{` 입력 시 완성 제안에 블록 형태로 나타납니다.
+- 설정 `tex-machina.snippets.autoInsertEnv: true` 시, `\begin{env}`를 입력 완료하면 해당 환경용 스니펫 본문(`\end{env}` 포함)이 자동 삽입됩니다. (여러 스니펫이 매칭되면 자동 삽입하지 않고 완성 제안으로 안내)
+
+#### 내장 스니펫 (기본 제공)
+`frac`, `sqrt`, `sum`, `int`, `align`, `cases`, `textbf`, `emph` — 삭제/수정 가능하며, webview 패널이나 `LaTeX: Create Snippet` 명령으로 추가할 수 있습니다.
+
+#### 명령 팔레트
+| 명령 | 설명 |
+| :--- | :--- |
+| `LaTeX: Insert Snippet` | 스니펫 목록에서 선택해 삽입 |
+| `LaTeX: Create Snippet` | 이름/범위/본문/설명을 입력해 새 스니펫 생성 |
+| `LaTeX: Edit Snippet` | 기존 스니펫 본문 수정 |
+| `LaTeX: Delete Snippet` | 스니펫 삭제 |
+| `LaTeX: Export Snippets` | 전체 스니펫을 JSON 파일로 내보내기 |
+| `LaTeX: Import Snippets` | JSON 파일에서 스니펫 가져오기 |
+
+#### 설정
+- `tex-machina.snippets.enabled` (기본 `true`): 시스템 활성화 여부
+- `tex-machina.snippets.triggerChar` (기본 `;`): 타이핑 트리거 문자
+- `tex-machina.snippets.autoInsertEnv` (기본 `false`): `\begin{env}` 입력 시 환경 스니펫 자동 삽입
+
 
 ## Keybindings
 

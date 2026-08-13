@@ -37,6 +37,16 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 vscode.commands.executeCommand('tex-machina.deleteMacro', data.name);
             } else if (data.command === 'applyMacro') {
                 vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
+            } else if (data.command === 'defineSnippet') {
+                vscode.commands.executeCommand('tex-machina.snippets.save', data.snippet);
+            } else if (data.command === 'deleteSnippet') {
+                vscode.commands.executeCommand('tex-machina.snippets.delete', data.name);
+            } else if (data.command === 'applySnippet') {
+                vscode.commands.executeCommand('tex-machina.snippets.insert', data.name);
+            } else if (data.command === 'exportSnippets') {
+                vscode.commands.executeCommand('tex-machina.snippets.export');
+            } else if (data.command === 'importSnippets') {
+                vscode.commands.executeCommand('tex-machina.snippets.import');
             } else if (data.command === 'discoverLabels') {
                 vscode.commands.executeCommand('tex-machina.discoverLabels');
             } else if (data.command === 'toggleLabelDiscovery') {
@@ -55,6 +65,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 if (this._lastMacros) {
                     this.updateMacros(this._lastMacros);
                 }
+                if (Object.keys(this._lastSnippets).length > 0) {
+                    this.updateSnippets(this._lastSnippets);
+                }
                 if (this._lastNodes.length > 0) {
                     this.updateLabels(this._lastNodes, this._lastEdges);
                 }
@@ -70,6 +83,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     private _lastWarning: string = "";
     private _lastPreviewImg: string = "";
     private _lastMacros: Record<string, string> = {};
+    private _lastSnippets: Record<string, any> = {};
     private _lastNodes: any[] = [];
     private _lastEdges: any[] = [];
 
@@ -95,6 +109,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
     public updateMacros(macros: Record<string, string>) {
         this._lastMacros = macros;
         this._view?.webview.postMessage({ type: 'updateMacros', macros });
+    }
+
+    public updateSnippets(snippets: Record<string, any>) {
+        this._lastSnippets = snippets;
+        this._view?.webview.postMessage({ type: 'updateSnippets', snippets });
     }
 
     public updateLabels(nodes: any[], edges: any[]) {
@@ -179,6 +198,56 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 .macro-actions button { padding: 2px 4px; font-size: 10px; flex: none; width: auto; }
                 .macro-input-group { display: flex; gap: 4px; margin-bottom: 4px; }
                 .macro-input-group input { flex: 1; }
+                .macro-input-group select { flex: 1; }
+
+                /* Snippet Styles */
+                .snippet-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
+                .snippet-toolbar button { flex: none; width: auto; padding: 3px 6px; font-size: 10px; }
+                #snippet-list { list-style: none; padding: 0; margin: 0; }
+                .snippet-item {
+                    display: flex;
+                    flex-direction: column;
+                    padding: 8px;
+                    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+                    background: rgba(255, 255, 255, 0.03);
+                    margin-bottom: 4px;
+                }
+                .snippet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 4px; }
+                .snippet-name { font-weight: bold; color: var(--vscode-textLink-foreground); cursor: pointer; }
+                .snippet-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; }
+                .snippet-badge.math { background: rgba(0, 122, 204, 0.25); color: var(--vscode-textLink-foreground); }
+                .snippet-badge.text { background: rgba(35, 134, 54, 0.25); color: #89d185; }
+                .snippet-badge.any { background: rgba(255, 153, 0, 0.2); color: #ffb454; }
+                .snippet-indicators { display: flex; gap: 4px; align-items: center; font-size: 10px; color: var(--vscode-descriptionForeground); }
+                .snippet-body {
+                    font-family: var(--vscode-editor-font-family);
+                    font-size: 10px;
+                    color: var(--vscode-descriptionForeground);
+                    background: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-sideBarSectionHeader-border);
+                    border-radius: 3px;
+                    padding: 4px 6px;
+                    margin-bottom: 4px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .snippet-desc { font-size: 10px; color: var(--vscode-descriptionForeground); margin-bottom: 4px; word-break: break-all; }
+                .snippet-actions { display: flex; gap: 4px; }
+                .snippet-actions button { padding: 2px 4px; font-size: 10px; flex: none; width: auto; }
+                .snippet-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border); background: rgba(255, 255, 255, 0.03); margin-bottom: 4px; }
+                .snippet-form label { font-size: 10px; margin-bottom: 0; }
+                .snippet-form textarea {
+                    background: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border: 1px solid var(--vscode-input-border);
+                    font-family: var(--vscode-editor-font-family);
+                    font-size: 11px;
+                    padding: 4px;
+                    resize: vertical;
+                }
+                .snippet-disabled { opacity: 0.5; }
+                .snippet-empty { color: var(--vscode-descriptionForeground); font-size: 11px; padding: 6px 8px; }
 
                 /* Label Discovery Styles */
                 #viz-container { position: relative; width: 100%; height: 400px; background: var(--vscode-sideBar-background); border: 1px solid var(--vscode-sideBarSectionHeader-border); margin-top: 10px; overflow: hidden; }
@@ -308,6 +377,34 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                         <button style="width: 100%; margin-bottom: 10px;" onclick="addMacro()">Add Macro</button>
                         <div id="macro-list"></div>
+                    </div>
+                </details>
+
+                <details id="details-sn">
+                    <summary>📝 스니펫</summary>
+                    <div id="sn" style="padding: 10px;">
+                        <div class="snippet-toolbar">
+                            <button class="secondary" onclick="openSnippetForm()">+ 새 스니펫</button>
+                            <button class="secondary" onclick="exportSnippets()">내보내기</button>
+                            <button class="secondary" onclick="importSnippets()">가져오기</button>
+                        </div>
+                        <div id="snippet-form" class="snippet-form" style="display: none;">
+                            <div class="macro-input-group">
+                                <input type="text" id="sn-name" placeholder="이름 (예: frac)">
+                                <select id="sn-scope">
+                                    <option value="any">모두</option>
+                                    <option value="math">수식</option>
+                                    <option value="text">텍스트</option>
+                                </select>
+                            </div>
+                            <textarea id="sn-body" rows="3" placeholder="\\frac{$1}{$2}$0"></textarea>
+                            <input type="text" id="sn-desc" placeholder="설명 (선택)">
+                            <div class="btn-row">
+                                <button onclick="saveSnippetForm()">저장</button>
+                                <button class="secondary" onclick="cancelSnippetForm()">취소</button>
+                            </div>
+                        </div>
+                        <ul id="snippet-list"></ul>
                     </div>
                 </details>
 
@@ -472,8 +569,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     });
                 }
 
-
-                // Macro Logic
                 function addMacro() {
                     const name = document.getElementById('new-macro-name').value;
                     const chain = document.getElementById('new-macro-chain').value;
@@ -495,6 +590,132 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 function editMacro(name, chain) {
                     document.getElementById('new-macro-name').value = name;
                     document.getElementById('new-macro-chain').value = chain;
+                }
+
+                let currentSnippets = {};
+                let editingSnippet = null;
+
+                function escapeHtml(str) {
+                    return String(str == null ? '' : str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                }
+
+                function snippetNameAttr(name) {
+                    return escapeHtml(name).replace(/'/g, "\\'");
+                }
+
+                function snippetScopeBadge(scope) {
+                    if (scope === 'math') return '<span class="snippet-badge math">수식</span>';
+                    if (scope === 'text') return '<span class="snippet-badge text">텍스트</span>';
+                    return '<span class="snippet-badge any">모두</span>';
+                }
+
+                function renderSnippets(snippets) {
+                    currentSnippets = snippets || {};
+                    const list = document.getElementById('snippet-list');
+                    if (!list) return;
+                    list.innerHTML = '';
+                    const entries = Object.entries(currentSnippets);
+                    if (entries.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'snippet-empty';
+                        empty.textContent = '정의된 스니펫이 없습니다.';
+                        list.appendChild(empty);
+                        return;
+                    }
+                    for (const [name, sn] of entries) {
+                        const item = document.createElement('div');
+                        item.className = 'snippet-item' + (sn && sn.enabled === false ? ' snippet-disabled' : '');
+                        const body = (sn && sn.body) || '';
+                        const description = (sn && sn.description) || '';
+                        let indicators = '';
+                        if (sn && sn.script) indicators += '<span class="snippet-ind" title="스크립트">⚙</span>';
+                        if (sn && sn.autoInsertEnv) indicators += '<span class="snippet-ind" title="환경 자동 삽입">🏷</span>';
+                        if (sn && sn.enabled === false) indicators += '<span class="snippet-ind" title="비활성화됨">꺼짐</span>';
+                        const nameAttr = snippetNameAttr(name);
+                        item.innerHTML = \`
+                            <div class="snippet-header">
+                                <span class="snippet-name" onclick="applySnippet('\${nameAttr}')" title="활성 편집기에 삽입">\${escapeHtml(name)}</span>
+                                <div style="display: flex; gap: 4px; align-items: center;">
+                                    \${snippetScopeBadge((sn && sn.scope) || 'any')}
+                                    <span class="snippet-indicators">\${indicators}</span>
+                                </div>
+                            </div>
+                            <div class="snippet-body" title="\${escapeHtml(body)}">\${escapeHtml(body)}</div>
+                            \${description ? '<div class="snippet-desc">' + escapeHtml(description) + '</div>' : ''}
+                            <div class="snippet-actions">
+                                <button onclick="applySnippet('\${nameAttr}')">삽입</button>
+                                <button class="secondary" onclick="editSnippet('\${nameAttr}')">편집</button>
+                                <button class="secondary" style="background: #a30000;" onclick="deleteSnippet('\${nameAttr}')">삭제</button>
+                            </div>
+                        \`;
+                        list.appendChild(item);
+                    }
+                }
+
+                function openSnippetForm() {
+                    editingSnippet = null;
+                    document.getElementById('sn-name').value = '';
+                    document.getElementById('sn-scope').value = 'any';
+                    document.getElementById('sn-body').value = '';
+                    document.getElementById('sn-desc').value = '';
+                    document.getElementById('snippet-form').style.display = 'flex';
+                    document.getElementById('sn-name').focus();
+                }
+
+                function cancelSnippetForm() {
+                    editingSnippet = null;
+                    document.getElementById('snippet-form').style.display = 'none';
+                }
+
+                function editSnippet(name) {
+                    const sn = currentSnippets[name];
+                    if (!sn) return;
+                    editingSnippet = Object.assign({}, sn, { name });
+                    document.getElementById('sn-name').value = name;
+                    document.getElementById('sn-scope').value = (sn.scope && ['any', 'math', 'text'].indexOf(sn.scope) !== -1) ? sn.scope : 'any';
+                    document.getElementById('sn-body').value = (sn.body || '');
+                    document.getElementById('sn-desc').value = (sn.description || '');
+                    document.getElementById('snippet-form').style.display = 'flex';
+                    document.getElementById('sn-body').focus();
+                }
+
+                function saveSnippetForm() {
+                    const name = document.getElementById('sn-name').value.trim();
+                    const scope = document.getElementById('sn-scope').value;
+                    const body = document.getElementById('sn-body').value;
+                    const description = document.getElementById('sn-desc').value.trim();
+                    if (!name || !body) return;
+                    let snippet;
+                    if (editingSnippet) {
+                        snippet = Object.assign({}, editingSnippet, { name, scope, body, description });
+                    } else {
+                        snippet = { name, scope, body };
+                        if (description) snippet.description = description;
+                    }
+                    vscode.postMessage({ command: 'defineSnippet', snippet });
+                    cancelSnippetForm();
+                }
+
+                function deleteSnippet(name) {
+                    if (confirm('스니펫 "' + name + '"을(를) 삭제하시겠습니까?')) {
+                        vscode.postMessage({ command: 'deleteSnippet', name });
+                    }
+                }
+
+                function applySnippet(name) {
+                    vscode.postMessage({ command: 'applySnippet', name });
+                }
+
+                function exportSnippets() {
+                    vscode.postMessage({ command: 'exportSnippets' });
+                }
+
+                function importSnippets() {
+                    vscode.postMessage({ command: 'importSnippets' });
                 }
 
                 function alignZ() {
@@ -801,7 +1022,6 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         smooth: false
                     }));
 
-                    // Incremental Update
                     const currentIds = visNodes.getIds();
                     const nextIds = newNodes.map(n => n.id);
                     const toRemove = currentIds.filter(id => !nextIds.includes(id));
@@ -940,7 +1160,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 window.addEventListener('message', e => {
-                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges, settings } = e.data;
+                    const { type, x3d_data, latex, preview_img, warning, expr_latex, macros, nodes, edges, settings, snippets } = e.data;
                     if (type === 'labels') {
                         initLabelGraph({ nodes, edges, settings });
                     } else if (type === 'update') {
@@ -1099,6 +1319,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             \`;
                             list.appendChild(item);
                         }
+                    } else if (type === 'updateSnippets') {
+                        renderSnippets(snippets);
                     }
                 });
             </script>

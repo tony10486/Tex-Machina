@@ -18,6 +18,9 @@ import { registerFractionShorthand } from './core/fractionShorthand';
 import { registerScanPrevention } from './core/scanPrevention';
 import { registerEnvAutoDelete } from './core/envAutoDelete';
 import { MacroManager } from './core/macroManager';
+import { SnippetManager } from './core/snippetManager';
+import { registerSnippetTriggers } from './core/snippetTriggers';
+import { registerEnvSnippetIntegration } from './core/envSnippetIntegration';
 import { registerToggleMode, deactivateToggleMode } from './core/toggleMode';
 import { registerImplicitSubscripts } from './core/implicitSubscripts';
 import { registerSmartNewline } from './core/smartNewline';
@@ -103,10 +106,6 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
         lastResponse = response;
 
         if (response.status === 'success') {
-            if (response.status === 'oeis_results' || response.status === 'search_results') {
-                vscode.window.showWarningMessage(`체인 내에서 인터랙티브 명령어(${parsed.mainCommand})는 지원되지 않습니다.`);
-                break;
-            }
             currentInput = response.latex;
         } else {
             vscode.window.showErrorMessage(`체인 중단 (${cmdStr}): ${response.message}`);
@@ -132,7 +131,7 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
             outputText = `${initialSelection} = ${resultLatex}`;
         }
 
-        if (lastMainCommand !== "plot" || (lastMainCommand === "plot" && lastResponse.latex.includes("tikzpicture"))) {
+        if (lastMainCommand !== "plot" || lastResponse.latex.includes("tikzpicture")) {
             await editor.edit(editBuilder => {
                 editBuilder.replace(selection, outputText);
             });
@@ -141,13 +140,12 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('TeX-Machina 활성화 완료!');
-
     pythonService = new PythonService(context);
     context.subscriptions.push(pythonService);
     await pythonService.start();
 
     macroManager = new MacroManager(context);
+    const snippetManager = new SnippetManager(context);
 
     const registerFunctions: Array<() => vscode.Disposable | void> = [
         () => registerImplicitSubscripts(),
@@ -191,7 +189,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }
 
-    // Paste External Data Provider
     if (typeof vscode.languages.registerDocumentPasteEditProvider === 'function') {
         context.subscriptions.push(vscode.languages.registerDocumentPasteEditProvider(
             'latex',
@@ -259,6 +256,13 @@ export async function activate(context: vscode.ExtensionContext) {
     const provider = new TeXMachinaWebviewProvider(context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(TeXMachinaWebviewProvider.viewType, provider));
     provider.updateMacros(macroManager.getMacros());
+    provider.updateSnippets(snippetManager.getAll());
+
+    const refreshSnippets = () => {
+        provider.updateSnippets(snippetManager.getAll());
+    };
+    registerSnippetTriggers(context, snippetManager, pythonService, refreshSnippets);
+    registerEnvSnippetIntegration(context, snippetManager);
 
     context.subscriptions.push(pythonService.onResponse(async (response) => {
         await handlePythonResponse(response, provider);
@@ -723,9 +727,9 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
             
             const targetEditor = reqCtx?.editor || vscode.window.activeTextEditor;
             if (!targetEditor || targetEditor.document.isClosed) return;
-            const targetSelection = reqCtx?.selection || targetEditor?.selection;
+            const targetSelection = reqCtx?.selection || targetEditor.selection;
             
-            if (targetEditor && targetSelection) {
+            if (targetSelection) {
                 if (reqCtx?.isExportingPdf && response.export_content && reqCtx.pdfTargetDir) {
                     const exportBuffer = Buffer.from(response.export_content, 'base64');
                     const imagesDir = path.join(reqCtx.pdfTargetDir, 'images');
@@ -758,7 +762,7 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                     else if (mainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : originalText; }
                     else if (parallelOptions.includes("newline")) { outputText = `${originalText}\n\n\\[\n${resultLatex}\n\\]`; }
                     else { outputText = `${originalText} = ${resultLatex}`; }
-                    if (mainCommand !== "plot" || (mainCommand === "plot" && response.latex.includes("tikzpicture"))) {
+                    if (mainCommand !== "plot" || response.latex.includes("tikzpicture")) {
                         await targetEditor.edit(editBuilder => { editBuilder.replace(targetSelection, outputText); });
                     }
                 }
