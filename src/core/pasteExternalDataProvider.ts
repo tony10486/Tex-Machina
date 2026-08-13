@@ -16,15 +16,6 @@ const PASTE_KIND_TABULAR = vscode.DocumentDropOrPasteEditKind.Empty.append('late
 
 export class PasteExternalDataProvider implements vscode.DocumentPasteEditProvider {
 
-    async prepareDocumentPaste?(
-        _document: vscode.TextDocument,
-        _ranges: readonly vscode.Range[],
-        _dataTransfer: vscode.DataTransfer,
-        _token: vscode.CancellationToken
-    ): Promise<void> {
-        // Nothing to prepare in advance; we analyze on demand in provideDocumentPasteEdits
-    }
-
     async provideDocumentPasteEdits(
         document: vscode.TextDocument,
         ranges: readonly vscode.Range[],
@@ -54,7 +45,6 @@ export class PasteExternalDataProvider implements vscode.DocumentPasteEditProvid
 
         const edits: vscode.DocumentPasteEdit[] = [];
 
-        // Determine default behavior
         const mode = cfg.defaultMode === 'auto'
             ? (isInsideMath ? 'matrix' : 'tabular')
             : cfg.defaultMode;
@@ -145,10 +135,6 @@ export async function forcePasteAsTabular() {
         cfg.escapeMode
     );
     await editor.edit(eb => eb.replace(editor.selection, latex));
-}
-
-interface ModePickItem extends vscode.QuickPickItem {
-    value: 'matrix' | 'tabular';
 }
 
 interface ConfirmPickItem extends vscode.QuickPickItem {
@@ -300,7 +286,6 @@ async function getClipboardText(dataTransfer: vscode.DataTransfer): Promise<stri
         }
     }
 
-    // Fallback to plain text
     const textItem = dataTransfer.get('text/plain');
     if (textItem) {
         return await textItem.asString();

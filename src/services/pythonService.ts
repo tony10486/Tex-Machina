@@ -219,12 +219,10 @@ export class PythonService implements vscode.Disposable {
                 }
 
                 const requestId = response.requestId;
-                if (requestId && this.resolvers.has(requestId)) {
-                    const resolve = this.resolvers.get(requestId);
+                const resolve = requestId ? this.resolvers.get(requestId) : undefined;
+                if (resolve) {
                     this.resolvers.delete(requestId);
-                    if (resolve) {
-                        resolve(response);
-                    }
+                    resolve(response);
                 } else {
                     this.emitResponse(response);
                 }
@@ -241,8 +239,15 @@ export class PythonService implements vscode.Disposable {
     }
 
     private onResponseCallback?: (response: any) => void;
-    public onResponse(callback: (response: any) => void): void {
+    public onResponse(callback: (response: any) => void): { dispose(): void } {
         this.onResponseCallback = callback;
+        return {
+            dispose: () => {
+                if (this.onResponseCallback === callback) {
+                    this.onResponseCallback = undefined;
+                }
+            },
+        };
     }
 
     public send(payload: any): void {

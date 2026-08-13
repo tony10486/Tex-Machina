@@ -46,7 +46,6 @@ export function registerNodeNavigation(context: vscode.ExtensionContext) {
     // Toggle Command: cmd+shift+' l
     let toggleCommand = vscode.commands.registerCommand('tex-machina.toggleMathNav', () => {
         isMathNavActive = !isMathNavActive;
-        console.log(`[MathNav] Toggled: ${isMathNavActive}`);
         vscode.commands.executeCommand('setContext', 'tex-machina.mathNavActive', isMathNavActive);
         
         // Update configuration to persist the change
@@ -217,9 +216,7 @@ export function getJumpPoints(text: string): number[] {
         } else if (m === '^' || m === '_') {
             // If the script is followed by a bracket, let the bracket handle the jump point (inside the slot)
             let nextChar = pos + 1 < text.length ? text[pos + 1] : '';
-            if (openingBrackets.includes(nextChar)) {
-                // Skip adding a point before the bracket
-            } else {
+            if (!openingBrackets.includes(nextChar)) {
                 // Slot: Right after the script marker
                 points.add(pos + 1);
                 if (pos + 1 < text.length && !/\s/.test(nextChar)) {

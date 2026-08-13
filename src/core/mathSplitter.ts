@@ -53,27 +53,15 @@ export function registerMathSplitter(context: vscode.ExtensionContext) {
  * @param splitAtPlus If true, also split at outermost + and - operators.
  */
 export function splitMathString(text: string, splitAtPlus: boolean = false): string {
-    // 1. Determine inner content and if it was wrapped
+    // 1. Strip the math environment delimiters to get the inner content
     let inner = text.trim();
-    let wasWrapped = false;
-    let wrapperStart = "";
-    let wrapperEnd = "";
     
     if (inner.startsWith('$$') && inner.endsWith('$$')) {
         inner = inner.substring(2, inner.length - 2).trim();
-        wrapperStart = "$$";
-        wrapperEnd = "$$";
-        wasWrapped = true;
     } else if (inner.startsWith('\\[') && inner.endsWith('\\]')) {
         inner = inner.substring(2, inner.length - 2).trim();
-        wrapperStart = "\\[";
-        wrapperEnd = "\\]";
-        wasWrapped = true;
     } else if (inner.startsWith('$') && inner.endsWith('$')) {
         inner = inner.substring(1, inner.length - 1).trim();
-        wrapperStart = "$";
-        wrapperEnd = "$";
-        wasWrapped = true;
     }
 
     // 2. Find outermost = and (+, - if enabled)

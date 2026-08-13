@@ -8,16 +8,10 @@ export interface CalcOperation {
 export function detectOperation(expr: string): CalcOperation {
     const s = expr.replace(/\s/g, '');
 
-    if (s.includes('\\int') || s.includes('\\iint') || s.includes('\\iiint')) {
-        return { mainCommand: 'calc', subCommands: [] };
-    }
-    if (s.includes('\\frac{d') || s.includes('\\partial')) {
-        return { mainCommand: 'calc', subCommands: [] };
-    }
-    if (s.includes('\\lim')) {
-        return { mainCommand: 'calc', subCommands: [] };
-    }
-    if (s.includes('\\sum') || s.includes('\\prod')) {
+    if (s.includes('\\int') || s.includes('\\iint') || s.includes('\\iiint') ||
+        s.includes('\\frac{d') || s.includes('\\partial') ||
+        s.includes('\\lim') ||
+        s.includes('\\sum') || s.includes('\\prod')) {
         return { mainCommand: 'calc', subCommands: [] };
     }
 

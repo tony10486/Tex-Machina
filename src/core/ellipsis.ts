@@ -9,7 +9,6 @@ export function registerEllipsis(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('tex-machina');
             
             for (const change of event.contentChanges) {
-                // Check if the inserted text is exactly a dot
                 if (change.text !== '.') {
                     continue;
                 }
@@ -24,11 +23,9 @@ export function registerEllipsis(context: vscode.ExtensionContext) {
 
                 const line = position.line;
                 if (line >= document.lineCount) {continue;}
-                
                 const lineText = document.lineAt(line).text;
                 const charOffset = position.character;
                 
-                // Check if the previous two characters are also dots
                 if (lineText[charOffset - 1] === '.' && lineText[charOffset - 2] === '.') {
                     const macro = config.get<string>('ellipsis.macro', '\\dots');
                     

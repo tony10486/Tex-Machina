@@ -118,8 +118,11 @@ const PREFIX_MAP: { [key: string]: string } = {
     'd': '\\deci', 'c': '\\centi', 'm': '\\milli', 'u': '\\micro', 'n': '\\nano', 'p': '\\pico', 'f': '\\femto', 'a': '\\atto', 'z': '\\zepto', 'y': '\\yocto'
 };
 
+// Sort by length descending to match longest possible unit/prefix first (e.g., kHz before k)
+const SORTED_UNIT_KEYS = Object.keys(UNIT_MAP).sort((a, b) => b.length - a.length);
+const SORTED_PREFIX_KEYS = Object.keys(PREFIX_MAP).sort((a, b) => b.length - a.length);
+
 export function expandSiunitx(input: string): string {
-    // 1. Check if it's already in \SI{val}{unit} format
     let value = "";
     let unitStr = "";
 
@@ -201,10 +204,7 @@ function parseUnitSequence(seq: string): string {
         // Try to match units from UNIT_MAP greedily
         let matched = false;
         
-        // Sort keys by length descending to match longest possible unit first (e.g., kHz before k)
-        const unitKeys = Object.keys(UNIT_MAP).sort((a, b) => b.length - a.length);
-        
-        for (const key of unitKeys) {
+        for (const key of SORTED_UNIT_KEYS) {
             if (remaining.startsWith(key)) {
                 result += UNIT_MAP[key];
                 remaining = remaining.substring(key.length).trim();
@@ -216,11 +216,10 @@ function parseUnitSequence(seq: string): string {
         if (matched) { continue; }
 
         // If no unit matched, try to match prefix + base unit
-        const prefixKeys = Object.keys(PREFIX_MAP).sort((a, b) => b.length - a.length);
-        for (const p of prefixKeys) {
+        for (const p of SORTED_PREFIX_KEYS) {
             if (remaining.startsWith(p)) {
                 const afterPrefix = remaining.substring(p.length);
-                for (const key of unitKeys) {
+                for (const key of SORTED_UNIT_KEYS) {
                     if (afterPrefix.startsWith(key)) {
                         result += PREFIX_MAP[p] + UNIT_MAP[key];
                         remaining = afterPrefix.substring(key.length).trim();

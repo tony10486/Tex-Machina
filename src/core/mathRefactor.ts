@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isSubscriptToggleActive, registerToggleFeature, isFeatureActive } from './toggleMode';
+import { isSubscriptToggleActive, registerToggleFeature } from './toggleMode';
 import { findMathAtPos, isInsideTextMode } from './latexParser';
 
 export interface MathRange {
@@ -79,7 +79,7 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
         })
     );
 
-    // 2. Automatic Multi-Cursor Variable Selection (Toggle Feature)
+    // Automatic Multi-Cursor Variable Selection (Toggle Feature)
     registerToggleFeature({
         name: 'mathRefactor',
         onSelectionChange: async (event, editor) => {
@@ -88,7 +88,7 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
             const selection = event.selections[0];
             const document = editor.document;
 
-            // 1. Auto-Deactivation: If multi-cursor is active and primary selection moves out of math environment, reset.
+            // Auto-Deactivation: If multi-cursor is active and primary selection moves out of math environment, reset.
             if (isRefactoringActive && lastMathEnvRange) {
                 if (!lastMathEnvRange.contains(selection.active)) {
                     isRefactoringActive = false;
@@ -103,12 +103,11 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
                 }
             }
 
-            // 2. Trigger Check: Must have exactly ONE selection and it must NOT be empty (user must drag/select)
+            // Trigger Check: Must have exactly ONE selection and it must NOT be empty (user must drag/select)
             if (event.selections.length !== 1 || selection.isEmpty) {
                 return;
             }
 
-            // 3. Identify the symbol under the selection
             const wordRange = document.getWordRangeAtPosition(selection.start, /\\[a-zA-Z]+|(?<!\\)[a-zA-Z0-9]+/);
             if (!wordRange) {return;}
 
@@ -118,15 +117,13 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
             const symbol = document.getText(wordRange);
             if (!symbol || symbol.length === 0) {return;}
 
-            // 4. Ensure we are in a math environment
             const mathEnv = findMathAtPos(document, selection.active);
             if (!mathEnv) {return;}
 
-            // 5. Text Mode Protection: Ensure the selection is not inside \text{...} or similar
+            // Text Mode Protection: Ensure the selection is not inside \text{...} or similar
             const offsetInContent = document.offsetAt(selection.start) - (document.offsetAt(mathEnv.range.start) + mathEnv.prefixLen);
             if (isInsideTextMode(mathEnv.content, offsetInContent)) {return;}
 
-            // 6. Find all occurrences of this symbol in the same math environment
             const occurrences = findOccurrencesInMath(document, mathEnv, symbol);
             
             if (occurrences.length <= 1) {return;}
@@ -138,7 +135,6 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // 7. Update selections to include all occurrences (Multi-Cursor)
             isInternalSelectionChange = true;
             try {
                 const newSelections = occurrences.map(range => new vscode.Selection(range.start, range.end));
@@ -157,10 +153,6 @@ export function registerMathRefactor(context: vscode.ExtensionContext) {
 }
 
 /**
- * Checks if a given offset within the math content is inside a text-mode command.
- */
-
-/**
  * Finds all semantic occurrences of a symbol within a math environment.
  * Reuses logic from Linked Editing for consistency.
  */
@@ -174,7 +166,6 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
     const strictTextCommands = ['\\text', '\\mbox', '\\cite', '\\ref', '\\label'];
 
     while (i < content.length) {
-        // Skip text mode commands
         let matchedTextCmd = false;
         for (const cmd of strictTextCommands) {
             if (content.startsWith(cmd, i)) {
@@ -195,7 +186,6 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
         }
         if (matchedTextCmd) {continue;}
 
-        // Check for command symbol
         if (content[i] === '\\') {
             const rest = content.substring(i);
             const commandMatch = rest.match(/^\\[a-zA-Z]+\*?/);
@@ -213,11 +203,10 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
             continue;
         }
 
-        // Check for single char variable
         if (content.substring(i, i + symbol.length) === symbol && !symbol.startsWith('\\')) {
             const prevChar = i > 0 ? content[i - 1] : '';
             const nextChar = i + symbol.length < content.length ? content[i + symbol.length] : '';
-            
+
             const isPrevValid = !/[a-zA-Z]/.test(prevChar);
             const isNextValid = !/[a-zA-Z]/.test(nextChar);
 
@@ -231,11 +220,6 @@ export function findOccurrencesInMath(document: vscode.TextDocument, mathEnv: an
 
     return ranges;
 }
-
-
-/**
- * Finds all math ranges in the document or within a specific selection.
- */
 function findMathRanges(document: vscode.TextDocument, selection: vscode.Range | null): MathRange[] {
     const text = document.getText();
     const ranges: MathRange[] = [];

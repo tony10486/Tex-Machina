@@ -25,7 +25,6 @@ export function registerIdxExpansion(context: vscode.ExtensionContext) {
 
                 // Don't expand if idx is inside unclosed braces
                 let braceDepth = 0;
-                let idxColonColonFound = false;
                 for (let i = 0; i < idxStart; i++) {
                     if (textBefore[i] === '{') braceDepth++;
                     else if (textBefore[i] === '}') braceDepth--;

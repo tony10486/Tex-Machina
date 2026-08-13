@@ -18,13 +18,11 @@ export function registerDiacritics(context: vscode.ExtensionContext) {
             const selection = editor.selection;
 
             if (!selection.isEmpty) {
-                // Wrap selection
                 const text = document.getText(selection);
                 await editor.edit(editBuilder => {
                     editBuilder.replace(selection, `\\${macro}{${text}}`);
                 });
             } else {
-                // No selection, wrap character before cursor
                 const position = selection.active;
                 if (position.character > 0) {
                     const range = new vscode.Range(position.translate(0, -1), position);
@@ -45,7 +43,6 @@ export function registerDiacritics(context: vscode.ExtensionContext) {
                         });
                     }
                 } else {
-                    // Start of line, just insert macro
                     await editor.edit(editBuilder => {
                         editBuilder.insert(position, `\\${macro}{}`);
                     });

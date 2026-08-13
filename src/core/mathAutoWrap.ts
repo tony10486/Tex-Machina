@@ -22,7 +22,6 @@ export function registerMathAutoWrap(context: vscode.ExtensionContext) {
         triggerChars: [' '],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
-                // Trigger on space insertion
                 if (change.text !== ' ') {
                     continue;
                 }

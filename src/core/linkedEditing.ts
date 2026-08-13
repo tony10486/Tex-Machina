@@ -18,7 +18,6 @@ export function registerLinkedEditing(context: vscode.ExtensionContext) {
                 await new Promise(resolve => setTimeout(resolve, 50));
                 if (token.isCancellationRequested) {return undefined;}
 
-                // Check if Environment Linked Editing is enabled
                 const config = vscode.workspace.getConfiguration('tex-machina');
                 const envEnabled = config.get<boolean>('linkedEditing.enabled', true);
 
@@ -215,7 +214,6 @@ function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vs
         }
         if (matchedTextCmd) {continue;}
 
-        // Check for command symbol
         if (content[i] === '\\') {
             const rest = content.substring(i);
             const commandMatch = rest.match(/^\\[a-zA-Z]+\*?/);
@@ -233,7 +231,6 @@ function getMathVariableLinkedRanges(document: vscode.TextDocument, position: vs
             continue;
         }
 
-        // Check for single char variable
         if (content.substring(i, i + symbol.length) === symbol && !symbol.startsWith('\\')) {
             const prevChar = i > 0 ? content[i - 1] : '';
             const nextChar = i + symbol.length < content.length ? content[i + symbol.length] : '';

@@ -18,8 +18,6 @@ suite('Math Ligatures Test Suite', function () {
         await closeEditor();
     });
 
-    // ── Simple mappings (immediate conversion) ──────────────
-
     test('-> should become \\to in math mode', async () => {
         const editor = vscode.window.activeTextEditor!;
         await insertAt(editor, 0, 0, '$');
@@ -82,8 +80,6 @@ suite('Math Ligatures Test Suite', function () {
         assert.strictEqual(editor.document.lineAt(0).text, '->');
     });
 
-    // ── Pattern mappings (space-triggered) ──────────────────
-
     test('<a| space should become \\bra{a} in math mode', async () => {
         const editor = vscode.window.activeTextEditor!;
         await insertAt(editor, 0, 0, '$');
@@ -140,8 +136,6 @@ suite('Math Ligatures Test Suite', function () {
         await sleep(300);
         assert.strictEqual(editor.document.lineAt(0).text, '<a| ');
     });
-
-    // ── Custom config override ─────────────────────────────
 
     test('custom mapping via config should work', async () => {
         const config = vscode.workspace.getConfiguration('tex-machina');

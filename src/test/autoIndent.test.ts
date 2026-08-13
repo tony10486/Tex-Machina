@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { openDoc, closeEditor, waitForLine, waitForCondition } from './testUtils';
+import { openDoc, closeEditor, waitForLine, waitForCondition, waitForIncludes } from './testUtils';
 
 function cursorPos(editor: vscode.TextEditor): { line: number; char: number } {
     return { line: editor.selection.active.line, char: editor.selection.active.character };
@@ -111,15 +111,3 @@ suite('Auto-indent on Enter Test Suite', () => {
         await closeEditor();
     });
 });
-
-function waitForIncludes(document: vscode.TextDocument, substring: string, timeout = 500): Promise<boolean> {
-    const start = Date.now();
-    return new Promise(resolve => {
-        const check = () => {
-            if (document.getText().includes(substring)) { resolve(true); return; }
-            if (Date.now() - start >= timeout) { resolve(document.getText().includes(substring)); return; }
-            setTimeout(check, 10);
-        };
-        check();
-    });
-}

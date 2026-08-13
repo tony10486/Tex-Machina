@@ -302,10 +302,8 @@ const labelTracker = new LabelTracker();
 let updateTimeout: NodeJS.Timeout | undefined;
 
 export function registerLabelDetection(context: vscode.ExtensionContext) {
-    // Initialize tracker
     labelTracker.initialize();
 
-    // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-machina.deleteUnusedLabels', async () => {
             const editor = vscode.window.activeTextEditor;
@@ -351,7 +349,6 @@ export function registerLabelDetection(context: vscode.ExtensionContext) {
         }, 500); // Debounce reduced to 500ms for better responsiveness
     }
 
-    // Update decorations and track changes
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor) {
             labelTracker.recordDocumentState(editor.document);
@@ -376,7 +373,6 @@ export function registerLabelDetection(context: vscode.ExtensionContext) {
         labelTracker.removeDocument(doc.uri);
     }, null, context.subscriptions);
 
-    // Initial update
     if (vscode.window.activeTextEditor) {
         labelTracker.recordDocumentState(vscode.window.activeTextEditor.document);
         triggerUpdate(vscode.window.activeTextEditor);

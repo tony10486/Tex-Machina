@@ -8,7 +8,6 @@ export function registerMarkdownLatex(context: vscode.ExtensionContext) {
         triggerChars: [' '],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
-                // We are looking for space insertion
                 if (change.text !== ' ') {
                     continue;
                 }

@@ -23,7 +23,6 @@ export function generateScanPreventionPattern(options: ScanPreventionOptions): s
 
     let latex = prefix + '\\begin{tikzpicture}\n';
     
-    // Hidden text node generation (for moire/aliasing)
     const textNode = (hiddenText && type !== 'dots')
         ? `  % Hidden text (Pantograph effect)\n  \\node[font=\\sffamily\\Huge\\bfseries, text=gray!20, scale=${(size / 3).toFixed(2)}, rotate=45, align=center] at (${size / 2},${size / 2}) {${hiddenText}};\n`
         : '';

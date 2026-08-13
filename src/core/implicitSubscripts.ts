@@ -98,7 +98,6 @@ export function registerImplicitSubscripts(): vscode.Disposable {
                             new vscode.Position(line, charOffsetAfter)
                         );
 
-                        // Apply the edit
                         await editor.edit(editBuilder => {
                             editBuilder.replace(rangeToReplace, replacement);
                         });
@@ -112,4 +111,3 @@ export function registerImplicitSubscripts(): vscode.Disposable {
         unregisterToggleFeature('implicitSubscripts');
     });
 }
-

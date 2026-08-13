@@ -55,7 +55,7 @@ export function registerSmartNewline(context: vscode.ExtensionContext) {
             return;
         }
 
-        // 1. Math env with ENV_CONFIG: insert \\ + & (existing behavior)
+        // 1. Math env with ENV_CONFIG: insert \\ + &
         const mathEnv = findMathAtPos(document, pos);
         if (mathEnv) {
             const beginMatch = mathEnv.text.match(/^\\begin\{([^}]+)\}/);

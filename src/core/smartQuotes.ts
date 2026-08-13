@@ -7,7 +7,6 @@ export function registerSmartQuotes(context: vscode.ExtensionContext) {
         triggerChars: ['"'],
         onTextChange: async (event, editor) => {
             for (const change of event.contentChanges) {
-                // Check if the inserted text is exactly a double quote
                 if (change.text !== '"') {
                     continue;
                 }
@@ -19,7 +18,6 @@ export function registerSmartQuotes(context: vscode.ExtensionContext) {
                     continue;
                 }
 
-                // Determine if it should be an opening or closing quote
                 const line = position.line;
                 if (line >= document.lineCount) {continue;}
                 const charOffset = position.character;

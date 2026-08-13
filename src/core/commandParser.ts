@@ -28,7 +28,6 @@ export function splitChain(input: string, delimiter: string = "&&"): string[] {
             continue;
         }
 
-        // 구분자 매칭 확인
         let isMatch = true;
         for (let j = 0; j < delimiter.length; j++) {
             if (input[i + j] !== delimiter[j]) {
@@ -61,16 +60,6 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     let isParallelSection = false;
     let isMainCmdParsed = false;
 
-    // Detect query to prevent '>' splitting conflict
-    /*
-    const isQuery = input.trim().startsWith('?');
-    let startIdx = 0;
-    if (isQuery) {
-        mainCmd = "?";
-        isMainCmdParsed = true;
-        startIdx = input.indexOf('?') + 1;
-    }
-    */
     const isQuery = false;
     let startIdx = 0;
 
@@ -111,8 +100,6 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
         }
         buffer = "";
     }
-
-    // 최종 정리: 마지막 조각 처리
     if (isParallelSection) {
         const trimmed = buffer.trim();
         if (trimmed) {

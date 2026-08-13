@@ -9,9 +9,6 @@ export interface MathEnvironment {
     prefixLen: number;
 }
 
-/**
- * Checks if the given position is inside a LaTeX comment.
- */
 export function isInsideComment(document: vscode.TextDocument, pos: vscode.Position): boolean {
     const lineNum = Math.max(0, Math.min(pos.line, document.lineCount - 1));
     const lineText = document.lineAt(lineNum).text;
@@ -36,15 +33,11 @@ export function isInsideComment(document: vscode.TextDocument, pos: vscode.Posit
     return false;
 }
 
-/**
- * Checks if the given position is inside a verbatim-like environment or command.
- */
 export function isInsideVerbatim(document: vscode.TextDocument, pos: vscode.Position): boolean {
     const offset = document.offsetAt(pos);
     const startLine = Math.max(0, pos.line - 150);
     const endLine = Math.min(document.lineCount - 1, pos.line + 150);
-    const safeEndLine = Math.max(0, Math.min(endLine, document.lineCount - 1));
-    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(safeEndLine).text.length));
+    const range = new vscode.Range(new vscode.Position(startLine, 0), new vscode.Position(endLine, document.lineAt(endLine).text.length));
     const text = document.getText(range);
     const searchStartOffset = document.offsetAt(range.start);
 
@@ -81,14 +74,12 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
     const offset = document.offsetAt(pos);
     const lineCount = document.lineCount;
     
-    // Search a reasonable window around the cursor
     const startLine = Math.max(0, pos.line - 150);
     const endLine = Math.min(lineCount - 1, pos.line + 150);
-    
-    const safeEndLine = Math.max(0, Math.min(endLine, lineCount - 1));
+
     const rangeToSearch = new vscode.Range(
         new vscode.Position(startLine, 0),
-        new vscode.Position(endLine, document.lineAt(safeEndLine).text.length)
+        new vscode.Position(endLine, document.lineAt(endLine).text.length)
     );
     const text = document.getText(rangeToSearch);
     const searchStartOffset = document.offsetAt(rangeToSearch.start);
@@ -121,13 +112,12 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
         }
     }
 
-    // Find verbatim environments
+    // Find verbatim environments and \verb commands
     const verbatimRegex = /\\begin\s*\{(verbatim|lstlisting|minted|comment|code)\}[\s\S]*?\\end\s*\{\1\}/g;
     while ((match = verbatimRegex.exec(text)) !== null) {
         skipRanges.push({ start: match.index, end: match.index + match[0].length });
     }
 
-    // Find \verb commands
     const verbRegex = /\\verb([^\s])[\s\S]*?\1/g;
     while ((match = verbRegex.exec(text)) !== null) {
         skipRanges.push({ start: match.index, end: match.index + match[0].length });
@@ -177,7 +167,6 @@ export function findInnermostEnvAtPos(document: vscode.TextDocument, pos: vscode
                 }
             }
         } else if (m === '$$' || m === '\\[' || m === '$' || m === '\\(') {
-            const closeTag = m === '$$' ? '$$' : (m === '\\[' ? '\\]' : (m === '$' ? '$' : '\\)'));
             const existingIdx = stack.findIndex(s => s.type === m);
             
             // If it's $, we need to be careful as it's the same for open/close
@@ -365,12 +354,11 @@ export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.P
         return null;
     }
 
-    let i = 1; // skip backslash
+    let i = 1;
     // Match command name: [a-zA-Z]+
     while (i < restOfLine.length && /[a-zA-Z]/.test(restOfLine[i])) {
         i++;
     }
-    // Optional asterisk
     if (i < restOfLine.length && restOfLine[i] === '*') {
         i++;
     }
@@ -378,7 +366,6 @@ export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.P
     // Match optional arguments like [], {}, _{}, ^{}
     while (i < restOfLine.length) {
         let j = i;
-        // Skip whitespace before argument
         while (j < restOfLine.length && /\s/.test(restOfLine[j])) {
             j++;
         }
@@ -402,7 +389,6 @@ export function findCommandAtCursor(document: vscode.TextDocument, pos: vscode.P
             }
         } else if (char === '_' || char === '^') {
             let k = j + 1;
-            // Skip whitespace after _ or ^ to look for {
             while (k < restOfLine.length && /\s/.test(restOfLine[k])) {
                 k++;
             }

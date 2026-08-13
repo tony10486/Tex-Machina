@@ -8,7 +8,7 @@ function formatDisplayMath(
     mathRange: vscode.Range,
     lineText: string,
     tabSize: number,
-): { text: string } {
+): string {
     const baseIndent = lineText.match(/^\s*/)?.[0] || '';
     const innerIndent = baseIndent + ' '.repeat(tabSize);
 
@@ -31,7 +31,7 @@ function formatDisplayMath(
         }
     }
 
-    return { text };
+    return text;
 }
 
 export function registerMathToggle(context: vscode.ExtensionContext) {
@@ -64,7 +64,10 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
 
         if (currentIndex === -1) {
             if (mathEnv.type === 'inline') { currentIndex = sequence.indexOf('$'); }
-            else if (mathEnv.type === 'display') { currentIndex = sequence.indexOf('\\[') !== -1 ? sequence.indexOf('\\[') : sequence.indexOf('$$'); }
+            else if (mathEnv.type === 'display') {
+                const bracketIdx = sequence.indexOf('\\[');
+                currentIndex = bracketIdx !== -1 ? bracketIdx : sequence.indexOf('$$');
+            }
             else { currentIndex = sequence.indexOf('equation'); }
         }
 
@@ -95,7 +98,7 @@ export function registerMathToggle(context: vscode.ExtensionContext) {
                 closeTag = `\\end{${nextType}}`;
             }
 
-            newText = formatDisplayMath(openTag, closeTag, content, mathEnv.range, lineText, tabSize).text;
+            newText = formatDisplayMath(openTag, closeTag, content, mathEnv.range, lineText, tabSize);
         }
 
         await editor.edit(editBuilder => {

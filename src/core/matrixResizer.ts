@@ -2,12 +2,10 @@ import * as vscode from 'vscode';
 import { findInnermostEnvAtPos, splitTopLevel } from './latexParser';
 
 export function registerMatrixResizer(context: vscode.ExtensionContext) {
-    // 1. Code Action Provider (Ctrl+.)
     context.subscriptions.push(vscode.languages.registerCodeActionsProvider('latex', new MatrixCodeActionProvider(), {
         providedCodeActionKinds: [vscode.CodeActionKind.Refactor]
     }));
 
-    // 2. Commands
     context.subscriptions.push(vscode.commands.registerCommand('tex-machina.matrix.resizeMenu', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {return;}
@@ -94,17 +92,14 @@ async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' 
     const content = envMatch[3];
     const endTag = envMatch[4];
 
-    // Split rows safely
     let rawRows = splitTopLevel(content, '\\\\');
     
     // Clean rows: remove the trailing empty string if the content ended with \\
     let rows = rawRows.map(r => r.trim()).filter((r, i) => r !== '' || i < rawRows.length - 1);
 
-    // Parse cols to handle asymmetric matrices
     let parsedRows = rows.map(r => splitTopLevel(r, '&'));
     let maxCols = parsedRows.reduce((max, cols) => Math.max(max, cols.length), 1);
 
-    // Pad missing '&'
     parsedRows = parsedRows.map(cols => {
         while (cols.length < maxCols) {
             cols.push(' ');
@@ -131,7 +126,6 @@ async function modifyMatrix(range: vscode.Range, action: 'addRow' | 'removeRow' 
         });
     }
 
-    // Join back
     rows = parsedRows.map(cols => cols.join(' & '));
 
     // Reconstruct with consistent formatting (always end rows with \\ for clarity)

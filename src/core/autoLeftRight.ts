@@ -127,9 +127,5 @@ export function registerAutoLeftRight(context: vscode.ExtensionContext) {
 
 function isTall(text: string): boolean {
     // Check for explicit tall macros
-    if (TALL_ELEMENTS.some(el => text.includes(el))) {
-        return true;
-    }
-    
-    return false;
+    return TALL_ELEMENTS.some(el => text.includes(el));
 }

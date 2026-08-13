@@ -21,7 +21,6 @@ suite('Selection Expansion Test Suite', () => {
         const ranges = getSelectionRangesAt(doc, pos);
 
         const rangeTexts = ranges.map(r => doc.getText(r));
-        console.log("Detected ranges:", rangeTexts);
 
         // Expected (at least):
         // 1. x

@@ -28,7 +28,6 @@ let activeProfile: string | null = null; // "unconditional" or a number string l
 let remainingTime = 0;
 let timerId: NodeJS.Timeout | undefined = undefined;
 let statusBarItem: vscode.StatusBarItem | undefined = undefined;
-let originalColorCustomizations: any = undefined;
 
 /**
  * Checks if a feature should be active.
@@ -199,7 +198,6 @@ async function activateToggleMode(profile: string) {
     const config = vscode.workspace.getConfiguration('tex-machina');
     remainingTime = config.get<number>('toggle.duration', 10);
 
-    // Update Status Bar Item
     updateStatusBar();
     statusBarItem?.show();
 
@@ -209,7 +207,6 @@ async function activateToggleMode(profile: string) {
         await setStatusBarColorGreen();
     }
 
-    // Notify all active features of activation
     for (const feature of registeredFeatures) {
         if (feature.onActivate && isFeatureActive(feature.name)) {
             try {
@@ -220,7 +217,6 @@ async function activateToggleMode(profile: string) {
         }
     }
 
-    // Start Timer
     if (timerId) {
         clearInterval(timerId);
     }
@@ -239,19 +235,15 @@ export async function deactivateToggleMode() {
     activeProfile = null;
     remainingTime = 0;
 
-    // Clear Timer
     if (timerId) {
         clearInterval(timerId);
         timerId = undefined;
     }
 
-    // Hide Status Bar Item
     statusBarItem?.hide();
 
-    // Revert status bar background color
     await restoreStatusBarColor();
 
-    // Notify all features of deactivation
     for (const feature of registeredFeatures) {
         if (feature.onDeactivate) {
             try {

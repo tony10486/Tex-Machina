@@ -35,7 +35,6 @@ async function wrapWith(editor: vscode.TextEditor, scriptChar: string) {
     });
 
     if (success) {
-        // Adjust selections to be inside the new braces
         const newSelections: vscode.Selection[] = [];
         for (const info of originalInfos) {
             if (info.isEmpty) {

@@ -56,18 +56,15 @@ export function loadPasteConfig(): PasteExternalDataConfig {
  * If `preferredDelimiter` is provided, it overrides automatic detection.
  */
 export function parseClipboardData(text: string, preferredDelimiter?: string): string[][] {
-    // Remove BOM
     let raw = text.replace(/^\ufeff/, '');
     if (!raw.trim()) { return []; }
 
     const cfg = loadPasteConfig();
 
-    // Determine delimiter
     let delimiter = '\t';
     if (preferredDelimiter) {
         delimiter = preferredDelimiter;
     } else {
-        // Build a list of candidate delimiters based on settings and actual presence in text
         const candidates: { delim: string; count: number }[] = [];
 
         for (const custom of cfg.customDelimiters) {
@@ -97,7 +94,6 @@ export function parseClipboardData(text: string, preferredDelimiter?: string): s
         }
 
         if (candidates.length > 0) {
-            // Pick the delimiter with the highest occurrence count
             candidates.sort((a, b) => b.count - a.count);
             delimiter = candidates[0].delim;
         }
@@ -127,7 +123,6 @@ export function parseClipboardData(text: string, preferredDelimiter?: string): s
 
     if (filtered.length === 0) { return []; }
 
-    // Pad all rows to the same column count
     const maxCols = filtered.map(r => r.length).reduce((max, cur) => Math.max(max, cur), 0);
     return filtered.map(r => {
         while (r.length < maxCols) { r.push(''); }
@@ -217,8 +212,6 @@ export function smartEscapeCell(cell: string, mode: 'smart' | 'all' | 'none'): s
         if (/^(\\[a-zA-Z]+\*?)+$/.test(trimmed)) {
             return cell;
         }
-        // If the cell contains only LaTeX commands and whitespace, preserve commands but escape other parts
-        // We process token by token
     }
 
     // Escape special LaTeX characters
@@ -248,20 +241,7 @@ export function smartEscapeCell(cell: string, mode: 'smart' | 'all' | 'none'): s
 
         // Protect replacement literals that contain braces (e.g. \textbackslash{})
         // so that the braces inside them are not double-escaped.
-        const protectedReplacements: { from: string; to: string }[] = [];
-        let protectedIdx = 0;
-        const protectPlaceholder = '\u0000PROT';
-
-        const safeEscapeMap: Record<string, string> = {};
-        for (const [char, replacement] of Object.entries(escapeMap)) {
-            if (replacement.includes('{') || replacement.includes('}')) {
-                const safeKey = protectPlaceholder + (protectedIdx++) + '\u0000';
-                protectedReplacements.push({ from: safeKey, to: replacement });
-                safeEscapeMap[char] = safeKey;
-            } else {
-                safeEscapeMap[char] = replacement;
-            }
-        }
+        const { safeEscapeMap, protectedReplacements } = buildSafeEscapeMap(escapeMap);
 
         // Now escape special chars in the remaining text
         for (const [char, replacement] of Object.entries(safeEscapeMap)) {
@@ -289,20 +269,7 @@ export function smartEscapeCell(cell: string, mode: 'smart' | 'all' | 'none'): s
         // 'all' mode: escape everything
         let result = cell;
 
-        // Protect replacement literals that contain braces
-        const protectedReplacements: { from: string; to: string }[] = [];
-        let protectedIdx = 0;
-        const protectPlaceholder = '\u0000PROT';
-        const safeEscapeMap: Record<string, string> = {};
-        for (const [char, replacement] of Object.entries(escapeMap)) {
-            if (replacement.includes('{') || replacement.includes('}')) {
-                const safeKey = protectPlaceholder + (protectedIdx++) + '\u0000';
-                protectedReplacements.push({ from: safeKey, to: replacement });
-                safeEscapeMap[char] = safeKey;
-            } else {
-                safeEscapeMap[char] = replacement;
-            }
-        }
+        const { safeEscapeMap, protectedReplacements } = buildSafeEscapeMap(escapeMap);
 
         for (const [char, replacement] of Object.entries(safeEscapeMap)) {
             if (char === '\\') {
@@ -319,6 +286,26 @@ export function smartEscapeCell(cell: string, mode: 'smart' | 'all' | 'none'): s
         // Apply number formatting AFTER escaping
         return formatNumber(result);
     }
+}
+
+function buildSafeEscapeMap(
+    escapeMap: Record<string, string>
+): { safeEscapeMap: Record<string, string>; protectedReplacements: { from: string; to: string }[] } {
+    const protectedReplacements: { from: string; to: string }[] = [];
+    let protectedIdx = 0;
+    const protectPlaceholder = '\u0000PROT';
+
+    const safeEscapeMap: Record<string, string> = {};
+    for (const [char, replacement] of Object.entries(escapeMap)) {
+        if (replacement.includes('{') || replacement.includes('}')) {
+            const safeKey = protectPlaceholder + (protectedIdx++) + '\u0000';
+            protectedReplacements.push({ from: safeKey, to: replacement });
+            safeEscapeMap[char] = safeKey;
+        } else {
+            safeEscapeMap[char] = replacement;
+        }
+    }
+    return { safeEscapeMap, protectedReplacements };
 }
 
 /**
@@ -477,16 +464,11 @@ export function generateTabularLatex(
             latex += `${indent}${headerRow.map(c => smartEscapeCell(c, escapeMode)).join(' & ')} \\\\\n`;
             latex += `${indent}\\midrule\n`;
         }
-        latex += dataRows.map((row, idx) => {
-            const line = `${indent}${row.map(c => smartEscapeCell(c, escapeMode)).join(' & ')} \\\\\n`;
-            if (hasHeader && idx === dataRows.length - 1) {
-                // No midrule before bottomrule for the last line if there's no header separation needed
-            }
-            return line;
+        latex += dataRows.map(row => {
+            return `${indent}${row.map(c => smartEscapeCell(c, escapeMode)).join(' & ')} \\\\\n`;
         }).join('');
         latex += `${indent}\\bottomrule\n`;
     } else {
-        // array style
         if (hasBorders) {
             latex += `${indent}\\hline\n`;
         }

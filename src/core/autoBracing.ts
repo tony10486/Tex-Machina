@@ -4,7 +4,6 @@ import { registerToggleFeature } from './toggleMode';
 let isEscaped = false;
 
 export function registerAutoBracing(context: vscode.ExtensionContext) {
-    // Register the escape command
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-machina.escapeAutoBracing', () => {
             isEscaped = true;
@@ -16,7 +15,6 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
         onTextChange: async (event, editor) => {
             const config = vscode.workspace.getConfiguration('tex-machina');
             
-            // Collect all edits to apply them at once if possible
             for (const change of event.contentChanges) {
                 // Reset escape if user moves to a new word/line or deletes
                 if (change.text.includes(' ') || change.text.includes('\n') || change.text === '') {
@@ -29,7 +27,7 @@ export function registerAutoBracing(context: vscode.ExtensionContext) {
                 }
 
                 if (isEscaped) {
-                    isEscaped = false; // Reset for next character
+                    isEscaped = false;
                     continue;
                 }
 

@@ -15,7 +15,6 @@ export function registerSelectionExpansion(context: vscode.ExtensionContext) {
                 return positions.map(position => {
                     const ranges = getSelectionRangesAt(document, position);
                     
-                    // Convert vscode.Range list to a nested SelectionRange structure
                     let lastSelectionRange: vscode.SelectionRange | undefined;
                     for (let i = ranges.length - 1; i >= 0; i--) {
                         lastSelectionRange = new vscode.SelectionRange(ranges[i], lastSelectionRange);
@@ -35,22 +34,19 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
     const offset = document.offsetAt(position);
     const text = document.getText();
 
-    // 1. Current word or character
     const wordRange = document.getWordRangeAtPosition(position);
     if (wordRange) {
         ranges.push(wordRange);
     }
 
-    // 2. Collect all structural ranges containing this position
     const structuralRanges: vscode.Range[] = [];
 
-    // --- Math Block ---
+    // Math Block
     const mathBlock = findMathAtPos(document, position);
     if (mathBlock) {
         const mathStart = document.offsetAt(mathBlock.range.start);
         const mathEnd = document.offsetAt(mathBlock.range.end);
         
-        // Content inside math delimiters
         let innerStartOffset = 1;
         let innerEndOffset = 1;
 
@@ -83,7 +79,7 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
                 structuralRanges.push(trimmedInnerRange);
             }
 
-            // --- Granular Term/Side Analysis inside Math Block ---
+            // Granular Term/Side Analysis inside Math Block
             const mathInnerContent = mathBlock.text.substring(innerStartOffset, mathBlock.text.length - innerEndOffset);
             const innerRelativeOffset = (offset - mathStart) - innerStartOffset;
             
@@ -98,7 +94,7 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
         structuralRanges.push(mathBlock.range);
     }
 
-    // --- Environments \begin{env} ... \end{env} ---
+    // Environments \begin{env} ... \end{env}
     const lookDistance = 5000;
     const startSearch = Math.max(0, offset - lookDistance);
     const subText = text.substring(startSearch, Math.min(text.length, offset + lookDistance));
@@ -119,7 +115,7 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
         }
     }
 
-    // --- Brackets {...}, [...], (...) ---
+    // Brackets {...}, [...], (...)
     const bracketPairs = [['{', '}'], ['[', ']'], ['(', ')']];
     for (const [open, close] of bracketPairs) {
         let currentOffset = offset;
@@ -133,7 +129,6 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
                 if (innerRange.contains(position)) { 
                     structuralRanges.push(innerRange); 
                     
-                    // Add granular terms inside brackets
                     const bracketInner = text.substring(openIdx + 1, closeIdx);
                     const bracketRelativeOffset = offset - (openIdx + 1);
                     const granularInside = getGranularMathRanges(
@@ -166,7 +161,6 @@ export function getSelectionRangesAt(document: vscode.TextDocument, position: vs
         }
     }
 
-    // Include word range if it's the smallest
     if (wordRange && (!finalRanges.length || document.offsetAt(wordRange.end) - document.offsetAt(wordRange.start) < document.offsetAt(finalRanges[0].end) - document.offsetAt(finalRanges[0].start))) {
         finalRanges.unshift(wordRange);
     }
@@ -224,8 +218,7 @@ function getGranularMathRanges(text: string, relativeOffset: number, document: v
     const activeMajor = majorSegments.find(s => relativeOffset >= s.start && relativeOffset <= s.end);
 
     if (activeMajor) {
-        // Add current major segment (trimmed)
-        const addTrimmed = (s: number, e: number, baseOffset: number) => {
+        const addTrimmed = (s: number, e: number) => {
             const raw = text.substring(s, e);
             const trimmedStart = s + (raw.length - raw.trimStart().length);
             const trimmedEnd = s + raw.trimEnd().length;
@@ -240,7 +233,7 @@ function getGranularMathRanges(text: string, relativeOffset: number, document: v
             }
         };
 
-        addTrimmed(activeMajor.start, activeMajor.end, 0);
+        addTrimmed(activeMajor.start, activeMajor.end);
 
         // 2. Find Minor Segments (Terms) INSIDE the active major segment
         const subText = activeMajor.text;
@@ -249,7 +242,7 @@ function getGranularMathRanges(text: string, relativeOffset: number, document: v
         const activeMinor = minorSegments.find(s => subRelativeOffset >= s.start && subRelativeOffset <= s.end);
 
         if (activeMinor && activeMinor.text.trim() !== activeMajor.text.trim()) {
-            addTrimmed(activeMajor.start + activeMinor.start, activeMajor.start + activeMinor.end, 0);
+            addTrimmed(activeMajor.start + activeMinor.start, activeMajor.start + activeMinor.end);
         }
     }
     
