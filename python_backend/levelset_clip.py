@@ -1,7 +1,7 @@
 """
 TeX-Machina 3D Plot — 정확한 레벨셋 클립 (Phase 2, port-to-fix)
 
-데모(demo/threejs-demo/index.html)의 클립 파이프라인을 numpy 로 재구현하되,
+초기 데모(threejs 프로토타입)의 클립 파이프라인을 numpy 로 재구현하되,
 3라운드 하이퍼플랜 감사에서 확인된 버그를 **수정한 채** 이식한다 (B1-B4):
 
 - B1 (고리 합체): "각 극점 = 닫힌 고리" 가정이 capP < 안장 임계에서 붕괴.
