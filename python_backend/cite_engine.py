@@ -1,12 +1,14 @@
 import requests
 import re
 import xml.etree.ElementTree as ET
+from urllib.parse import urlencode
 
 def fetch_arxiv(arxiv_id):
     """arXiv ID를 통해 BibTeX 정보를 가져옵니다."""
     # arXiv ID 정규화 (버전 번호 v1, v2 등 제거)
     clean_id = re.sub(r'v\d+$', '', arxiv_id)
-    url = f"http://export.arxiv.org/api/query?id_list={clean_id}"
+    # [N17] 쿼리 값 URL 인코딩 (사용자 입력이 URL에 그대로 삽입되지 않도록)
+    url = "http://export.arxiv.org/api/query?" + urlencode({"id_list": clean_id})
     
     try:
         response = requests.get(url, timeout=10)
@@ -57,7 +59,15 @@ def fetch_doi(doi):
     headers = {"Accept": "application/x-bibtex"}
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        # [N17] SSRF 고려: doi.org 는 발행사로 리다이렉트하므로 자동 리다이렉트를 끄고
+        # HTTPS 대상으로만 1-hop 수동 리다이렉트를 수행한다. (비HTTPS/다중 홉 차단)
+        response = requests.get(url, headers=headers, timeout=10, allow_redirects=False)
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get('Location')
+            if location and location.startswith('https://'):
+                response = requests.get(location, headers=headers, timeout=10)
+            else:
+                return {"status": "error", "message": "DOI 리다이렉트 대상이 HTTPS가 아니어서 차단되었습니다."}
         if response.status_code == 200:
             bibtex = response.text.strip()
             # BibTeX에서 Key 추출 (@article{Key, ...)
@@ -81,7 +91,8 @@ def fetch_doi(doi):
 
 def search_crossref(query):
     """제목 또는 키워드로 Crossref에서 논문을 검색합니다."""
-    url = f"https://api.crossref.org/works?query={query}&rows=5"
+    # [N17] 쿼리 값 URL 인코딩 (사용자 입력이 URL에 그대로 삽입되지 않도록)
+    url = "https://api.crossref.org/works?" + urlencode({"query": query, "rows": "5"})
     
     try:
         response = requests.get(url, timeout=10)
@@ -122,7 +133,12 @@ def search_crossref(query):
 def search_semantic_scholar(query):
     """Semantic Scholar API를 통해 논문을 검색합니다."""
     # fields: title, authors, year, externalIds(DOI), citationStyles(BibTeX), publicationVenue, journal
-    url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=5&fields=title,authors,year,externalIds,citationStyles,publicationVenue,journal"
+    # [N17] 쿼리 값 URL 인코딩 (사용자 입력이 URL에 그대로 삽입되지 않도록)
+    url = "https://api.semanticscholar.org/graph/v1/paper/search?" + urlencode({
+        "query": query,
+        "limit": "5",
+        "fields": "title,authors,year,externalIds,citationStyles,publicationVenue,journal",
+    })
     
     try:
         response = requests.get(url, timeout=10)
@@ -164,7 +180,7 @@ def search_semantic_scholar(query):
 def handle_cite(args):
     """cite 명령의 메인 핸들러"""
     if not args:
-        return {"status": "error", "message": "No input provided for cite command."}
+        return {"status": "error", "message": "인용 검색을 위한 입력이 제공되지 않았습니다."}
     
     query = " ".join(args).strip()
     
@@ -200,7 +216,7 @@ def handle_cite(args):
             if r.get("doi"): seen_dois.add(r["doi"])
             
     if not combined:
-        return {"status": "error", "message": "No papers found for your query."}
+        return {"status": "error", "message": "검색 결과를 찾을 수 없습니다."}
         
     return {
         "status": "search_results",

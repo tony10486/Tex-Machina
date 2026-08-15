@@ -8,10 +8,10 @@ import re
 from io import BytesIO
 from typing import Dict, Any, List, Tuple
 
-SAFE_SYMPY_DICT = {'__builtins__': {}}
-for k, v in sp.__dict__.items():
-    if not k.startswith('__'):
-        SAFE_SYMPY_DICT[k] = v
+# 안전 파싱: eval 기반 parse_expr 에 사용자 입력을 직접 넘기지 않기 위해
+# utils 의 safe_parse_expr (화이트리스트 + __builtins__ 차단) 만 사용한다 (S2).
+from utils import safe_parse_expr
+from latex_conversion import latex_to_sympy, safe_lambdify
 
 try:
     from latex2sympy2 import latex2sympy
@@ -43,13 +43,12 @@ def _safe_latex_parse(raw_latex: str) -> sp.Expr:
         if isinstance(expr, sp.Eq):
             return expr.lhs - expr.rhs
         return expr
-    except Exception as e:
-        # Fallback: parse_latex가 실패하면 parse_expr 시도 (간단한 수식용)
-        try:
-            from sympy.parsing.sympy_parser import parse_expr
-            return parse_expr(raw_latex.replace('\\', ''), evaluate=False, global_dict=SAFE_SYMPY_DICT)
-        except:
-            raise ValueError(f"LaTeX 파싱 실패: {raw_latex}. 상세: {str(e)}")
+    except Exception:
+        # 보안: eval 기반 parse_expr 폴백은 샌드박스 이스케이프 경로(RCE)이므로
+        # 절대 사용하지 않는다 (S2). 대신 공유 변환 계층(latex_to_sympy)으로 폴백한다.
+        # latex_to_sympy 는 normalize + parse_latex + safe_parse_expr 화이트리스트
+        # 폴백을 수행하고, 전부 실패하면 한국어 ValueError 를 던진다 (H2 파서 통합).
+        return latex_to_sympy(processed_latex, for_plot=True)
 
 def sympy_to_pgfplots_str(expr: sp.Expr) -> str:
     """SymPy 수식을 PGFPlots가 이해할 수 있는 대수적 문자열로 변환합니다."""
@@ -119,7 +118,7 @@ def detect_singularities(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
                 sings_found.add(float(s))
 
     # 수치적 스캔 (급격한 변화 탐지)
-    f = sp.lambdify(var, expr, modules=['numpy', 'scipy'])
+    f = safe_lambdify(var, expr, modules=['numpy', 'scipy'])
     x_scan = np.linspace(domain[0], domain[1], 1000)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -182,7 +181,7 @@ def try_rewrite_for_pgfplots(expr: sp.Expr) -> sp.Expr:
 
 def generate_numerical_data(expr: sp.Expr, var: sp.Symbol, intervals: List[Tuple[float, float]], samples_per_interval: int = 100, y_limit: float = 50.0) -> Tuple[str, str]:
     """수치적 좌표 데이터를 생성하고 미리보기 이미지를 반환합니다. 다중 구간(특이점 분리)을 지원합니다."""
-    f = sp.lambdify(var, expr, modules=['numpy', 'scipy', {'gamma': sp.gamma, 'zeta': sp.zeta}])
+    f = safe_lambdify(var, expr, modules=['numpy', 'scipy'], extra={'gamma': sp.gamma, 'zeta': sp.zeta})
     
     dat_content = "x\ty\n"
     plt.figure(figsize=(5, 4))
@@ -210,7 +209,8 @@ def generate_numerical_data(expr: sp.Expr, var: sp.Symbol, intervals: List[Tuple
                 else:
                     dat_content += f"{x:.6f}\t{y_val:.6f}\n"
             else:
-                dat_content += f"{x:.6f}\tinf\n"
+                # [N6] 비유한/비실수값은 'inf' 대신 'nan' 으로 기록 — PGFPlots가 누락점으로 처리
+                dat_content += f"{x:.6f}\tnan\n"
         
         # 구간 사이에 빈 줄 추가 (PGFPlots에서 선 연결 방지)
         dat_content += "\n"
@@ -258,6 +258,10 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
     if not intervals: # 특이점이 도메인 전체를 덮거나 비정상적인 경우
         intervals = [domain]
 
+    # [보안] 샘플 수 제한 — 8GB linspace / O(n²) 문자열 폭주 방지 (A1)
+    if dat_samples > 5000:
+        raise ValueError("샘플 수가 너무 큽니다 (최대 5000)")
+
     # 구간당 샘플 수 계산 (동일 분배)
     samples_per_interval = max(10, dat_samples // len(intervals))
 
@@ -302,6 +306,47 @@ def generate_2d_pgfplots(expr: sp.Expr, var: sp.Symbol, domain: Tuple[float, flo
         
     return latex_code, warning_msg, None, preview_img
 
+def _to_index_buffer(rows: int, cols: int) -> List[int]:
+    """그리드(rows×cols)를 삼각형 목록 인덱스로 변환한다 (row-major, strip 아님).
+
+    웹뷰의 quad-strip 인덱스 생성(webviewProvider.ts)을 대체한다 (mesh contract v1).
+    각 셀 (i,j): 정점 (i*c+j, i*c+j+1, (i+1)*c+j+1) | (i*c+j, (i+1)*c+j+1, (i+1)*c+j)
+    """
+    indices: List[int] = []
+    for i in range(rows - 1):
+        for j in range(cols - 1):
+            a = i * cols + j
+            b = a + 1
+            d = a + cols
+            c = d + 1
+            indices.extend([a, b, c, a, c, d])
+    return indices
+
+
+def _emit_flat_mesh(points: List[List[float]], colors: List[List[float]],
+                    rows: int, cols: int) -> Dict[str, Any]:
+    """v1 mesh contract (`mode:"flat"`) 방출.
+
+    - positions: [x,y,z, x,y,z, ...] 평면 배열 (Float32Array 호환)
+    - colors:    [r,g,b, r,g,b, ...] 평면 배열 (0..1)
+    - indices:   삼각형 목록 (strip 아님)
+    - grid_size: [rows, cols]
+    """
+    positions: List[float] = []
+    for p in points:
+        positions.extend([float(p[0]), float(p[1]), float(p[2])])
+    flat_colors: List[float] = []
+    for c in colors:
+        flat_colors.extend([float(c[0]), float(c[1]), float(c[2])])
+    return {
+        "mode": "flat",
+        "positions": positions,
+        "colors": flat_colors,
+        "indices": _to_index_buffer(rows, cols),
+        "grid_size": [rows, cols],
+    }
+
+
 def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, Any]) -> Dict[str, Any]:
     """3D 그래프 데이터를 생성합니다 (x3dom용 메시 데이터)."""
     parallels = params.get("parallelOptions", [])
@@ -332,7 +377,13 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
     for p in parallels:
         p = p.strip()
         if p.startswith("samples="):
-            try: grid_res = int(p.split("=")[1])
+            try:
+                grid_res = int(p.split("=")[1])
+                # [보안] 3D 그리드 해상도 제한 — 그리드² 리스트 폭주 방지 (A1)
+                if grid_res > 5000:
+                    raise ValueError("샘플 수가 너무 큽니다 (최대 5000)")
+            except ValueError:
+                raise
             except: pass
         elif p.startswith("x="):
             try: x_range = [float(x) for x in p.split("=")[1].split(",")]
@@ -394,7 +445,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             # SciPy ufunc 대응: 단일 복소수 심볼로 lambdify
             v_comp = sp.Symbol('v_comp', complex=True)
             expr = expr.subs(v_orig, v_comp)
-            f = sp.lambdify(v_comp, expr, modules=['numpy', 'scipy'])
+            f = safe_lambdify(v_comp, expr, modules=['numpy', 'scipy'])
             is_single_complex_input = True
             
             # 가시화용 변수 이름 (라벨용)
@@ -402,11 +453,11 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         elif len(var_list) >= 2:
             v1 = next((s for s in var_list if s.name == 'x'), var_list[0])
             v2 = next((s for s in var_list if s.name == 'y'), var_list[1])
-            f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+            f = safe_lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
             is_single_complex_input = False
         else:
             v1, v2 = sp.Symbol('x'), sp.Symbol('y')
-            f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+            f = safe_lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
             is_single_complex_input = False
     else:
         is_single_complex_input = False
@@ -417,7 +468,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
             v2 = sp.Symbol('y')
         else:
             v1, v2 = sp.Symbol('x'), sp.Symbol('y')
-        f = sp.lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
+        f = safe_lambdify((v1, v2), expr, modules=['numpy', 'scipy'])
 
     x = np.linspace(x_range[0], x_range[1], grid_res)
     y = np.linspace(y_range[0], y_range[1], grid_res)
@@ -640,12 +691,49 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         plt.close()
         export_content = base64.b64encode(buf.getvalue()).decode('utf-8')
 
+    # v1 mesh contract (Phase 1 Track B) — 웹뷰 quad-strip 인덱스 생성을 대체.
+    # 정식 스키마: src/ui/plot3d/mesh.ts + 본 파일 상단 주석.
+    mesh_payload = _emit_flat_mesh(points, colors, len(y), len(x))
+    # [Phase 3] 복소 abs_phase: 정점별 위상(0..1)을 mesh.phase 로 함께 전송 —
+    # 웹뷰가 순환 컬러맵(hue wheel)을 적용할 수 있게 한다.
+    if is_complex_by_opt and complex_mode == "abs_phase" and np.iscomplexobj(W_num):
+        try:
+            phase_flat = (np.angle(W_num).ravel() / (2 * np.pi)) % 1.0
+            mesh_payload["phase"] = [float(v) for v in phase_flat]
+        except Exception:
+            mesh_payload["phase"] = None
+    # [Phase 2] 레벨셋 클립 (v2 mesh contract) — `clip=exact` parallel 옵션 시
+    # 정확한 레벨셋 클립(특이점 캡) + cap-ring LUT. 기본은 flat (무회귀).
+    if any(p.strip() == "clip=exact" for p in parallels) and is_complex_by_opt:
+        try:
+            from levelset_clip import build_levelset_mesh
+            from real_oracle import make_oracle, detect_poles, known_poles_for_expr, build_cap_lut
+            abs_expr = sp.Abs(expr)
+            oracle = make_oracle(abs_expr, [sp.Symbol('x'), sp.Symbol('y')])
+            # 사전 알려진 폴(감마) 우선, 없으면 수치 스캔
+            poles = known_poles_for_expr(abs_expr, tuple(x_range), tuple(y_range))
+            if not poles:
+                poles = detect_poles(oracle, tuple(x_range), tuple(y_range))
+            mesh_payload = build_levelset_mesh(
+                oracle, tuple(x_range), tuple(y_range), grid_res,
+                z_range[0], z_range[1], poles=poles if poles else None,
+            )
+            try:
+                mesh_payload["lut"] = build_cap_lut(abs_expr, [sp.Symbol('x'), sp.Symbol('y')],
+                                                    poles if poles else [(0.0, 0.0)])
+            except Exception:
+                mesh_payload["lut"] = None
+        except Exception:
+            # 레벨셋 실패 시 flat 폴백 (회귀 방지)
+            mesh_payload = _emit_flat_mesh(points, colors, len(y), len(x))
+
     return {
         "latex": f"${sp.latex(expr)}$",
         "x3d_data": {
             "points": points,
             "colors": colors,
             "grid_size": [len(x), len(y)],
+            "mesh": mesh_payload,
             "expr": sp.latex(expr),
             "labels": labels,
             "ranges": {"x": x_range, "y": y_range, "z": z_range},
@@ -657,6 +745,7 @@ def handle_plot_3d(expr: sp.Expr, var_list: List[sp.Symbol], params: Dict[str, A
         },
         "export_content": export_content,
         "export_format": export_format,
+        "kind": "plot",
         "status": "success"
     }
 
@@ -671,7 +760,7 @@ def handle_plot_complex(expr: sp.Expr, var: sp.Symbol, params: Dict[str, Any]) -
     X, Y = np.meshgrid(x, y)
     Z = X + 1j * Y
     
-    f = sp.lambdify(var, expr, modules=['numpy', 'scipy'])
+    f = safe_lambdify(var, expr, modules=['numpy', 'scipy'])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         W = f(Z)
@@ -688,15 +777,43 @@ def handle_plot_complex(expr: sp.Expr, var: sp.Symbol, params: Dict[str, Any]) -
     hsv[..., 2] = v
     rgb = hsv_to_rgb(hsv)
     
-    img_dir = os.path.join(workspace_dir, 'images')
+    # [N18] 심볼릭 링크를 통한 경로 탈출 쓰기 방지:
+    # workspace_dir 을 realpath 로 정규화해 쓰고, 경로에 심볼릭 링크 성분이
+    # 있으면 (realpath != abspath) 쓰기를 거부한다.
+    real_ws = os.path.realpath(workspace_dir)
+    if real_ws != os.path.abspath(workspace_dir):
+        return {"status": "error", "message": "작업 폴더 경로에 심볼릭 링크가 포함되어 있어 쓰기를 거부합니다."}
+    img_dir = os.path.join(real_ws, 'images')
     os.makedirs(img_dir, exist_ok=True)
     img_path = os.path.join(img_dir, 'complex_plot.png')
     plt.imsave(img_path, rgb)
     
     return {
         "latex": f"\\begin{{figure}}[ht]\n\\centering\n\\includegraphics[width=0.5\\textwidth]{{images/complex_plot.png}}\n\\caption{{Domain Coloring of ${sp.latex(expr)}$}}\n\\end{{figure}}",
+        "kind": "plot",
         "status": "success"
     }
+
+def _parse_domain_range(value: str) -> Tuple[float, float]:
+    """'min,max' 형식의 범위 문자열을 (min, max)로 변환한다.
+
+    두 값 모두 유한한 숫자여야 하고 min < max 여야 유효하다.
+    유효하지 않으면 None 을 반환한다 (호출부에서 경고 처리).
+    """
+    try:
+        parts = [p.strip() for p in value.split(",")]
+        if len(parts) != 2:
+            return None
+        # 보안: 사용자 입력 범위 값은 eval 기반 parse_expr 대신
+        # safe_parse_expr (화이트리스트 + __builtins__ 차단) 경로로 파싱한다 (S2).
+        lo = float(safe_parse_expr(parts[0], evaluate=False).evalf())
+        hi = float(safe_parse_expr(parts[1], evaluate=False).evalf())
+        if lo != lo or hi != hi or abs(lo) == float('inf') or abs(hi) == float('inf') or lo >= hi:
+            return None
+        return (lo, hi)
+    except Exception:
+        return None
+
 
 def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], config: Dict[str, Any], workspace_dir: str) -> Dict[str, Any]:
     """Plot 명령어 통합 핸들러."""
@@ -727,12 +844,29 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         for cmd in sub_cmds:
             if "," in cmd:
                 try:
-                    from sympy.parsing.sympy_parser import parse_expr
+                    # 보안: safe_parse_expr 경로로만 파싱 (S2)
                     bounds = cmd.split(',')
-                    domain = (float(parse_expr(bounds[0], evaluate=False, global_dict=SAFE_SYMPY_DICT).evalf()), float(parse_expr(bounds[1], evaluate=False, global_dict=SAFE_SYMPY_DICT).evalf()))
+                    domain = (float(safe_parse_expr(bounds[0], evaluate=False).evalf()), float(safe_parse_expr(bounds[1], evaluate=False).evalf()))
                     break
                 except: pass
-            
+
+        # parallelOptions의 range=/x= 옵션으로 2d 도메인(x축) 지정 — 서브커맨드보다 우선
+        range_warnings = []
+        for p in parallels:
+            if p.startswith("range="):
+                parsed = _parse_domain_range(p[len("range="):])
+                if parsed is not None:
+                    domain = parsed
+                else:
+                    range_warnings.append(f"잘못된 range 옵션 '{p}' — 'range=min,max' (min<max, 숫자) 형식이어야 합니다. 기본 도메인(-10,10)을 사용합니다.")
+            elif p.startswith("x="):
+                # 2d에서는 x= 가 x축 도메인 지정 (3d의 x_range와 별개)
+                parsed = _parse_domain_range(p[len("x="):])
+                if parsed is not None:
+                    domain = parsed
+                else:
+                    range_warnings.append(f"잘못된 x= 옵션 '{p}' — 'x=min,max' 형식이어야 합니다. 기본 도메인(-10,10)을 사용합니다.")
+
         var = free_symbols[0] if free_symbols else sp.Symbol('x')
         dat_samples = config.get('datDensity', 500)
         
@@ -745,6 +879,13 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
             elif p.startswith("ymax="):
                 try: ymax = float(p.split("=")[1])
                 except: pass
+            elif p.startswith("y="):
+                # 2d에서는 y= 가 y축 표시 범위(ymin/ymax) 지정
+                parsed = _parse_domain_range(p[len("y="):])
+                if parsed is not None:
+                    ymin, ymax = parsed
+                else:
+                    range_warnings.append(f"잘못된 y= 옵션 '{p}' — 'y=min,max' 형식이어야 합니다. 기본 y범위(-15,15)를 사용합니다.")
             elif p.startswith("yMultiplier="):
                 try: y_multiplier = float(p.split("=")[1])
                 except: pass
@@ -758,6 +899,10 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         dat_filename = f"plot_data_{timestamp}.dat"
         
         pgf_code, warning_msg, dat_content, preview_img = generate_2d_pgfplots(expr, var, domain, parallels, dat_samples, y_limit)
+
+        if range_warnings:
+            combined = " ".join(range_warnings)
+            warning_msg = f"{combined} {warning_msg}" if warning_msg else combined
         
         pgf_code = pgf_code.replace("data/plot_data.dat", f"data/{dat_filename}")
         if line_color != "blue":
@@ -781,6 +926,7 @@ def handle_plot(expr_latex: str, sub_cmds: List[str], parallels: List[str], conf
         )
         return {
             "status": "success",
+            "kind": "plot",
             "latex": final_latex,
             "expr_latex": f"${sp.latex(expr)}$",
             "vars": [str(s) for s in free_symbols],

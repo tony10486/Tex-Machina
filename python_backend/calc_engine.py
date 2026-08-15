@@ -1,10 +1,14 @@
 import sympy as sp
 from sympy.parsing.latex import parse_latex  # 공식 파서 사용
 import json
+import logging
 import re
 import os
-from functools import lru_cache
 from utils import SAFE_SYMPY_DICT, safe_parse_expr, strip_latex_delimiters
+from latex_conversion import latex_to_sympy, safe_lambdify
+
+# 모듈 레벨 로거 — 조용히 삼켜지던 예외를 서버 로그에서 추적할 수 있게 한다 (P17)
+logger = logging.getLogger(__name__)
 
 try:
     import symengine
@@ -52,6 +56,12 @@ def op_tensor_expand(expr, args, parallels=[], selection=None):
         if p.startswith('dim='):
             try: dim = int(p.split('=')[1])
             except: pass
+    
+    # [보안] 텐서 차원/인덱스 수 제한 — product(repeat=...) 지수 폭주 방지 (A1)
+    if dim > 3:
+        raise ValueError("텐서 차원이 너무 큽니다 (최대 3)")
+    if len(dummy_indices) > 6:
+        raise ValueError("텐서 반복 인덱스가 너무 많습니다 (최대 6개)")
 
     # 3. 문자열 레벨에서 확장 수행
     expanded_terms = []
@@ -80,12 +90,12 @@ def op_tensor_expand(expr, args, parallels=[], selection=None):
         
     final_latex_str = " + ".join(expanded_terms)
     try:
-        return parse_latex(final_latex_str)
-    except:
+        return latex_to_sympy(final_latex_str)
+    except Exception:
         res_expr = 0
         for t in expanded_terms:
-            try: res_expr += parse_latex(t)
-            except: pass
+            try: res_expr += latex_to_sympy(t)
+            except Exception: pass
         return res_expr
 
 def format_step(text, latex_expr, level, target_level):
@@ -238,6 +248,13 @@ def get_diff_steps(expr, var, level):
     steps.append(f"\\text{{Final Result: }} {sp.latex(res)}")
     return steps
 
+def _parse_var_csv(arg):
+    """변수 CSV 파싱 (예: "x, y"). 빈/공백만 있는 이름은 오류 처리 (N1)."""
+    names = [v.strip() for v in arg.split(',')]
+    if any(not n for n in names):
+        raise ValueError("변수 이름이 비어 있습니다")
+    return [sp.Symbol(n) for n in names]
+
 def op_diff(expr, args):
     # 이미 Derivative 객체인 경우 (LaTeX에 \frac{d}{dx} 등이 포함됨)
     if isinstance(expr, sp.Derivative):
@@ -245,7 +262,7 @@ def op_diff(expr, args):
             return expr.doit()
         # 변수가 명시된 경우, 일단 doit() 한 뒤에 추가 미분을 수행하거나 
         # 혹은 명시된 변수가 이미 미분 변수에 포함되어 있다면 redundant한 요청으로 보고 doit()만 수행
-        vars_to_diff = [sp.Symbol(v.strip()) for v in args[0].split(',')]
+        vars_to_diff = _parse_var_csv(args[0])
         if all(v in expr.variables for v in vars_to_diff):
             return expr.doit()
         # 그 외의 경우 (예: d/dx 를 선택하고 diff > y 를 호출) doit() 후 새로 미분
@@ -259,7 +276,7 @@ def op_diff(expr, args):
         return sp.diff(expr, symbols[0])
     
     # diff > x, y 형태의 다변수 편미분 지원
-    vars_to_diff = [sp.Symbol(v.strip()) for v in args[0].split(',')]
+    vars_to_diff = _parse_var_csv(args[0])
     return sp.diff(expr, *vars_to_diff)
 
 def op_taylor(expr, args, parallels):
@@ -281,6 +298,15 @@ def op_taylor(expr, args, parallels):
             
     if len(args) > 1 and args[1].isdigit():
         n = int(args[1])
+    
+    # taylor > 1000 (차수 단독) 형태: 숫자는 변수명이 될 수 없으므로 차수로 해석
+    # (이전에는 args[0]='1000' 을 변수 Symbol('1000') 로 처리해 차수 캡이 우회됐다)
+    if args and len(args) == 1 and args[0].isdigit():
+        n = int(args[0])
+        
+    # [보안] 테일러 차수 제한 — 과도한 전개로 서버가 멈추는 것을 방지 (A1)
+    if n > 100:
+        raise ValueError("테일러 급수 차수는 100을 초과할 수 없습니다")
         
     # 3. 전개 지점 결정 (parallels에서 at=N, 없으면 args[2], 기본값 0)
     at = 0
@@ -341,7 +367,9 @@ def op_int(expr, args):
         expr = expr.doit()
 
     if not args:
-        symbols = list(expr.free_symbols)
+        # [N3] free_symbols 는 set 순회라 PYTHONHASHSEED 에 따라 순서가 달라진다.
+        # 단일 변수 선택 지점은 이름 기준 정렬로 결정적으로 만든다.
+        symbols = sorted(list(expr.free_symbols), key=lambda s: s.name)
         return sp.integrate(expr, symbols[0]) if symbols else expr
     
     # int > x, a, b 형태의 구간 입력
@@ -373,6 +401,45 @@ def op_limit(expr, args):
     direction = params[2] if len(params) > 2 else '+'
     return sp.limit(expr, var, target, dir=direction)
 
+# 잘 알려진 함수 이름 — 함수 호출 인자에서 독립 변수를 유추하지 않도록 제외 (M4)
+_ODE_FUNC_NAMES = {
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan',
+    'sinh', 'cosh', 'tanh', 'coth', 'sech', 'csch', 'log', 'ln', 'exp', 'sqrt',
+    'abs', 'min', 'max', 'floor', 'ceil', 'sign', 'det', 'arg', 'Re', 'Im',
+    'lim', 'inf', 'sup', 'gcd', 'lcm', 'erf', 'erfc', 'Gamma', 'zeta', 'frac',
+}
+
+# 상수 목록 — fix_ode_expression 과 동일하게 유지 (독립 변수 후보에서 제외)
+_ODE_CONSTANTS = {'e', 'E', 'pi', 'I', 'i', 'j', 'g', 'L', 'k', 'm', 'M', 'G', 'R', 'C'}
+
+def _detect_ode_indep_fallback(latex_str, dep_var):
+    """함수 호출 인자·종속 변수·상수에 들어있지 않은 자유 변수에서 독립 변수를 찾습니다.
+
+    결정적(deterministic): 등장 순서대로 후보를 수집하고, x/t/s/r/z 우선순위로 선택합니다.
+    """
+    # 1) 함수 호출 인자 마스킹: \cos(y), \sin(x), f(t) — 인자 안 변수는 후보에서 제외
+    masked = re.sub(r'\\?[a-zA-Z]+\s*(\([^()]*\))', lambda m: ' ' * len(m.group(0)), latex_str)
+    # 2) \left( ... \right) 형태의 함수 인자 마스킹
+    masked = re.sub(r'\\left\s*(\([^()]*\))\\right\s*', lambda m: ' ' * len(m.group(0)), masked)
+    # 3) 명령어 이름 마스킹: \cos, \frac, \theta 등 — 명령어 이름의 글자는 변수 후보가 아님
+    masked = re.sub(r'\\[a-zA-Z]+', lambda m: ' ' * len(m.group(0)), masked)
+
+    excluded = set(_ODE_CONSTANTS) | {dep_var, 'd'}
+    candidates = []
+    for name in re.findall(r'[a-zA-Z]+', masked):
+        if name in excluded or len(name) != 1:
+            continue
+        if name not in candidates:
+            candidates.append(name)
+
+    if not candidates:
+        return None
+    preferred = ['x', 't', 's', 'r', 'z']
+    for p in preferred:
+        if p in candidates:
+            return p
+    return candidates[0]
+
 def preprocess_latex_ode(latex_str):
     r"""\frac{d^ny}{dx^n} 형태를 y' 형태로 변환하고, 독립 변수를 추출합니다."""
     indep = None
@@ -381,10 +448,17 @@ def preprocess_latex_ode(latex_str):
     greek_list = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'phi', 'chi', 'psi', 'omega']
     greek_pattern = r'\\?(?:' + '|'.join(greek_list) + r'|omicron|upsilon)'
     
-    # 독립 변수 감지 (f(t) 형태에서 추출)
-    m_indep = re.search(r"(?:[a-zA-Z]|\\(?:" + '|'.join(greek_list) + r"))'*\((\s*[a-zA-Z]\s*)\)", latex_str)
-    if m_indep:
-        indep = m_indep.group(1).strip()
+    # 종속 변수: 프라임이 붙은 기호의 기본 문자 (예: y' -> y, \theta' -> theta)
+    m_dep = re.search(r"\\?([a-zA-Z]+)'", latex_str)
+    dep_var = m_dep.group(1) if m_dep else None
+
+    # 독립 변수 감지: 프라임이 붙은 함수 표기 f'(t), y''(x) 에서만 추출
+    # (일반 함수 호출 cos(y) 는 미분 표기가 아니므로 제외 — cos(y) 의 y 를
+    #  독립 변수로 오인하지 않는다. 이전 버그: y' - \cos(y) - x = 0 에서
+    #  indep='y' 로 잘못 감지되어 해가 y(y) 로 나왔다 — M4)
+    m_indep = re.search(r"([a-zA-Z]+)'+\(\s*([a-zA-Z]+)\s*\)", latex_str)
+    if m_indep and m_indep.group(1) not in _ODE_FUNC_NAMES:
+        indep = m_indep.group(2).strip()
 
     # 단일 알파벳 또는 그리스 문자 (캡처 그룹 포함)
     var_pattern = r'([a-zA-Z]|' + greek_pattern + r')'
@@ -405,8 +479,13 @@ def preprocess_latex_ode(latex_str):
     # 3. \frac{d^2y}{dx^2} -> y'' (공백 및 변수 유연하게 대응)
     def repl_n(m):
         nonlocal indep
+        # [보안] 미분 차수 제한 — "'" * N 문자열 폭주 방지 (A1)
+        # 29자 입력 \frac{d^9999999y}{dx^9999999} 가 10MB 문자열을 만들 수 있다.
+        order = int(m.group(1))
+        if order > 1000:
+            raise ValueError("미분 차수가 너무 큽니다 (최대 1000)")
         indep = m.group(3).replace('\\', '')
-        return m.group(2).replace('\\', '') + "'" * int(m.group(1))
+        return m.group(2).replace('\\', '') + "'" * order
     
     # var_pattern이 캡처 그룹을 가지고 있으므로 group 번호 주의 (1: 차수, 2: 종속변수, 3: 독립변수)
     # \frac{d^2 theta}{dt^2} 등
@@ -428,6 +507,12 @@ def preprocess_latex_ode(latex_str):
     latex_str = re.sub(r'\\(' + greek_pattern_combined + r")('+(?!'))(?!\s*\()", 
                        r'\\\1\2(' + target_indep + r')', 
                        latex_str)
+
+    # 6. 아직 독립 변수를 못 찾았다면 자유 변수 후보에서 결정 (함수 호출 인자·상수·종속 변수 제외)
+    if not indep:
+        fallback = _detect_ode_indep_fallback(latex_str, dep_var)
+        if fallback:
+            indep = fallback
 
     return latex_str, indep
 
@@ -498,6 +583,18 @@ def fix_ode_expression(expr, dep_var_name='y', indep_var_name=None):
     
     return fixed_expr, y, x
 
+# 초기조건 값 형식 검증 (보안): 숫자 리터럴, 단순 심볼, 단순 거듭제곱만 허용
+# S('chr(95)+...') 같은 safe_parse_expr 샌드박스 이스케이프 payload를 차단한다 (S1).
+_IC_NUM_RE = re.compile(r'^[+-]?\d+\.?\d*$')
+_IC_SYM_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9_]*$')
+# a^2, a^{-1}, e^{-t}, e^-t, x^{-2} 등 — 지수는 수치/부호 있는 심볼 허용
+_IC_POW_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9_]*\^\{?[+-]?[a-zA-Z0-9_]+\}?$')
+
+def is_valid_ic_value(value_str):
+    """초기조건 값/지점이 안전한 형식(수치·심볼·단순 거듭제곱)인지 검증합니다."""
+    s = str(value_str).strip()
+    return bool(_IC_NUM_RE.match(s) or _IC_SYM_RE.match(s) or _IC_POW_RE.match(s))
+
 def parse_ics(ics_str, funcs, x):
     """ic=y(0):1,z(0):0 형태의 초기조건을 파싱합니다. 임의의 지점 x0 및 여러 함수를 지원합니다."""
     ics = {}
@@ -529,7 +626,14 @@ def parse_ics(ics_str, funcs, x):
             continue
             
         lhs_str = lhs_str.strip()
-        rhs = safe_parse_expr(rhs_str.strip(), evaluate=False)
+        # [보안] 초기조건 값(RHS)과 지점(x0)은 safe_parse_expr 호출 전에
+        # 엄격한 형식(숫자/단순 심볼/단순 거듭제곱)으로 검증한다.
+        # 검증 없이는 S('chr(95)+...') 같은 샌드박스 이스케이프 payload가
+        # safe_parse_expr 에 도달해 RCE로 이어질 수 있다 (S1).
+        rhs_str = rhs_str.strip()
+        if not is_valid_ic_value(rhs_str):
+            raise ValueError(f"초기조건 값 형식이 올바르지 않습니다: {rhs_str}")
+        rhs = safe_parse_expr(rhs_str, evaluate=False)
         
         # 정규화하여 감지 (f(x0) 또는 f'(x0) 형태)
         clean_lhs = lhs_str.replace('\\', '').replace('{', '').replace('}', '').replace(' ', '')
@@ -543,6 +647,10 @@ def parse_ics(ics_str, funcs, x):
             if func_name in func_map:
                 try:
                     target_func = func_map[func_name]
+                    x0_str = x0_str.strip()
+                    # [보안] IC 지점(x0)도 형식 검증 (S1 우회 벡터 차단)
+                    if not is_valid_ic_value(x0_str):
+                        raise ValueError(f"초기조건 지점 형식이 올바르지 않습니다: {x0_str}")
                     x0 = safe_parse_expr(x0_str, evaluate=False)
                     order = len(primes)
                     
@@ -550,7 +658,10 @@ def parse_ics(ics_str, funcs, x):
                         ics[target_func.subs(x, x0)] = rhs
                     else:
                         ics[target_func.diff(x, order).subs(x, x0)] = rhs
-                except: pass
+                except Exception as e:
+                    # [P17] 초기조건 파싱 실패를 무시하지 않고 로그로 남긴다.
+                    # IC가 조용히 누락되면 ODE 해가 틀려도 원인을 알 수 없었다.
+                    logger.debug("parse_ics: %s(%s) 초기조건 파싱 실패: %s", func_name, x0_str, e)
             
     return ics
 
@@ -702,7 +813,11 @@ from io import BytesIO
 
 def op_num_solve(expr, args):
     # 1. 초기 조건 및 범위 파싱
-    ics_dict = {}
+    # ic=y(5):1,y'(0):2 형태의 초기조건 문자열을 (함수, 프라임수, t0, y0) 목록으로 파싱한다.
+    # 기존 split(':') 방식은 다중 IC(y(0):1,y'(0):2)에서 값을 잘라내는 문제가 있어
+    # 정규식 기반으로 전체 IC 문자열을 한 번에 처리한다 (M2).
+    ic_re = re.compile(r"^\s*([a-zA-Z]+)\s*('*)\s*\(\s*(.+?)\s*\)\s*[:=]\s*(.+?)\s*$")
+    ics = []  # (func_name, order, t0, y0)
     t_span = [0, 10]
     num_points = 100
     show_plot = False
@@ -710,44 +825,121 @@ def op_num_solve(expr, args):
     if args:
         for arg in args:
             if 'ic=' in arg:
-                parts = arg.replace('ic=', '').split(':')
-                if len(parts) == 2:
-                    t0_str = re.search(r'\((.*?)\)', parts[0])
-                    t0 = float(t0_str.group(1)) if t0_str else 0
-                    ics_dict[t0] = float(parts[1])
+                ic_str = arg.replace('ic=', '').strip()
+                for part in ic_str.split(','):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    m = ic_re.match(part)
+                    if not m:
+                        raise ValueError(f"초기조건 형식이 올바르지 않습니다: {part}")
+                    func_name, primes, t0_str, y0_str = m.group(1), m.group(2), m.group(3), m.group(4)
+                    # [보안] 값/지점 모두 is_valid_ic_value 화이트리스트 검증 (S1)
+                    if not is_valid_ic_value(t0_str):
+                        raise ValueError(f"초기조건 지점 형식이 올바르지 않습니다: {t0_str}")
+                    if not is_valid_ic_value(y0_str):
+                        raise ValueError(f"초기조건 값 형식이 올바르지 않습니다: {y0_str}")
+                    try:
+                        t0 = float(t0_str)
+                        y0 = float(y0_str)
+                    except ValueError:
+                        raise ValueError(f"초기조건은 숫자여야 합니다: {part}") from None
+                    ics.append((func_name, len(primes), t0, y0))
             elif 't_span=' in arg:
                 parts = arg.replace('t_span=', '').split(',')
                 if len(parts) == 2:
                     try:
                         t_span = [float(parts[0]), float(parts[1])]
-                    except: pass
+                    except Exception as e:
+                        # [P17] 잘못된 t_span 값은 무시하고 기본 범위(0~10)를 유지하되 로그 기록
+                        logger.debug("num_solve: t_span 파싱 실패, 기본값 유지: %s", e)
             elif 'points=' in arg:
                 try:
                     num_points = int(arg.replace('points=', ''))
-                except: pass
+                except Exception as e:
+                    # [P17] 잘못된 points 값은 기본 샘플 수(100)로 폴백하되 로그 기록
+                    logger.debug("num_solve: points 파싱 실패, 기본값 유지: %s", e)
             elif 'plot=true' in arg:
                 show_plot = True
-                    
-    if not ics_dict:
+
+    if not ics:
         return "Error: Numerical solving requires initial conditions (e.g., ic=y(0):1)"
 
+    if len(ics) > 2:
+        raise ValueError("최대 2개의 초기조건을 지원합니다")
+
+    # 함수명이 ODE의 종속 변수와 일치하는지 확인
+    ode_dep_names = set()
+    for f in expr.atoms(sp.Function):
+        if isinstance(f.func, sp.core.function.UndefinedFunction):
+            ode_dep_names.add(getattr(f.func, 'name', None))
+    if ode_dep_names:
+        for func_name, _, _, _ in ics:
+            if func_name not in ode_dep_names:
+                raise ValueError(f"초기조건 함수명({func_name})이 ODE의 종속 변수와 일치하지 않습니다")
+
+    # 중복 IC 검사 (같은 함수+차수)
+    seen = set()
+    for func_name, order, _, _ in ics:
+        key = (func_name, order)
+        if key in seen:
+            raise ValueError(f"중복된 초기조건입니다: {func_name}{chr(39) * order}(...)")
+        seen.add(key)
+
+    # 모든 IC의 t0는 동일해야 한다 (solve_ivp는 단일 시작점만 지원)
+    t0_vals = {ic[2] for ic in ics}
+    if len(t0_vals) > 1:
+        raise ValueError("모든 초기조건은 같은 시점(t0)에 주어져야 합니다")
+    t0_ic = ics[0][2]
+
     fixed_expr, y_func, t_var = fix_ode_expression(expr)
-    
-    y_prime = y_func.diff(t_var)
-    sol_expr = sp.solve(fixed_expr, y_prime)
-    if not sol_expr:
-        return "Error: Could not solve for y' explicitly."
-    
-    # t_var(독립 변수)를 t로, y_func를 y로 lambdify
-    f_np = sp.lambdify((t_var, y_func), sol_expr[0], 'numpy')
-    def odefun(t, y): return f_np(t, y[0])
-    
-    t0_val = list(ics_dict.keys())[0]
-    y0 = [ics_dict[t0_val]]
-    t_eval = np.linspace(t_span[0], t_span[1], num_points)
+
+    # ODE 차수 감지: 최고차 미분 차수
+    max_order = 0
+    for d in fixed_expr.atoms(sp.Derivative):
+        max_order = max(max_order, len(d.variables))
+
+    ics_by_order = {order: (t0, y0) for func_name, order, t0, y0 in ics}
+
+    if max_order == 1:
+        if 1 in ics_by_order:
+            raise ValueError("1계 미분방정식에는 y'(t0) 초기조건을 적용할 수 없습니다")
+        if 0 not in ics_by_order:
+            return "Error: Numerical solving requires initial conditions (e.g., ic=y(0):1)"
+        t0 = ics_by_order[0][0]
+        y0 = [ics_by_order[0][1]]
+        y_prime = y_func.diff(t_var)
+        sol_expr = sp.solve(fixed_expr, y_prime)
+        if not sol_expr:
+            return "Error: Could not solve for y' explicitly."
+        f_np = safe_lambdify((t_var, y_func), sol_expr[0])
+        def odefun(t, y): return f_np(t, y[0])
+    else:
+        if max_order != 2:
+            return f"Error: {max_order}계 미분방정식의 수치해석은 지원되지 않습니다 (2계까지 지원)"
+        if 0 not in ics_by_order or 1 not in ics_by_order:
+            return "Error: 2계 미분방정식에는 y(t0)와 y'(t0) 초기조건이 모두 필요합니다 (예: ic=y(0):1,y'(0):0)"
+        t0 = ics_by_order[0][0]
+        y0 = [ics_by_order[0][1], ics_by_order[1][1]]
+        y_prime = y_func.diff(t_var)
+        y_double_prime = y_func.diff(t_var, 2)
+        sol_expr = sp.solve(fixed_expr, y_double_prime)
+        if not sol_expr:
+            return "Error: Could not solve for y'' explicitly."
+        yp_sym = sp.Symbol('yp')
+        f2_np = safe_lambdify((t_var, y_func, yp_sym), sol_expr[0].subs(y_prime, yp_sym))
+        def odefun(t, state): return [state[1], f2_np(t, state[0], state[1])]
+
+    # t_span 옵션의 종료점을 t_final로 사용하고, 시작점은 초기조건의 t0로 결정한다.
+    # (기존 버그: IC의 t0를 무시하고 t_span[0]=0에서 시작 → y(5)=1이 y(0)=1로 오용됨 — M2)
+    t_start = t0
+    t_end = t_span[1]
+    if t_start == t_end:
+        return "Error: t_span 종료점은 초기조건 시점(t0)과 달라야 합니다."
+    t_eval = np.linspace(t_start, t_end, num_points)
     
     try:
-        sol = solve_ivp(odefun, t_span, y0, t_eval=t_eval)
+        sol = solve_ivp(odefun, (t_start, t_end), y0, t_eval=t_eval)
     except Exception as e:
         return f"Error in numerical solver: {str(e)}"
     
@@ -814,7 +1006,6 @@ from dimcheck_engine import handle_dimcheck
 from plot_engine import handle_plot
 from cite_engine import handle_cite
 from oeis_engine import handle_oeis
-from query_engine import execute_query_on_text
 from label_engine import LabelEngine
 
 def run_fast_op(op_name, expr, *args):
@@ -845,21 +1036,34 @@ def run_fast_op(op_name, expr, *args):
         pass # 실패 시 None 반환하여 SymPy 폴백 유도
     return None
 
-def get_calc_operations():
-    return {
-        # 0. 행렬 및 인용
-        "matrix": lambda x, v, p, c, s: handle_matrix(v, p),
-        "cite": lambda x, v, p, c, s: handle_cite(v),
-        "oeis": lambda x, v, p, c, s: handle_oeis(v),
+def _checked_int_value(x):
+    """정수로 변환하되 자릿수 제한(20자리)을 적용합니다. (prime/factorint 폭주 방지 — A1)"""
+    val = int(sp.simplify(x))
+    if len(str(abs(val))) > 20:
+        raise ValueError("숫자가 너무 큽니다 (최대 20자리)")
+    return val
 
+def _get_precision(config):
+    """config 에서 precision 설정을 읽습니다 (없으면 기본 10). eval 연산에 사용 (N11)."""
+    settings = config.get('settings') or {}
+    try:
+        return int(settings.get('precision') or config.get('precision') or 10)
+    except (TypeError, ValueError):
+        return 10
+
+def get_calc_operations():
+    # matrix/cite/oeis/plot 는 execute_calc 에서 조기 반환(전용 핸들러)되므로
+    # 이 테이블에 존재하지 않는다 (죽은 디스패치 제거 — N10).
+    return {
         # 1. 기본 대수 및 해석 
         "calc": lambda x, v, p, c, s: x.doit(),
+        # 'evaluate' 는 'calc' 와 동일한 doit() 별칭 (하위 호환용 — 유지)
         "evaluate": lambda x, v, p, c, s: x.doit(),
         "simplify": lambda x, v, p, c, s: run_fast_op("simplify", x) or sp.simplify(x.doit()),
         "expand": lambda x, v, p, c, s: run_fast_op("expand", x) or sp.expand(x),
         "factor": lambda x, v, p, c, s: sp.factor(x),
         "solve": lambda x, v, p, c, s: sp.solve(x),
-        "eval": lambda x, v, p, c, s: x.evalf(),
+        "eval": lambda x, v, p, c, s: x.evalf(_get_precision(c)),
         
         # 2. 분수 및 삼각함수
         "apart": lambda x, v, p, c, s: sp.apart(x),
@@ -868,11 +1072,11 @@ def get_calc_operations():
         "expand_trig": lambda x, v, p, c, s: sp.expand_trig(x),
         
         # 3. 미적분 계층
-        "diff": lambda x, v, p, c, s: run_fast_op("diff", x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0] if x.free_symbols else sp.Symbol('x')) or op_diff(x, v),
+        "diff": lambda x, v, p, c, s: run_fast_op("diff", x, sp.Symbol(v[0]) if v else sorted(list(x.free_symbols), key=lambda s: s.name)[0] if x.free_symbols else sp.Symbol('x')) or op_diff(x, v),
         "int": lambda x, v, p, c, s: op_int(x, v),
         "limit": lambda x, v, p, c, s: op_limit(x, v),
         "taylor": lambda x, v, p, c, s: op_taylor(x, v, p),
-        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else list(x.free_symbols)[0], sp.oo).removeO(),
+        "asymp": lambda x, v, p, c, s: sp.series(x, sp.Symbol(v[0]) if v else sorted(list(x.free_symbols), key=lambda s: s.name)[0], sp.oo).removeO(),
         
         # 4. 선형대수 행렬 연산
         "det": lambda x, v, p, c, s: run_fast_op("det", x) or sp.Matrix(x).det(),
@@ -883,8 +1087,11 @@ def get_calc_operations():
         "trace": lambda x, v, p, c, s: sp.Matrix(x).trace(),
         "transpose": lambda x, v, p, c, s: sp.Matrix(x).T,
         "nullspace": lambda x, v, p, c, s: sp.Matrix(x).nullspace(),
-        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym) for sym in v[0].split(',')]) if v else x,
-        "hessian": lambda x, v, p, c, s: sp.hessian(x, list(x.free_symbols)),
+        # [Fix] 변수명 앞뒤 공백 제거 — 'jacobian > x, y' 에서 Symbol(' y') 가 생성되어
+        # y 방향 미분이 누락되던 버그 수정 (P14)
+        "jacobian": lambda x, v, p, c, s: sp.Matrix(x).jacobian([sp.Symbol(sym.strip()) for sym in v[0].split(',')]) if v else x,
+        # [N3] free_symbols set 순회 비결정성 방지 — 이름 기준 정렬
+        "hessian": lambda x, v, p, c, s: sp.hessian(x, sorted(list(x.free_symbols), key=lambda s: s.name)),
         
         # 5. 미분방정식 및 변환
         "ode": lambda x, v, p, c, s: op_ode(x, v),
@@ -904,17 +1111,14 @@ def get_calc_operations():
         "im": lambda x, v, p, c, s: sp.im(x),
 
         # 7. 정수론 및 이산수학
-        "prime": lambda x, v, p, c, s: sp.isprime(int(sp.simplify(x))),
-        "factorint": lambda x, v, p, c, s: sp.factorint(int(sp.simplify(x))),
+        "prime": lambda x, v, p, c, s: sp.isprime(_checked_int_value(x)),
+        "factorint": lambda x, v, p, c, s: sp.factorint(_checked_int_value(x)),
         "logic": lambda x, v, p, c, s: sp.simplify_logic(x, form='cnf'),
         
         # 8. 물리 / 공학 유틸리티
         "dimcheck": lambda x, v, p, c, s: op_dimcheck_wrapper(x, v, p, s),
         "error_prop": lambda x, v, p, c, s: op_error_prop(x, v, p),
         "tensor_expand": lambda x, v, p, c, s: op_tensor_expand(x, v, p, s),
-
-        # 9. 시각화 (Plotting)
-        "plot": lambda x, v, p, c, s: handle_plot(s, v, p, c, os.getcwd())
     }
 
 def preprocess_matrix_latex(latex_str):
@@ -956,6 +1160,12 @@ def preprocess_matrix_latex(latex_str):
         # 전치행렬: ^T, ^\top, ^\intercal -> .T
         processed = re.sub(r'\^\{\s*\\*(?:T|top|intercal)\s*\}|\^\\*(?:T|top|intercal)', '.T', processed)
         
+        # [보안] safe_parse_expr AST 검증은 속성 접근(.inv()/.T)을 금지하므로
+        # 함수 호출 형태(inv(...)/transpose(...))로 변환한다 (P1 화이트리스트 호환).
+        # Matrix([...]) 의 괄호는 중첩 대괄호만 포함하므로 첫 ')' 에서 안전하게 종료된다.
+        processed = re.sub(r'(Matrix\([^\n]*?\))\.inv\(\)', r'inv(\1)', processed)
+        processed = re.sub(r'(Matrix\([^\n]*?\))\.T\b', r'transpose(\1)', processed)
+        
         # [Fix] Greedy match for Matrix(...) to handle nested parentheses
         for func in ['det', 'tr', 'trace', 'inv', 'rank', 'transpose']:
             processed = re.sub(r'\\*' + func + r'\s*(Matrix\(.*\))', func + r'(\1)', processed)
@@ -965,7 +1175,30 @@ def preprocess_matrix_latex(latex_str):
         
     return processed
 
-@lru_cache(maxsize=1024)
+# [Fix] lru_cache 제거 (P15): 캐시 키가 요청 JSON 전체이므로 항상 고유한
+# requestId(crypto.randomUUID)가 포함되어 캐시가 절대 히트되지 않는데,
+# 대신 최대 1024개의 대용량 응답(plot 3D 데이터, base64 이미지)이
+# 메모리에 누적되는 문제가 있었다.
+
+def _is_error_string(s):
+    """문자열 결과가 오류 메시지인지 판별합니다 (P11).
+
+    일부 연산자(op_ode, op_num_solve)는 실패 시 LaTeX 문자열을 반환하는데,
+    이 문자열이 그대로 status:"success" latex 로 포장되어 사용자 문서에
+    삽입되는 문제를 차단하기 위한 판별 헬퍼입니다.
+    """
+    t = s.strip()
+    return (t.startswith("Error:")
+            or t.startswith("Error in numerical solver:")
+            or t.startswith("\\text{The ODE solver failed")
+            or t.startswith("\\text{System ODE solver failed"))
+
+def _error_message_text(s):
+    """오류 문자열에서 LaTeX 명령을 벗겨낸 순수 텍스트 메시지를 추출합니다."""
+    msg = re.sub(r'\\text\{([^{}]*)\}', r'\1', s)
+    msg = msg.replace('\\\\', ' ').replace('\\', '').strip()
+    return msg
+
 def execute_calc(parsed_json_str):
     try:
         req = json.loads(parsed_json_str)
@@ -973,29 +1206,20 @@ def execute_calc(parsed_json_str):
         sub_cmds = req.get('subCommands', [])
         parallels = req.get('parallelOptions', [])
         config = req.get('config', {})
+        # [N11] 설정 사용 현황:
+        # - precision: eval 연산에서 소비됨 (_get_precision)
+        # - imaginaryUnit: latex_to_sympy 변환 게이트로 사용됨
+        # - angleUnit / simplifyResult: 현재 소비되지 않는 설정 (향후 연동 예정)
         selection = req.get('rawSelection', '').strip()
         selection = strip_latex_delimiters(selection)
 
         if main_cmd == "labels":
             filepath = config.get('filepath')
             if not filepath:
-                return json.dumps({"status": "error", "message": "No file path provided for label discovery"})
+                return json.dumps({"status": "error", "message": "라벨 탐색을 위한 파일 경로가 제공되지 않았습니다"})
             engine = LabelEngine()
             return json.dumps(engine.parse_file(filepath))
 
-        if main_cmd == "?":
-            full_text = req.get('fullText', '')
-            # sub_cmds[0] should contain the query without '?'
-            query_str = sub_cmds[0] if sub_cmds else selection
-            res = execute_query_on_text(full_text, query_str)
-            if res.get('status') == 'success':
-                return json.dumps({
-                    "status": "success",
-                    "mainCommand": "?",
-                    "fullText": res['text'],
-                    "latex": ""
-                })
-            return json.dumps(res)
         if main_cmd == "calc" and sub_cmds:
             action = sub_cmds.pop(0)
         elif main_cmd:
@@ -1058,6 +1282,7 @@ def execute_calc(parsed_json_str):
                 return json.dumps(plot_res)
             return json.dumps({
                 "status": "success",
+                "kind": plot_res.get("kind"),
                 "latex": plot_res["latex"],
                 "expr_latex": plot_res.get("expr_latex"),
                 "vars": plot_res.get("vars", []),
@@ -1072,7 +1297,7 @@ def execute_calc(parsed_json_str):
 
         # 다른 명령어는 선택 영역이 필요함 
         if not selection:
-            return json.dumps({"status": "error", "message": "Selection is empty after stripping delimiters"})
+            return json.dumps({"status": "error", "message": "구분자 제거 후 선택 영역이 비어 있습니다"})
 
         if action == "ode":
             # [Add] \begin{cases} ... \end{cases} 환경 전처리
@@ -1111,7 +1336,10 @@ def execute_calc(parsed_json_str):
                     if indep: detected_indeps.append(indep)
                     preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', preprocessed)
                     preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
-                    expr = parse_latex(preprocessed)
+                    # [Fix] \mathrm{...} / \text{...} 정규화 (M3) + 상수 변환 (M1) —
+                    # 공유 변환 계층(latex_to_sympy)에서 normalize + parse_latex +
+                    # safe_parse_expr 폴백을 한 번에 처리한다 (H2 파서 중복 제거)
+                    expr = latex_to_sympy(preprocessed)
                     if sp.Symbol('e') in expr.free_symbols:
                         expr = expr.subs(sp.Symbol('e'), sp.E)
                     exprs.append(expr)
@@ -1120,7 +1348,7 @@ def execute_calc(parsed_json_str):
                 ode_args.append("ic=" + ",".join(found_ics))
             
             if not exprs:
-                return json.dumps({"status": "error", "message": "No ODE expression found"})
+                return json.dumps({"status": "error", "message": "ODE 식을 찾을 수 없습니다"})
 
             # 수집된 모든 자유 변수 및 함수 확인
             all_symbols = set()
@@ -1209,7 +1437,7 @@ def execute_calc(parsed_json_str):
                     if not found_vars: found_vars = {'y'}
                     result = op_ode(exprs[0], ode_args, indep_var_name=main_indep)
             else:
-                return json.dumps({"status": "error", "message": "No ODE expression found"})
+                return json.dumps({"status": "error", "message": "ODE 식을 찾을 수 없습니다"})
         else:
             # 행렬 환경이 포함되어 있으면 Matrix() 생성자로 변환
             if 'matrix' in selection:
@@ -1236,17 +1464,32 @@ def execute_calc(parsed_json_str):
                 # \Gamma{\left(z \right)} -> \Gamma(z)
                 preprocessed = re.sub(r'\\([a-zA-Z]+)\s*\{\\left\s*\((.*?)\\right\s*\)\}', r'\\\1(\2)', selection)
                 preprocessed = re.sub(r'\\left\s*\((.*?)\\right\s*\)', r'(\1)', preprocessed)
-                
-                # e를 sp.E로 변환하기 위해 parse_latex의 결과를 보정하거나 
-                # 파싱 전에 텍스트 레벨에서 e^... 형태를 변환 시도
-                expr = parse_latex(preprocessed)
-                if sp.Symbol('e') in expr.free_symbols:
-                    expr = expr.subs(sp.Symbol('e'), sp.E)
+                # [Fix] parse_latex 는 그리스 문자/상수를 Symbol 로 파싱한다
+                # (\pi → Symbol('pi') 는 sp.pi 가 아님). 공유 변환 계층 latex_to_sympy 가
+                # \mathrm/\text/\operatorname 정규화(M3) + 상수 변환(M1) +
+                # safe_parse_expr 화이트리스트 폴백(S2)까지 한 번에 수행한다 (H2).
+                imaginary_unit = bool(
+                    config.get('imaginaryUnit')
+                    or (config.get('settings') or {}).get('imaginaryUnit')
+                )
+                expr = latex_to_sympy(preprocessed, imaginary_unit=imaginary_unit)
             
             ops = get_calc_operations()
             if action not in ops:
-                raise ValueError(f"Unknown action: {action}")
+                raise ValueError(f"알 수 없는 명령입니다: {action}")
             result = ops[action](expr, sub_cmds, parallels, config, selection)
+
+        # [N5] solve 결과가 빈 리스트이면 (x = x+1 같은 모순 또는 해가 없는 방정식)
+        # 빈 리스트가 성공으로 포장되어 문서에 [] 가 삽입되는 것을 차단한다.
+        # step=1 경로의 get_solve_steps(BooleanFalse) 크래시도 이 지점에서 함께 예방된다.
+        if action == "solve" and isinstance(result, (list, tuple)) and len(result) == 0:
+            return json.dumps({"status": "error", "message": "해가 없습니다 (모순된 방정식)"})
+
+        # [Fix] 오류 문자열이 status:"success" latex 로 포장되어 문서에 삽입되는 문제 차단 (P11)
+        # op_ode/op_num_solve 는 실패 시 오류 문자열을 반환한다. dimcheck(인라인 주석 렌더링,
+        # '%' 로 시작)와 num_solve 의 plot JSON('{' 로 시작)은 의도된 반환이므로 제외된다.
+        if isinstance(result, str) and _is_error_string(result):
+            return json.dumps({"status": "error", "message": _error_message_text(result)})
         
         final_latex = result if isinstance(result, str) else sp.latex(result)
             
@@ -1264,10 +1507,14 @@ def execute_calc(parsed_json_str):
                         # 미분 기호를 위해 공용 사용 가능
                         e = parse_latex(preprocess_latex_ode(p.strip()))
                         all_vars.update([str(s) for s in e.free_symbols])
-                    except: pass
-            vars_list = list(all_vars)
+                    except Exception as ex:
+                        # [P17] 개별 방정식 파싱 실패는 무시하되 로그로 남긴다.
+                        # 조용히 삼키면 vars 목록이 비어 step/vars 기능이 오작동한다.
+                        logger.debug("execute_calc: ODE 변수 수집 중 파싱 실패: %s", ex)
+            vars_list = sorted(all_vars)  # [N3] set 순회 비결정성 제거 — 이름순 정렬
         else:
-            vars_list = [str(s) for s in expr.free_symbols]
+            # [N3] free_symbols set 순회 비결정성 제거 — 이름순 정렬
+            vars_list = sorted(str(s) for s in expr.free_symbols)
 
         if step_level > 0:
             # 수식 전개 과정을 AST 기반으로 추적 (MVP는 요약본 제공)

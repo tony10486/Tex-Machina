@@ -24,6 +24,9 @@ def handle_matrix(sub_cmds, parallels, config=None):
             r_str, c_str = cmds.pop(0).split('x')
             rows, cols = int(r_str), int(c_str)
             size_specified = True
+            # [보안] 행렬 크기 제한 — 거대 행렬 생성으로 인한 메모리 폭주 방지
+            if rows > 500 or cols > 500:
+                raise ValueError("행렬 크기는 500×500을 초과할 수 없습니다")
             
         actual_data_parts = []
         while cmds:
@@ -219,6 +222,10 @@ def handle_matrix(sub_cmds, parallels, config=None):
             if not size_specified:
                 rows = len(parsed_data)
                 cols = max(len(r) for r in parsed_data) if parsed_data else 1
+
+            # [보안] 데이터 기반 행렬 크기 제한 (size 미지정 대용량 입력 대비)
+            if rows > 500 or cols > 500:
+                raise ValueError("행렬 크기는 500×500을 초과할 수 없습니다")
 
             for i in range(rows):
                 row_data = []
