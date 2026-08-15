@@ -23,26 +23,47 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this._getHtml(webviewView.webview);
 
         webviewView.webview.onDidReceiveMessage(data => {
+            // 메시지 밸리데이션 (CSP/보안: 웹뷰에서 온 데이터를 명령에 그대로 전달하지 않음)
+            const ALLOWED_SNIPPET_SCRIPT_TYPES = ['js', 'python'];
+            const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
+            if (data.command === 'defineSnippet') {
+                const sn = data.snippet;
+                // script.type 은 허용 목록만 통과 (임의 코드 실행 방지)
+                if (sn && sn.script && sn.script.type && !ALLOWED_SNIPPET_SCRIPT_TYPES.includes(sn.script.type)) {
+                    return; // 거부
+                }
+                if (sn && isNonEmptyString(sn.name)) {
+                    vscode.commands.executeCommand('tex-machina.snippets.save', sn);
+                }
+                return;
+            }
+            if (data.command === 'defineMacro' || data.command === 'deleteMacro' || data.command === 'applyMacro') {
+                if (!isNonEmptyString(data.name)) return; // 비문자열/빈 이름 거부
+                if (data.command === 'defineMacro') {
+                    vscode.commands.executeCommand('tex-machina.defineMacro', data.name, data.chain);
+                } else if (data.command === 'deleteMacro') {
+                    vscode.commands.executeCommand('tex-machina.deleteMacro', data.name);
+                } else {
+                    vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
+                }
+                return;
+            }
+            if (data.command === 'deleteSnippet' || data.command === 'applySnippet') {
+                if (!isNonEmptyString(data.name)) return;
+                vscode.commands.executeCommand(data.command === 'deleteSnippet' ? 'tex-machina.snippets.delete' : 'tex-machina.snippets.insert', data.name);
+                return;
+            }
+
             if (data.command === 'rerender') {
                 vscode.commands.executeCommand('tex-machina.rerenderPlot', data.expr, data.samples, data.options);
             } else if (data.command === 'exportPdf') {
                 vscode.commands.executeCommand('tex-machina.export3dPlot', data.expr, data.samples, data.color, data.options);
             } else if (data.command === 'saveImage') {
+                if (!isNonEmptyString(data.imageData)) return;
                 const base64Data = data.imageData.replace(/^data:image\/\w+;base64,/, "");
                 const buffer = Buffer.from(base64Data, 'base64');
                 vscode.commands.executeCommand('tex-machina.internalSaveWebviewImage', buffer, data.format, data.expr);
-            } else if (data.command === 'defineMacro') {
-                vscode.commands.executeCommand('tex-machina.defineMacro', data.name, data.chain);
-            } else if (data.command === 'deleteMacro') {
-                vscode.commands.executeCommand('tex-machina.deleteMacro', data.name);
-            } else if (data.command === 'applyMacro') {
-                vscode.commands.executeCommand('tex-machina.applyMacro', data.name);
-            } else if (data.command === 'defineSnippet') {
-                vscode.commands.executeCommand('tex-machina.snippets.save', data.snippet);
-            } else if (data.command === 'deleteSnippet') {
-                vscode.commands.executeCommand('tex-machina.snippets.delete', data.name);
-            } else if (data.command === 'applySnippet') {
-                vscode.commands.executeCommand('tex-machina.snippets.insert', data.name);
             } else if (data.command === 'exportSnippets') {
                 vscode.commands.executeCommand('tex-machina.snippets.export');
             } else if (data.command === 'importSnippets') {
@@ -142,19 +163,24 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
     private _getHtml(webview: vscode.Webview) {
         const mathjaxUri = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
-        const x3domJs = "https://www.x3dom.org/download/1.8.3/x3dom.js";
-        const x3domCss = "https://www.x3dom.org/download/1.8.3/x3dom.css";
         const visNetworkJs = "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js";
-        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.x3dom.org https://unpkg.com; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net https://www.x3dom.org; font-src https://cdn.jsdelivr.net https://www.x3dom.org; connect-src https://www.x3dom.org blob:; worker-src 'self' blob:;`;
+        // Three.js 플롯 렌더러 (Phase 0.2/0.3) — 로컬 번들, CDN 없음 (오프라인)
+        const plot3dUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'plot3d.js'));
+        const nonce = crypto.randomUUID();
+        // CSP: script-src 에서 'unsafe-inline'/'unsafe-eval' 제거 (XSS 격리).
+        // - 인라인 <script> 는 nonce 로만 허용.
+        // - 'unsafe-eval' 은 외부 번들(MathJax/vis-network)의 eval 경로가 브라우저에서
+        //   실행되지 않는 것 확인 — 제거해도 동작 보존.
+        // - x3dom.org 제거 (Three.js 로컬 번들로 대체), webview.cspSource 는 dist/webview 로드용.
+        const csp = `default-src 'none'; img-src ${webview.cspSource} data: blob:; script-src 'nonce-${nonce}' ${webview.cspSource} https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; connect-src blob:; worker-src 'self' blob:;`;
 
         return `<!DOCTYPE html>
         <html>
         <head>
             <meta http-equiv="Content-Security-Policy" content="${csp}">
-            <link rel="stylesheet" href="${x3domCss}">
-            <script src="${x3domJs}"></script>
             <script src="${visNetworkJs}"></script>
-            <script>
+            <script src="${plot3dUri}"></script>
+            <script nonce="${nonce}">
                 window.MathJax = {
                     tex: {
                         inlineMath: [['$', '$'], ['\\(', '\\)']],
@@ -348,7 +374,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <details id="details-labels" ontoggle="vscode.postMessage({ command: 'toggleLabelDiscovery', expanded: this.open })">
                     <summary>Label Discovery</summary>
                     <div id="label-discovery" style="padding: 10px;">
-                        <button style="width: 100%; margin-bottom: 10px;" onclick="discoverLabels()">Discover Labels</button>
+                        <button style="width: 100%; margin-bottom: 10px;" data-action="discoverLabels">Discover Labels</button>
                         <div id="viz-container">
                             <div id="viz"></div>
                             <div id="legend">
@@ -357,12 +383,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 <div class="legend-item"><span class="dot" style="background:#caffbf"></span> Fig</div>
                             </div>
                             <div id="inspector">
-                                <span id="close-inspector" onclick="document.getElementById('inspector').classList.remove('active')">×</span>
+                                <span id="close-inspector" data-action="closeInspector">×</span>
                                 <div class="ins-title">INSPECTOR</div>
                                 <div id="ins-label" class="ins-label">Label</div>
                                 <div id="ins-meta" class="ins-meta"></div>
                                 <div class="math-preview" id="ins-math-target"></div>
-                                <button onclick="document.getElementById('inspector').classList.remove('active')">Close</button>
+                                <button data-action="closeInspector">Close</button>
                             </div>
                         </div>
                     </div>
@@ -375,7 +401,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             <input type="text" id="new-macro-name" placeholder="Name (e.g. diff)">
                             <input type="text" id="new-macro-chain" placeholder="Chain (e.g. calc > diff)">
                         </div>
-                        <button style="width: 100%; margin-bottom: 10px;" onclick="addMacro()">Add Macro</button>
+                        <button style="width: 100%; margin-bottom: 10px;" data-action="addMacro">Add Macro</button>
                         <div id="macro-list"></div>
                     </div>
                 </details>
@@ -384,9 +410,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     <summary>📝 스니펫</summary>
                     <div id="sn" style="padding: 10px;">
                         <div class="snippet-toolbar">
-                            <button class="secondary" onclick="openSnippetForm()">+ 새 스니펫</button>
-                            <button class="secondary" onclick="exportSnippets()">내보내기</button>
-                            <button class="secondary" onclick="importSnippets()">가져오기</button>
+                            <button class="secondary" data-action="openSnippetForm">+ 새 스니펫</button>
+                            <button class="secondary" data-action="exportSnippets">내보내기</button>
+                            <button class="secondary" data-action="importSnippets">가져오기</button>
                         </div>
                         <div id="snippet-form" class="snippet-form" style="display: none;">
                             <div class="macro-input-group">
@@ -400,8 +426,8 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             <textarea id="sn-body" rows="3" placeholder="\\frac{$1}{$2}$0"></textarea>
                             <input type="text" id="sn-desc" placeholder="설명 (선택)">
                             <div class="btn-row">
-                                <button onclick="saveSnippetForm()">저장</button>
-                                <button class="secondary" onclick="cancelSnippetForm()">취소</button>
+                                <button data-action="saveSnippetForm">저장</button>
+                                <button class="secondary" data-action="cancelSnippetForm">취소</button>
                             </div>
                         </div>
                         <ul id="snippet-list"></ul>
@@ -411,7 +437,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <details id="details-s" class="plot-ui" style="display:none">
                     <summary>Style</summary>
                     <div id="s" class="controls" style="display:grid;">
-                        <div class="group"><label>Scheme</label><select id="sch" onchange="toggleScheme()">
+                        <div class="group"><label>Scheme</label><select id="sch" data-action="toggleScheme">
                             <option value="uniform">Uniform</option>
                             <option value="height">Height</option>
                             <option value="gradient">Gradient</option>
@@ -435,40 +461,40 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <details id="details-v" class="plot-ui" style="display:none">
                     <summary>View</summary>
                     <div id="v" class="controls" style="display:grid;">
-                        <div class="group"><label>Projection</label><select id="proj" onchange="updateViewpoint()">
+                        <div class="group"><label>Projection</label><select id="proj" data-action="updateViewpoint">
                             <option value="perspective">Perspective</option>
                             <option value="ortho">Orthographic</option>
                         </select></div>
                         <div class="group"><label>Standard Views</label>
                             <div class="btn-row">
-                                <button class="secondary" onclick="setView('iso')">Iso</button>
-                                <button class="secondary" onclick="setView('top')">Top</button>
-                                <button class="secondary" onclick="setView('front')">Front</button>
-                                <button class="secondary" onclick="setView('side')">Side</button>
+                                <button class="secondary" data-action="setView" data-view="iso">Iso</button>
+                                <button class="secondary" data-action="setView" data-view="top">Top</button>
+                                <button class="secondary" data-action="setView" data-view="front">Front</button>
+                                <button class="secondary" data-action="setView" data-view="side">Side</button>
                             </div>
                         </div>
                         <div class="group full" style="border: 1px solid #444; padding: 5px; margin-top: 5px;">
                             <label>Rotation & Zoom</label>
                             <div style="display: flex; align-items: center; gap: 8px; margin-top:5px">
                                 <label style="width: 40px;">Elev</label>
-                                <input type="range" id="rot-elev" min="-90" max="90" value="30" oninput="updateFromSliders()">
+                                <input type="range" id="rot-elev" min="-90" max="90" value="30" data-action="updateFromSliders">
                                 <span id="val-elev" style="width: 30px;">30</span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <label style="width: 40px;">Azim</label>
-                                <input type="range" id="rot-azim" min="-180" max="180" value="45" oninput="updateFromSliders()">
+                                <input type="range" id="rot-azim" min="-180" max="180" value="45" data-action="updateFromSliders">
                                 <span id="val-azim" style="width: 30px;">45</span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <label style="width: 40px;">Zoom</label>
-                                <input type="range" id="zoom" min="5" max="150" value="30" oninput="updateFromSliders()">
+                                <input type="range" id="zoom" min="5" max="150" value="30" data-action="updateFromSliders">
                                 <span id="val-zoom" style="width: 30px;">30</span>
                             </div>
                             <div class="btn-row" style="margin-top:5px">
-                                <button class="secondary" onclick="alignZ()">Align Z Axis</button>
+                                <button class="secondary" data-action="alignZ">Align Z Axis</button>
                             </div>
                         </div>
-                        <div class="group full"><label><input type="checkbox" id="textbook-mode" onchange="toggleTextbook()"> Textbook Mode</label></div>
+                        <div class="group full"><label><input type="checkbox" id="textbook-mode" data-action="toggleTextbook"> Textbook Mode</label></div>
                     </div>
                 </details>
 
@@ -502,15 +528,15 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 <details id="details-light" class="plot-ui" style="display:none">
                     <summary>Light</summary>
                     <div id="light-tab" class="controls" style="display:grid;">
-                        <div class="group"><label>Ambient Intensity</label><input type="range" id="amb-int" min="0" max="1" step="0.05" value="0.3" oninput="updateLights()"></div>
-                        <div class="group"><label>Direct Intensity</label><input type="range" id="dir-int" min="0" max="2" step="0.1" value="1.0" oninput="updateLights()"></div>
-                        <div class="group"><label>Shadow Intensity</label><input type="range" id="shd-int" min="0" max="1" step="0.1" value="0.0" oninput="updateLights()"></div>
-                        <div class="group"><label>Light Position</label><select id="light-pos" onchange="updateLights()">
+                        <div class="group"><label>Ambient Intensity</label><input type="range" id="amb-int" min="0" max="1" step="0.05" value="0.3" data-action="updateLights"></div>
+                        <div class="group"><label>Direct Intensity</label><input type="range" id="dir-int" min="0" max="2" step="0.1" value="1.0" data-action="updateLights"></div>
+                        <div class="group"><label>Shadow Intensity</label><input type="range" id="shd-int" min="0" max="1" step="0.1" value="0.0" data-action="updateLights"></div>
+                        <div class="group"><label>Light Position</label><select id="light-pos" data-action="updateLights">
                             <option value="top">Top Right</option>
                             <option value="front">Front</option>
                             <option value="left">Left High</option>
                         </select></div>
-                        <div class="group full"><label><input type="checkbox" id="headlight" checked onchange="updateLights()"> Headlight</label></div>
+                        <div class="group full"><label><input type="checkbox" id="headlight" checked data-action="updateLights"> Headlight</label></div>
                     </div>
                 </details>
 
@@ -527,11 +553,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                 </details>
 
                 <div class="btn-row full plot-btn-row" style="display:none; padding: 10px;">
-                    <button class="secondary" onclick="fitView()">Fit View</button>
-                    <button onclick="apply()">Apply Changes</button>
+                    <button class="secondary" data-action="fitView">Fit View</button>
+                    <button data-action="apply">Apply Changes</button>
                 </div>
                 <div class="controls full plot-btn-row" style="display:none; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #444; margin-top: 5px;">
-                    <div class="group"><label>Preset</label><select id="exp-preset" onchange="setExportPreset()">
+                    <div class="group"><label>Preset</label><select id="exp-preset" data-action="setExportPreset">
                         <option value="custom">Custom</option>
                         <option value="square">Square (1000)</option>
                         <option value="hd">HD (1280x720)</option>
@@ -543,15 +569,19 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     <div class="group full"><label><input type="checkbox" id="exp-smart" checked> Smart Crop</label></div>
                 </div>
                 <div class="btn-row full plot-btn-row" style="display:none; padding: 0 10px 10px 10px;">
-                    <button class="secondary" onclick="exportPlot()">Capture Image</button>
+                    <button class="secondary" data-action="exportPlot">Capture Image</button>
                     <select id="exp-fmt" style="width:70px; flex:none"><option value="png">PNG</option><option value="jpg">JPG</option></select>
                 </div>
                 <div class="btn-row full plot-btn-row" style="display:none; padding: 0 10px 10px 10px;">
-                    <button class="secondary" onclick="hqExport()">HQ Export (Matplotlib PDF)</button>
+                    <button class="secondary" data-action="hqExport">HQ Export (Matplotlib PDF)</button>
                 </div>
             </div>
             <script>
                 const vscode = acquireVsCodeApi();
+                // 웹뷰 언로드 시 Three.js 렌더러 리소스 해제 (GPU 메모리 누수 방지 — Phase 4)
+                window.addEventListener('beforeunload', () => {
+                    if (window.TexMachinaPlot3D) window.TexMachinaPlot3D.dispose();
+                });
                 let last = "";
                 let labelNetwork;
                 let visNodes = new vis.DataSet([]);
@@ -638,7 +668,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         const nameAttr = snippetNameAttr(name);
                         item.innerHTML = \`
                             <div class="snippet-header">
-                                <span class="snippet-name" onclick="applySnippet('\${nameAttr}')" title="활성 편집기에 삽입">\${escapeHtml(name)}</span>
+                                <span class="snippet-name" data-action="applySnippet" data-name="\${nameAttr}" title="활성 편집기에 삽입">\${escapeHtml(name)}</span>
                                 <div style="display: flex; gap: 4px; align-items: center;">
                                     \${snippetScopeBadge((sn && sn.scope) || 'any')}
                                     <span class="snippet-indicators">\${indicators}</span>
@@ -647,9 +677,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             <div class="snippet-body" title="\${escapeHtml(body)}">\${escapeHtml(body)}</div>
                             \${description ? '<div class="snippet-desc">' + escapeHtml(description) + '</div>' : ''}
                             <div class="snippet-actions">
-                                <button onclick="applySnippet('\${nameAttr}')">삽입</button>
-                                <button class="secondary" onclick="editSnippet('\${nameAttr}')">편집</button>
-                                <button class="secondary" style="background: #a30000;" onclick="deleteSnippet('\${nameAttr}')">삭제</button>
+                                <button data-action="applySnippet" data-name="\${nameAttr}">삽입</button>
+                                <button class="secondary" data-action="editSnippet" data-name="\${nameAttr}">편집</button>
+                                <button class="secondary" style="background: #a30000;" data-action="deleteSnippet" data-name="\${nameAttr}">삭제</button>
                             </div>
                         \`;
                         list.appendChild(item);
@@ -731,6 +761,11 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     document.getElementById('val-azim').innerText = azim;
                     document.getElementById('val-zoom').innerText = zoom;
                     
+                    if (window.TexMachinaPlot3D) {
+                        window.TexMachinaPlot3D.setView(elev, azim, zoom);
+                        return;
+                    }
+                    
                     const e = elev * Math.PI / 180;
                     const a = azim * Math.PI / 180;
                     
@@ -797,6 +832,16 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     const pos = document.getElementById('light-pos').value;
                     const head = document.getElementById('headlight').checked;
 
+                    if (window.TexMachinaPlot3D && document.getElementById('container').querySelector('canvas')) {
+                        window.TexMachinaPlot3D.updateOptions({
+                            ambIntensity: parseFloat(amb) || 0.9,
+                            dirIntensity: parseFloat(dir) || 2.2,
+                            shdIntensity: parseFloat(shd) || 0.15,
+                            headlight: head,
+                        });
+                        return;
+                    }
+
                     const dl = document.getElementById('dir-light');
                     const al = document.getElementById('amb-light');
                     const ni = document.getElementById('nav-info');
@@ -814,6 +859,10 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
 
                 function updateViewpoint() {
                     const isOrtho = document.getElementById('proj').value === 'ortho';
+                    if (window.TexMachinaPlot3D && document.getElementById('container').querySelector('canvas')) {
+                        window.TexMachinaPlot3D.updateOptions({ ortho: isOrtho });
+                        return;
+                    }
                     const x3d = document.getElementById('x');
                     if (!x3d) return;
                     
@@ -877,6 +926,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     });
                 }
                 function fitView(){
+                    if (window.TexMachinaPlot3D) { window.TexMachinaPlot3D.fitView(); return; }
                     const x3d = document.getElementById('x');
                     if (x3d && x3d.runtime) x3d.runtime.showAll();
                 }
@@ -930,6 +980,23 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                     else if(p === 'a4') { w.value = 2480; h.value = 1754; }
                 }
                 function exportPlot(){
+                    // Three.js 렌더러 경로 (v1) — canvas 캡처 + 기존 saveImage 브리지
+                    if (window.TexMachinaPlot3D) {
+                        const fmt = document.getElementById('exp-fmt').value || 'png';
+                        const isSmart = document.getElementById('exp-smart').checked;
+                        const bgColor = document.getElementById('bg').value;
+                        const raw = window.TexMachinaPlot3D.capture(fmt === 'jpg' ? 'jpeg' : 'png');
+                        if (!raw) return;
+                        if (isSmart) {
+                            window.TexMachinaPlot3D.captureCropped(fmt === 'jpg' ? 'jpeg' : 'png', bgColor, (cropped) => {
+                                vscode.postMessage({ command: 'saveImage', imageData: cropped, format: fmt === 'jpg' ? 'jpg' : 'png', expr: last });
+                            });
+                        } else {
+                            vscode.postMessage({ command: 'saveImage', imageData: raw, format: fmt === 'jpg' ? 'jpg' : 'png', expr: last });
+                        }
+                        return;
+                    }
+
                     const x3d = document.getElementById('x');
                     if (!x3d || !x3d.runtime) return;
                     
@@ -1146,7 +1213,7 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 document.getElementById('ins-label').innerText = node.label;
                                 document.getElementById('ins-meta').innerText = \`LINE \${node.line} | \${node.refCount || 0} REFS\`;
                                 const target = document.getElementById('ins-math-target');
-                                target.innerHTML = \`\\\\[ \${node.content} \\\\]\`;
+                                target.innerHTML = \`\\\\[ \${escapeHtml(node.content)} \\\\]\`;
                                 ins.classList.add('active');
                                 if (window.MathJax) MathJax.typesetPromise([target]);
                             } else {
@@ -1174,9 +1241,9 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                             content = "Plot Preview";
                         }
                         if (warning) {
-                            document.getElementById('out').innerHTML = '<div style="color: #ffa500; margin-bottom: 5px;">⚠️ ' + warning + '</div>' + content;
+                            document.getElementById('out').innerHTML = '<div style="color: #ffa500; margin-bottom: 5px;">⚠️ ' + escapeHtml(warning) + '</div>' + escapeHtml(content);
                         } else {
-                            document.getElementById('out').innerHTML = content;
+                            document.getElementById('out').innerHTML = escapeHtml(content);
                         }
 
                         if (x3d_data) {
@@ -1259,7 +1326,28 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 }
                             }
 
-                            document.getElementById('container').innerHTML = \`
+                            const containerEl = document.getElementById('container');
+                            // Three.js 렌더러 (v1/v2 mesh contract) — x3dom 대체 (Phase 1 Track A)
+                            if (window.TexMachinaPlot3D && x3d_data.mesh) {
+                                containerEl.innerHTML = '';
+                                const plotHost = document.createElement('div');
+                                plotHost.style.width = '100%';
+                                plotHost.style.height = '400px';
+                                containerEl.appendChild(plotHost);
+                                window.TexMachinaPlot3D.build(x3d_data, plotHost, {
+                                    bgColor: document.getElementById('bg').value,
+                                    ortho: document.getElementById('proj').value === 'ortho',
+                                    headlight: document.getElementById('headlight').checked,
+                                    axisStyle: document.getElementById('ax-style').value,
+                                    showAxes: document.getElementById('show-axes').checked,
+                                    ambIntensity: parseFloat(document.getElementById('amb-int').value) || 0.9,
+                                    dirIntensity: parseFloat(document.getElementById('dir-int').value) || 2.2,
+                                    shdIntensity: parseFloat(document.getElementById('shd-int').value) || 0.15,
+                                    meshColor: document.getElementById('col').value,
+                                    meshOpacity: parseFloat(document.getElementById('op').value) || 1.0,
+                                });
+                            } else {
+                            containerEl.innerHTML = \`
                                 <x3d id="x" antialiasing="\${aa}" style="width:100%; height:400px">
                                     <scene>
                                         <navigationInfo id="nav-info" headlight="\${head}"></navigationInfo>
@@ -1288,11 +1376,12 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                                 window.x3dom.reload();
                                 setTimeout(updateFromSliders, 200);
                             }
+                            }
                         } else if (preview_img) {
                             document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
                             document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
                             document.getElementById('details-t').open = true;
-                            document.getElementById('container').innerHTML = \`<div style="text-align:center; margin-top:10px;"><img src="\${preview_img}" style="max-width:100%; border:1px solid #444;"></div>\`;
+                            document.getElementById('container').innerHTML = \`<div style="text-align:center; margin-top:10px;"><img src="\${escapeHtml(preview_img)}" style="max-width:100%; border:1px solid #444;"></div>\`;
                         } else {
                             document.querySelectorAll('.plot-ui').forEach(el => el.style.display = 'none');
                             document.querySelectorAll('.plot-btn-row').forEach(el => el.style.display = 'none');
@@ -1307,21 +1396,87 @@ export class TeXMachinaWebviewProvider implements vscode.WebviewViewProvider {
                         for (const [name, chain] of Object.entries(macros)) {
                             const item = document.createElement('div');
                             item.className = 'macro-item';
+                            const nameAttr = escapeHtml(name).replace(/'/g, "\\'");
+                            const chainAttr = escapeHtml(chain).replace(/'/g, "\\'");
                             item.innerHTML = \`
                                 <div class="macro-header">
-                                    <span class="macro-name" onclick="applyMacro('\${name}')" title="Apply this macro to selection">;\${name}</span>
+                                    <span class="macro-name" data-action="applyMacro" data-name="\${nameAttr}" title="Apply this macro to selection">;\${escapeHtml(name)}</span>
                                     <div class="macro-actions">
-                                        <button class="secondary" onclick="editMacro('\${name}', '\${chain}')">Edit</button>
-                                        <button class="secondary" style="background: #a30000;" onclick="deleteMacro('\${name}')">Del</button>
+                                        <button class="secondary" data-action="editMacro" data-name="\${nameAttr}" data-chain="\${chainAttr}">Edit</button>
+                                        <button class="secondary" style="background: #a30000;" data-action="deleteMacro" data-name="\${nameAttr}">Del</button>
                                     </div>
                                 </div>
-                                <div class="macro-chain">\${chain}</div>
+                                <div class="macro-chain">\${escapeHtml(chain)}</div>
                             \`;
                             list.appendChild(item);
                         }
                     } else if (type === 'updateSnippets') {
                         renderSnippets(snippets);
                     }
+                });
+
+                // Z Range 입력 변경 → Three.js 씬 활성 시 setZRange (v2: IPC 없이 LUT 재클립)
+                const zrInput = document.getElementById('zr');
+                if (zrInput) {
+                    zrInput.addEventListener('change', () => {
+                        if (!window.TexMachinaPlot3D) return;
+                        const zr = zrInput.value.split(',').map(v => parseFloat(v.trim()));
+                        if (zr.length === 2 && isFinite(zr[0]) && isFinite(zr[1])) {
+                            window.TexMachinaPlot3D.setZRange(zr[0], zr[1]);
+                        }
+                    });
+                }
+
+                // data-action 기반 이벤트 위임 (CSP: 인라인 onclick/onchange/oninput 제거)
+                // - <button data-action="fn"> → click 시 fn()
+                // - <select data-action="fn"> → change 시 fn()
+                // - <input data-action="fn"> → input 시 fn()
+                // - data-name/data-chain/data-view/data-inline 는 인자 전달용
+                function handleAction(action, el, eventType) {
+                    const getAttr = (k) => el.getAttribute(k);
+                    const num = (k, d) => { const v = parseFloat(getAttr(k)); return isFinite(v) ? v : d; };
+                    switch (action) {
+                        case 'discoverLabels': discoverLabels(); break;
+                        case 'closeInspector': document.getElementById('inspector').classList.remove('active'); break;
+                        case 'addMacro': addMacro(); break;
+                        case 'openSnippetForm': openSnippetForm(); break;
+                        case 'exportSnippets': exportSnippets(); break;
+                        case 'importSnippets': importSnippets(); break;
+                        case 'saveSnippetForm': saveSnippetForm(); break;
+                        case 'cancelSnippetForm': cancelSnippetForm(); break;
+                        case 'toggleScheme': toggleScheme(); break;
+                        case 'updateViewpoint': updateViewpoint(); break;
+                        case 'setView': setView(getAttr('data-view')); break;
+                        case 'updateFromSliders': updateFromSliders(); break;
+                        case 'alignZ': alignZ(); break;
+                        case 'toggleTextbook': toggleTextbook(); break;
+                        case 'updateLights': updateLights(); break;
+                        case 'fitView': fitView(); break;
+                        case 'apply': apply(); break;
+                        case 'setExportPreset': setExportPreset(); break;
+                        case 'exportPlot': exportPlot(); break;
+                        case 'hqExport': hqExport(); break;
+                        case 'applySnippet': applySnippet(getAttr('data-name')); break;
+                        case 'editSnippet': editSnippet(getAttr('data-name')); break;
+                        case 'deleteSnippet': deleteSnippet(getAttr('data-name')); break;
+                        case 'applyMacro': applyMacro(getAttr('data-name')); break;
+                        case 'editMacro': editMacro(getAttr('data-name'), getAttr('data-chain')); break;
+                        case 'deleteMacro': deleteMacro(getAttr('data-name')); break;
+                        default: console.warn('[TeX-Machina] 알 수 없는 UI 액션:', action);
+                    }
+                }
+
+                document.addEventListener('click', (e) => {
+                    const el = e.target.closest('[data-action]');
+                    if (el) handleAction(el.dataset.action, el, 'click');
+                });
+                document.addEventListener('change', (e) => {
+                    const el = e.target.closest('[data-action]');
+                    if (el) handleAction(el.dataset.action, el, 'change');
+                });
+                document.addEventListener('input', (e) => {
+                    const el = e.target.closest('[data-action]');
+                    if (el) handleAction(el.dataset.action, el, 'input');
                 });
             </script>
         </body>
