@@ -7,11 +7,18 @@ import { StringDecoder } from 'string_decoder';
 
 export class PythonService implements vscode.Disposable {
     private pythonProcess: ChildProcess | null = null;
-    private resolvers: Map<string, (response: any) => void> = new Map();
+    private resolvers: Map<string, { resolve: (response: any) => void; reject: (reason?: any) => void }> = new Map();
     private stdoutBuffer: string = "";
+    private stderrBuffer: string = "";
+    private stderrFlushTimer: NodeJS.Timeout | null = null;
     private decoder = new StringDecoder('utf8');
     private startupResolver: (() => void) | null = null;
+    private startupReject: ((reason?: any) => void) | null = null;
     private startupTimeout: NodeJS.Timeout | null = null;
+    private restartTimer: NodeJS.Timeout | null = null;
+    private restartDelay = 500;
+    /** stop()/dispose()에 의한 의도적 종료 여부 — true면 종료 핸들러가 재시작을 예약하지 않는다. */
+    private stopped = false;
 
     constructor(private context: vscode.ExtensionContext) {}
 
@@ -139,6 +146,7 @@ export class PythonService implements vscode.Disposable {
     }
 
     public async start(): Promise<void> {
+        this.stopped = false;
         let pythonCommand: string;
         try {
             pythonCommand = await this.ensurePythonEnvironment();
@@ -151,33 +159,62 @@ export class PythonService implements vscode.Disposable {
 
         const serverPath = this.context.asAbsolutePath('python_backend/server.py');
         console.log('[PythonService] spawning:', pythonCommand);
-        this.pythonProcess = spawn(pythonCommand, [serverPath]);
+        const child = spawn(pythonCommand, [serverPath]);
+        this.pythonProcess = child;
 
-        this.pythonProcess.on('error', (err) => {
+        child.on('error', (err) => {
             vscode.window.showErrorMessage(
                 `Python 실행 실패: ${err.message}`
             );
+            // spawn 실패 시 ready 대기를 즉시 거부 — 60초 기동 스톨(N15)을 방지한다.
+            if (this.startupReject) {
+                if (this.startupTimeout) {
+                    clearTimeout(this.startupTimeout);
+                    this.startupTimeout = null;
+                }
+                const reject = this.startupReject;
+                this.startupResolver = null;
+                this.startupReject = null;
+                reject(new Error(`Python 프로세스를 시작하지 못했습니다: ${err.message}`));
+            }
         });
 
         const handleProcessExit = (code: number | null, signal: string | null) => {
+            // 'exit'/'close' 중복 호출과, 재시작 후 이전 프로세스에서 늦게 도착한
+            // 이벤트가 새 프로세스의 resolver를 건드리는 것을 방지한다.
+            if (this.pythonProcess !== child) { return; }
+            this.pythonProcess = null;
             console.log(`[PythonService] process terminated (code: ${code}, signal: ${signal})`);
-            for (const [reqId, resolver] of this.resolvers.entries()) {
+            for (const [, entry] of this.resolvers.entries()) {
                 try {
-                    resolver({ status: 'error', message: 'Python 프로세스가 비정상 종료되었습니다.' });
+                    entry.reject(new Error('계산 서버 프로세스가 종료되었습니다'));
                 } catch { /* ignore */ }
             }
             this.resolvers.clear();
-            this.pythonProcess = null;
+            // 의도적 종료(stop/dispose)가 아니고 재시작이 이미 예약되어 있지 않다면
+            // 백오프를 적용해 재시작을 예약한다 (충돌 후 자동 복구).
+            if (!this.stopped && !this.restartTimer) {
+                this.restartWithBackoff();
+            }
         };
 
-        this.pythonProcess.on('exit', handleProcessExit);
-        this.pythonProcess.on('close', handleProcessExit);
+        child.on('exit', handleProcessExit);
+        child.on('close', handleProcessExit);
 
-        this.pythonProcess.stderr?.on('data', (data: Buffer) => {
-            console.error(`Python Error: ${data.toString()}`);
+        child.stderr?.on('data', (data: Buffer) => {
+            // stderr 스팸 방지(N16): 버퍼링 후 최대 1초에 한 번씩 묶어서 출력한다.
+            this.stderrBuffer += data.toString();
+            if (!this.stderrFlushTimer) {
+                this.stderrFlushTimer = setTimeout(() => {
+                    this.stderrFlushTimer = null;
+                    const message = this.stderrBuffer.trim();
+                    this.stderrBuffer = "";
+                    if (message) { console.error(`Python Error: ${message}`); }
+                }, 1000);
+            }
         });
 
-        this.pythonProcess.stdout?.on('data', (data: Buffer) => {
+        child.stdout?.on('data', (data: Buffer) => {
             this.handleStdout(data);
         });
 
@@ -185,8 +222,10 @@ export class PythonService implements vscode.Disposable {
         try {
             await new Promise<void>((resolve, reject) => {
                 this.startupResolver = resolve;
+                this.startupReject = reject;
                 this.startupTimeout = setTimeout(() => {
                     this.startupResolver = null;
+                    this.startupReject = null;
                     reject(new Error('Python server startup timed out'));
                 }, 60000);
             });
@@ -213,16 +252,18 @@ export class PythonService implements vscode.Disposable {
                         clearTimeout(this.startupTimeout);
                         this.startupTimeout = null;
                     }
-                    this.startupResolver();
+                    const resolve = this.startupResolver;
                     this.startupResolver = null;
+                    this.startupReject = null;
+                    resolve();
                     continue;
                 }
 
                 const requestId = response.requestId;
-                const resolve = requestId ? this.resolvers.get(requestId) : undefined;
-                if (resolve) {
+                const entry = requestId ? this.resolvers.get(requestId) : undefined;
+                if (entry) {
                     this.resolvers.delete(requestId);
-                    resolve(response);
+                    entry.resolve(response);
                 } else {
                     this.emitResponse(response);
                 }
@@ -259,7 +300,8 @@ export class PythonService implements vscode.Disposable {
     public sendAndWait(payload: any): Promise<any> {
         return new Promise((resolve, reject) => {
             if (!this.pythonProcess?.stdin) {
-                resolve({ status: 'error', message: 'Python process is not running' });
+                // 통일된 에러 계약: 실패는 항상 reject로 전달한다 (resolve-with-error 금지).
+                reject(new Error('계산 서버가 실행 중이 아닙니다'));
                 return;
             }
             
@@ -268,12 +310,19 @@ export class PythonService implements vscode.Disposable {
 
             const timer = setTimeout(() => {
                 this.resolvers.delete(requestId);
-                reject(new Error(`Python request timed out (15s, requestId: ${requestId})`));
+                reject(new Error('처리 시간이 초과되어 계산 서버를 재시작합니다'));
+                this.restartWithBackoff();
             }, 15000);
 
-            this.resolvers.set(requestId, (response: any) => {
-                clearTimeout(timer);
-                resolve(response);
+            this.resolvers.set(requestId, {
+                resolve: (response: any) => {
+                    clearTimeout(timer);
+                    resolve(response);
+                },
+                reject: (reason?: any) => {
+                    clearTimeout(timer);
+                    reject(reason);
+                }
             });
             
             this.pythonProcess.stdin.write(JSON.stringify(payload) + '\n');
@@ -281,6 +330,12 @@ export class PythonService implements vscode.Disposable {
     }
 
     public stop(): void {
+        // 의도적 종료임을 표시 — 종료 핸들러가 재시작을 예약하지 않도록 한다.
+        this.stopped = true;
+        if (this.restartTimer) {
+            clearTimeout(this.restartTimer);
+            this.restartTimer = null;
+        }
         if (this.pythonProcess) {
             this.pythonProcess.kill();
             this.pythonProcess = null;
@@ -290,7 +345,36 @@ export class PythonService implements vscode.Disposable {
             clearTimeout(this.startupTimeout);
             this.startupTimeout = null;
         }
+        if (this.stderrFlushTimer) {
+            clearTimeout(this.stderrFlushTimer);
+            this.stderrFlushTimer = null;
+            const message = this.stderrBuffer.trim();
+            this.stderrBuffer = "";
+            if (message) { console.error(`Python Error: ${message}`); }
+        }
         this.decoder = new StringDecoder('utf8');
+    }
+
+    /**
+     * 프로세스 충돌/타임아웃 시 호출: 막혀 있는 Python 프로세스를 정리하고
+     * 백오프(500ms → 최대 2s)를 적용해 재시작을 예약한다.
+     * 단일 스레드 서버는 계산이 끝나기 전에는 스스로 응답할 수 없으므로
+     * kill 없이는 언웨지(un-wedge)가 불가능하다.
+     */
+    private restartWithBackoff(): void {
+        if (this.pythonProcess) {
+            this.pythonProcess.kill();
+        }
+        if (this.restartTimer) {
+            clearTimeout(this.restartTimer);
+        }
+        const delay = this.restartDelay;
+        this.restartDelay = Math.min(this.restartDelay * 2, 2000);
+        this.restartTimer = setTimeout(() => {
+            this.restartTimer = null;
+            this.restartDelay = 500;
+            void this.start();
+        }, delay);
     }
 
     public dispose(): void {

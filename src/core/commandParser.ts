@@ -48,7 +48,9 @@ export function splitChain(input: string, delimiter: string = "&&"): string[] {
     if (finalTrimmed) {
         parts.push(finalTrimmed);
     }
-    return parts;
+    // [N2] 빈 체인 요소 제거 — 'cmd1 && && cmd2' 또는 선행 '&&' 로 인해
+    // 빈 조각이 실제 명령으로 처리되는 것을 방지한다.
+    return parts.filter((s) => s.length > 0);
 }
 
 export function parseUserCommand(input: string, selection: string): ParsedCommand {
@@ -60,14 +62,23 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
     let isParallelSection = false;
     let isMainCmdParsed = false;
 
-    const isQuery = false;
     let startIdx = 0;
 
     // 제안서 준수: O(N) 시간 복잡도의 단일 루프 [cite: 132]
     for (let i = startIdx; i < input.length; i++) {
         const char = input[i];
         if (isEscaped) { buffer += char; isEscaped = false; continue; }
-        if (char === '\\') { isEscaped = true; continue; } // 이스케이프 처리 [cite: 128]
+        if (char === '\\') {
+            // [N12] CLI 구분자(> 또는 /) 앞의 백슬래시만 이스케이프로 처리하고,
+            // LaTeX 명령어(\pi, \theta 등)의 백슬래시는 그대로 보존한다.
+            const next = input[i + 1];
+            if (next === '>' || next === '/') {
+                isEscaped = true;
+                continue;
+            }
+            buffer += char;
+            continue;
+        }
 
         // 개선: 앞에 공백이 있는 '/'만 옵션 섹션 시작으로 인식
         if (char === '/' && !isParallelSection && i > 0 && input[i-1] === ' ') {
@@ -75,7 +86,7 @@ export function parseUserCommand(input: string, selection: string): ParsedComman
             isParallelSection = true;
             continue;
         }
-        if (char === '>' && !isParallelSection && !isQuery) {
+        if (char === '>' && !isParallelSection) {
             pushToCmds();
             continue;
         }

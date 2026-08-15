@@ -58,6 +58,8 @@ interface RequestContext {
     parallelOptions?: string[];
     isExportingPdf?: boolean;
     pdfTargetDir?: string;
+    // 웹뷰 재렌더(3D 미리보기) 경로 전용 마커 — 문서 삽입을 수행하지 않는다.
+    fromWebviewRerender?: boolean;
 }
 
 async function executeChain(chain: string[], initialSelection: string, editor: vscode.TextEditor, selection: vscode.Selection) {
@@ -102,7 +104,14 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
             }
         };
 
-        const response = await pythonService.sendAndWait(payload);
+        let response: any;
+        try {
+            response = await pythonService.sendAndWait(payload);
+        } catch (err: any) {
+            // 서버 크래시/타임아웃: 남은 체인을 중단한다.
+            vscode.window.showErrorMessage(`연산 실패 (${cmdStr}): ${err.message ?? '계산 서버 오류'}`);
+            return;
+        }
         lastResponse = response;
 
         if (response.status === 'success') {
@@ -116,22 +125,21 @@ async function executeChain(chain: string[], initialSelection: string, editor: v
     if (lastResponse && lastResponse.status === 'success') {
         const resultLatex = lastResponse.latex;
         let outputText = "";
+        // plot 결과 판별: Python의 명시적 kind 필드 우선, 구버전 백엔드 대비
+        // tikzpicture 부분 문자열 검사로 폴백 (dat 모드는 tikzpicture 없음)
+        const isPlotResult = lastResponse.kind === 'plot' || (typeof lastResponse.latex === 'string' && lastResponse.latex.includes("tikzpicture"));
 
         if (lastMainCommand === "matrix") {
             outputText = resultLatex;
         } else if (lastMainCommand === "plot") {
-            if (lastResponse.latex.includes("tikzpicture")) {
-                outputText = resultLatex;
-            } else {
-                outputText = initialSelection;
-            }
+            outputText = isPlotResult ? resultLatex : initialSelection;
         } else if (lastParallels.includes("newline")) {
             outputText = `${initialSelection}\n\n\\[\n${resultLatex}\n\\]`;
         } else {
             outputText = `${initialSelection} = ${resultLatex}`;
         }
 
-        if (lastMainCommand !== "plot" || lastResponse.latex.includes("tikzpicture")) {
+        if (lastMainCommand !== "plot" || isPlotResult) {
             await editor.edit(editBuilder => {
                 editBuilder.replace(selection, outputText);
             });
@@ -293,9 +301,14 @@ export async function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor;
         if (!editor || !editor.document.fileName.endsWith('.tex')) { return; }
         const payload = { mainCommand: "labels", config: { filepath: editor.document.uri.fsPath } };
-        const response = await pythonService.sendAndWait(payload);
-        if (response.status === 'success' && response.mainCommand === 'labels' && response.nodes) {
-            provider.updateLabels(response.nodes, response.edges);
+        try {
+            const response = await pythonService.sendAndWait(payload);
+            if (response.status === 'success' && response.mainCommand === 'labels' && response.nodes) {
+                provider.updateLabels(response.nodes, response.edges);
+            }
+        } catch (e) {
+            // 라벨 탐색은 저장/탭 전환 시 자주 호출되므로 실패를 조용히 기록만 한다.
+            console.warn('[TeX-Machina] 라벨 탐색 실패:', e);
         }
     }));
 
@@ -573,7 +586,8 @@ export async function activate(context: vscode.ExtensionContext) {
             selection: editor?.selection,
             originalText: exprLatex,
             mainCommand: parsed.mainCommand,
-            parallelOptions: parsed.parallelOptions
+            parallelOptions: parsed.parallelOptions,
+            fromWebviewRerender: true
         });
         } catch (err: any) {
             vscode.window.showErrorMessage(`그래프 다시 그리기 중 오류 발생: ${err.message}`);
@@ -723,7 +737,6 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
             const shouldShowWebview = mainCommand === 'plot';
 
             provider.updatePreview(response.latex, response.vars, response.analysis, response.x3d_data, response.warning, response.preview_img, response.expr_latex, shouldShowWebview);
-            const isRerender = parallelOptions.some(p => p.startsWith('samples=') || p.startsWith('x=') || p.startsWith('scheme='));
             
             const targetEditor = reqCtx?.editor || vscode.window.activeTextEditor;
             if (!targetEditor || targetEditor.document.isClosed) return;
@@ -745,8 +758,14 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                     } catch (err: any) { vscode.window.showErrorMessage(`저장 실패: ${err.message}`); }
                     return;
                 }
-                if (!isRerender) {
+                // 웹뷰 재렌더(3D 미리보기) 요청은 미리보기 전용 — 문서에 삽입하지 않는다.
+                // 그 외 CLI 경로(tex-machina.calc / 체인)는 samples=/x= 등 옵션과 무관하게 삽입한다.
+                if (!reqCtx?.fromWebviewRerender) {
                     const resultLatex = response.latex;
+                    // plot 결과 판별: Python의 명시적 kind 필드를 우선 사용하고,
+                    // 구버전 백엔드 대비 tikzpicture 부분 문자열 검사로 폴백한다.
+                    // (dat 모드 응답은 tikzpicture가 없어도 kind="plot"이면 삽입 대상)
+                    const isPlotResult = response.kind === 'plot' || (typeof response.latex === 'string' && response.latex.includes("tikzpicture"));
                     let outputText = "";
                     if (response.dat_content) {
                         const texDir = path.dirname(targetEditor.document.uri.fsPath);
@@ -759,10 +778,10 @@ async function handlePythonResponse(response: any, provider: TeXMachinaWebviewPr
                         } catch (err: any) { vscode.window.showErrorMessage(`파일 저장 실패: ${err.message}`); }
                     }
                     if (mainCommand === "matrix") { outputText = resultLatex; }
-                    else if (mainCommand === "plot") { outputText = response.latex.includes("tikzpicture") ? resultLatex : originalText; }
+                    else if (mainCommand === "plot") { outputText = isPlotResult ? resultLatex : originalText; }
                     else if (parallelOptions.includes("newline")) { outputText = `${originalText}\n\n\\[\n${resultLatex}\n\\]`; }
                     else { outputText = `${originalText} = ${resultLatex}`; }
-                    if (mainCommand !== "plot" || response.latex.includes("tikzpicture")) {
+                    if (mainCommand !== "plot" || isPlotResult) {
                         await targetEditor.edit(editBuilder => { editBuilder.replace(targetSelection, outputText); });
                     }
                 }

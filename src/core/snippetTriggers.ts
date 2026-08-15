@@ -76,16 +76,22 @@ export function registerSnippetTriggers(
             const resolved = resolveSnippetBody(snippet, selectionText, ctx, snippet.name);
             let body: string | null = null;
             if (resolved.kind === 'python') {
-                const resp = await pythonService.sendAndWait({
-                    mainCommand: 'snippet',
-                    subCommands: [resolved.value],
-                    rawSelection: selectionText
-                });
-                if (resp.status !== 'success') {
-                    vscode.window.showErrorMessage(resp.message ?? '스니펫 실행에 실패했습니다.');
+                try {
+                    const resp = await pythonService.sendAndWait({
+                        mainCommand: 'snippet',
+                        subCommands: [resolved.value],
+                        rawSelection: selectionText
+                    });
+                    if (resp.status !== 'success') {
+                        vscode.window.showErrorMessage(resp.message ?? '스니펫 실행에 실패했습니다.');
+                        return;
+                    }
+                    body = resp.latex;
+                } catch (e) {
+                    // 서버 크래시/타임아웃 — 타이핑 트리거에서 모달 에러를 띄우면 흐름이 방해되므로 조용히 기록한다.
+                    console.debug('snippetTriggers: python 스니펫 실행 실패:', e);
                     return;
                 }
-                body = resp.latex;
             } else {
                 body = resolved.value;
             }
@@ -200,16 +206,21 @@ export function registerSnippetTriggers(
         const resolved = resolveSnippetBody(snippet, selectionText, ctx, snippet.name);
         let body: string | null = null;
         if (resolved.kind === 'python') {
-            const resp = await pythonService.sendAndWait({
-                mainCommand: 'snippet',
-                subCommands: [resolved.value],
-                rawSelection: selectionText
-            });
-            if (resp.status !== 'success') {
-                vscode.window.showErrorMessage(resp.message ?? '스니펫 실행에 실패했습니다.');
+            try {
+                const resp = await pythonService.sendAndWait({
+                    mainCommand: 'snippet',
+                    subCommands: [resolved.value],
+                    rawSelection: selectionText
+                });
+                if (resp.status !== 'success') {
+                    vscode.window.showErrorMessage(resp.message ?? '스니펫 실행에 실패했습니다.');
+                    return;
+                }
+                body = resp.latex;
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`스니펫 실행에 실패했습니다: ${err.message ?? '계산 서버 오류'}`);
                 return;
             }
-            body = resp.latex;
         } else {
             body = resolved.value;
         }
