@@ -46,16 +46,18 @@ print(execute_calc(sys.argv[1]))
 suite('Calc Engine High Difficulty Tests', function() {
     this.timeout(10000);
 
-    test('Generalized Tensor Expand (4D Minkowski-like)', async () => {
+    test('Generalized Tensor Expand (Minkowski-like)', async () => {
         const payload = {
             rawSelection: "A_\\mu B^\\mu",
             mainCommand: "calc",
             subCommands: ["tensor_expand"],
-            parallelOptions: ["dim=4"]
+            parallelOptions: ["dim=3"]
         };
         const result = await runPythonCalc(payload);
+        // 참고: dim=4 는 보안상 리소스 캡(조합 폭발 방지, 최대 3)으로 거부되므로
+        // 최대 허용 차수인 dim=3 으로 검증한다.
         assert.strictEqual(result.status, 'success');
-        assert.ok(result.latex.includes('A_{4} B^{4}') || result.latex.includes('A_{{4}} B^{{4}}'), `Should contain index 4, got: ${result.latex}`);
+        assert.ok(result.latex.includes('A_{3} B^{3}') || result.latex.includes('A_{{3}} B^{{3}}'), `Should contain index 3, got: ${result.latex}`);
     });
 
     test('Taylor Expansion at non-zero point', async () => {
