@@ -1,4 +1,5 @@
 const esbuild = require("esbuild");
+const packageJson = require("./package.json");
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -37,7 +38,7 @@ async function main() {
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
 		define: {
-			'PACKAGE_VERSION': '"3.2.1"'
+			'PACKAGE_VERSION': JSON.stringify(packageJson.version)
 		},
 		logLevel: 'silent',
 		plugins: [
@@ -53,7 +54,47 @@ async function main() {
 	}
 }
 
-main().catch(e => {
+/**
+ * 웹뷰용 Three.js 3D 플롯 렌더러 번들 (Phase 0.2)
+ *
+ * - 엔트리: src/ui/plot3d/index.ts (웹뷰 inline 스크립트가 아니라 별도 IIFE 번들로 로드)
+ * - `three` 는 번들에 포함 (외부 아님) — CDN 없이 완전 오프라인, CSP 원격 origin 불필요.
+ * - importmap 대신 단일 파일 + `webview.asWebviewUri()` 로 로드 (경로 단순화).
+ * - 산출물: dist/webview/plot3d.js (esbuild 트리셰이킹, three r170 ≈ 128-166KB gz)
+ */
+async function buildWebview() {
+	const ctx = await esbuild.context({
+		entryPoints: [
+			'src/ui/plot3d/index.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outfile: 'dist/webview/plot3d.js',
+		define: {
+			'process.env.NODE_ENV': production ? '"production"' : '"development"'
+		},
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+		],
+	});
+	if (watch) {
+		await ctx.watch();
+	} else {
+		await ctx.rebuild();
+		await ctx.dispose();
+	}
+}
+
+async function run() {
+	await Promise.all([main(), buildWebview()]);
+}
+
+run().catch(e => {
 	console.error(e);
 	process.exit(1);
 });

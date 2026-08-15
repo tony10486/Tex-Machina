@@ -21,4 +21,4 @@ test_formulas.json
 to-do_list.md
 python_backend/__pycache__/**
 python_backend/requirements.txt (already in README, but maybe keep it in package?)
-fix
+fixdemo/**

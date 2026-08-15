@@ -76,7 +76,7 @@
             "simplifyResult": {
               "type": "boolean",
               "default": true,
-              "description": "\uacc4\uc0b0 \uacb0\uacfc\ub97c \ud56d\uc0c1 \uc790\ub3d9\uc73c\ub85c \ub2e8\uc21c\ud654(Simplify)\ud560\uc9c0 \uc5ec\ubd80"
+              "description": "계산 결과를 항상 자동으로 단순화(Simplify)할지 여부"
             },
             "defaultDomain": {
               "type": "string",
@@ -85,17 +85,17 @@
                 "complex"
               ],
               "default": "real",
-              "description": "\ubcc0\uc218\uc758 \uae30\ubcf8 \ub3c4\uba54\uc778 \uc124\uc815 (\uc2e4\uc218 \ub610\ub294 \ubcf5\uc18c\uc218). \ubcf5\uc18c\uc218 \uc124\uc815 \uc2dc \ub85c\uadf8\ub098 \uac70\ub4ed\uc81c\uacf1 \uacc4\uc0b0 \ubc29\uc2dd\uc774 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+              "description": "변수의 기본 도메인 설정 (실수 또는 복소수). 복소수 설정 시 로그나 거듭제곱 계산 방식이 달라질 수 있습니다."
             },
             "rationalNotation": {
               "type": "boolean",
               "default": true,
-              "description": "\uacb0\uacfc\ub97c \uac00\ub2a5\ud55c \uacbd\uc6b0 \ubd84\uc218(Rational) \ud615\ud0dc\ub85c \uc720\uc9c0\ud560\uc9c0 \uc5ec\ubd80. \ube44\ud65c\uc131\ud654 \uc2dc \uc18c\uc218\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+              "description": "결과를 가능한 경우 분수(Rational) 형태로 유지할지 여부. 비활성화 시 소수로 변환됩니다."
             },
             "autoFactor": {
               "type": "boolean",
               "default": false,
-              "description": "\uacc4\uc0b0 \ud6c4 \uacb0\uacfc\ub97c \uc790\ub3d9\uc73c\ub85c \uc778\uc218\ubd84\ud574(Factor)\ud558\uc5ec \ud45c\uc2dc\ud560\uc9c0 \uc5ec\ubd80"
+              "description": "계산 후 결과를 자동으로 인수분해(Factor)하여 표시할지 여부"
             }
           },
           "default": {
@@ -115,24 +115,24 @@
           "default": 500,
           "minimum": 10,
           "maximum": 5000,
-          "description": "2D PGFPlots .dat \ud30c\uc77c \uc0dd\uc131 \uc2dc \uacc4\uc0b0\ud560 \uc810\uc758 \uac1c\uc218 (\ubc00\ub3c4)"
+          "description": "2D PGFPlots .dat 파일 생성 시 계산할 점의 개수 (밀도)"
         },
         "tex-machina.plot.yMultiplier": {
           "type": "number",
           "default": 5,
           "minimum": 1,
           "maximum": 50,
-          "description": "2D \uadf8\ub798\ud504 \ub370\uc774\ud130(.dat) \uc0dd\uc131 \uc2dc y\ucd95 \ud45c\uc2dc \ubc94\uc704\ub97c \ub118\uc5b4\uc11c \uacc4\uc0b0\ud560 \ubc30\uc218 (Clipping Limit)"
+          "description": "2D 그래프 데이터(.dat) 생성 시 y축 표시 범위를 넘어서 계산할 배수 (Clipping Limit)"
         },
         "tex-machina.plot.lineColor": {
           "type": "string",
           "default": "blue",
-          "description": "2D PGFPlots \uadf8\ub798\ud504\uc758 \uae30\ubcf8 \uc120 \uc0c9\uc0c1 (\uc608: blue, red, black, cyan!50!blue)"
+          "description": "2D PGFPlots 그래프의 기본 선 색상 (예: blue, red, black, cyan!50!blue)"
         },
         "tex-machina.autoBracing.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\uc2a4\ub9c8\ud2b8 \ucca8\uc790 \uc790\ub3d9 \uad04\ud638 (Auto-bracing for Sub/Superscripts) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. _\ub098 ^ \ub4a4\uc5d0 \ub450 \uae00\uc790 \uc774\uc0c1 \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c {}\ub85c \ubb36\uc5b4\uc90d\ub2c8\ub2e4."
+          "description": "스마트 첨자 자동 괄호 (Auto-bracing for Sub/Superscripts) 기능을 활성화합니다. _나 ^ 뒤에 두 글자 이상 입력 시 자동으로 {}로 묶어줍니다."
         },
         "tex-machina.autoBracing.escapeExponents": {
           "type": "array",
@@ -142,7 +142,7 @@
           "default": [
             "-1"
           ],
-          "description": "\uc911\uad04\ud638 \uc790\ub3d9 \uc644\uc131 \uc2dc \ucee4\uc11c\ub97c \ubc16\uc73c\ub85c \uc774\ub3d9\uc2dc\ud0ac \uc9c0\uc218(exponent) \ubaa9\ub85d\uc785\ub2c8\ub2e4. (\uc608: ['-1', '2'])"
+          "description": "중괄호 자동 완성 시 커서를 밖으로 이동시킬 지수(exponent) 목록입니다. (예: ['-1', '2'])"
         },
         "tex-machina.autoLeftRight.enabled": {
           "type": "boolean",
@@ -152,7 +152,7 @@
         "tex-machina.autoMathWrap.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\uc218\uc2dd \ubaa8\ub4dc \uc790\ub3d9 \uc804\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \uc77c\ubc18 \ud14d\uc2a4\ud2b8 \ubaa8\ub4dc\uc5d0\uc11c \\alpha\ub098 \\sum \uac19\uc740 \uc218\ud559 \uc804\uc6a9 \ub9e4\ud06c\ub85c\ub97c \ud0c0\uc774\ud551\ud558\uba74 \uc790\ub3d9\uc73c\ub85c $ $\ub97c \uc50c\uc6cc\uc90d\ub2c8\ub2e4."
+          "description": "수식 모드 자동 전환 기능을 활성화합니다. 일반 텍스트 모드에서 \\alpha나 \\sum 같은 수학 전용 매크로를 타이핑하면 자동으로 $ $를 씌워줍니다."
         },
         "tex-machina.fractionShorthand.enabled": {
           "type": "boolean",
@@ -167,17 +167,17 @@
         "tex-machina.markdownLatex.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\ub9c8\ud06c\ub2e4\uc6b4 \uc2a4\ud0c0\uc77c \uc790\ub3d9 \ubcc0\ud658 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. **\ud14d\uc2a4\ud2b8** + \uc2a4\ud398\uc774\uc2a4\ub294 \\textbf{\ud14d\uc2a4\ud2b8}\ub85c, - + \uc2a4\ud398\uc774\uc2a4\ub294 itemize \ud658\uacbd\uc73c\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+          "description": "마크다운 스타일 자동 변환 기능을 활성화합니다. **텍스트** + 스페이스는 \\textbf{텍스트}로, - + 스페이스는 itemize 환경으로 변환됩니다."
         },
         "tex-machina.smartQuotes.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "LaTeX \uc2a4\ub9c8\ud2b8 \ub530\uc634\ud45c \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \" \ud0a4\ub97c \ub204\ub974\uba74 \uc0c1\ud669\uc5d0 \ub9de\uac8c `` \ub610\ub294 ''\ub85c \ubcc0\ud658\ub429\ub2c8\ub2e4."
+          "description": "LaTeX 스마트 따옴표 기능을 활성화합니다. \" 키를 누르면 상황에 맞게 `` 또는 ''로 변환됩니다."
         },
         "tex-machina.ellipsis.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "... \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c LaTeX \ub9d0\uc904\uc784\ud45c \ub9e4\ud06c\ub85c\ub85c \ubcc0\ud658\ud558\ub294 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4."
+          "description": "... 입력 시 자동으로 LaTeX 말줄임표 매크로로 변환하는 기능을 활성화합니다."
         },
         "tex-machina.ellipsis.macro": {
           "type": "string",
@@ -186,17 +186,17 @@
             "\\cdots"
           ],
           "default": "\\dots",
-          "description": "... \uc785\ub825 \uc2dc \ubcc0\ud658\ud560 LaTeX \ub9e4\ud06c\ub85c\ub97c \uc120\ud0dd\ud569\ub2c8\ub2e4."
+          "description": "... 입력 시 변환할 LaTeX 매크로를 선택합니다."
         },
         "tex-machina.mathNav.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "\uc218\uc2dd \uacc4\uce35\ubcc4 \uc810\ud504 \ubaa8\ub4dc (Math Navigation Mode) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. \ud65c\uc131\ud654 \uc2dc Alt+\ubc29\ud5a5\ud0a4\ub85c \uc218\uc2dd \ub0b4 \uc8fc\uc694 \uc2ac\ub86f \uc0ac\uc774\ub97c \uc810\ud504\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+          "description": "수식 계층별 점프 모드 (Math Navigation Mode) 기능을 활성화합니다. 활성화 시 Alt+방향키로 수식 내 주요 슬롯 사이를 점프할 수 있습니다."
         },
         "tex-machina.implicitSubscripts.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "\uc554\uc2dc\uc801 \ucca8\uc790 \ubcc0\ud658 (Implicit Subscripts) \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. x1 \uc785\ub825 \uc2dc \uc790\ub3d9\uc73c\ub85c x_1\ub85c \ubcc0\ud658\ud569\ub2c8\ub2e4."
+          "description": "암시적 첨자 변환 (Implicit Subscripts) 기능을 활성화합니다. x1 입력 시 자동으로 x_1로 변환합니다."
         },
         "tex-machina.smartNewline.enabled": {
           "type": "boolean",
@@ -248,7 +248,12 @@
         },
         "tex-machina.mathAutoCalc.defaultOperation": {
           "type": "string",
-          "enum": ["auto", "expand", "simplify", "evaluate"],
+          "enum": [
+            "auto",
+            "expand",
+            "simplify",
+            "evaluate"
+          ],
           "default": "auto",
           "description": "=.. 자동 계산 시 사용할 기본 SymPy 연산입니다. 'auto'는 수식 내용에 따라 자동으로 최적의 연산을 선택합니다."
         },
@@ -260,12 +265,12 @@
         "tex-machina.mathRefactor.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "\uc218\ud559 \ubcc0\uc218 \uc790\ub3d9 \uba40\ud2f0 \ucee4\uc11c \ub9ac\ud329\ud1a0\ub9c1 \uae30\ub2a5\uc744 \ud65c\uc131\ud654\ud569\ub2c8\ub2e4. Toggle Mode\uac00 \ud65c\uc131\ud654\ub41c \uc0c1\ud0dc\uc5d0\uc11c \ubcc0\uc218\ub97c \uc120\ud0dd\ud558\uba74 \uc218\uc2dd \ub0b4 \ubaa8\ub4e0 \ub3d9\uc77c \ubcc0\uc218\uac00 \ud568\uaed8 \uc120\ud0dd\ub429\ub2c8\ub2e4."
+          "description": "수학 변수 자동 멀티 커서 리팩토링 기능을 활성화합니다. Toggle Mode가 활성화된 상태에서 변수를 선택하면 수식 내 모든 동일 변수가 함께 선택됩니다."
         },
         "tex-machina.mathNav.selectContent.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "\uc218\uc2dd \uc810\ud504 \uc2dc \uc2ac\ub86f(\uad04\ud638) \ub0b4 \ub0b4\uc6a9\uc774 \uc788\ub2e4\uba74 \uc790\ub3d9\uc73c\ub85c \uc120\ud0dd(Selection)\ud569\ub2c8\ub2e4."
+          "description": "수식 점프 시 슬롯(괄호) 내 내용이 있다면 자동으로 선택(Selection)합니다."
         },
         "tex-machina.mathNav.jumpSymbols": {
           "type": "array",
@@ -286,7 +291,7 @@
             ";",
             ":"
           ],
-          "description": "\uc218\uc2dd \uc810\ud504 \uc2dc \uba48\ucd9c \uae30\ud638(\uc5f0\uc0b0\uc790, \uad6c\ubd84\uc790 \ub4f1)\ub4e4\uc758 \ubaa9\ub85d\uc785\ub2c8\ub2e4."
+          "description": "수식 점프 시 멈출 기호(연산자, 구분자 등)들의 목록입니다."
         },
         "tex-machina.mathNav.selectBrackets": {
           "type": "array",
@@ -298,7 +303,7 @@
             "[]",
             "()"
           ],
-          "description": "\uc790\ub3d9 \uc120\ud0dd(Auto-selection)\uc744 \uc801\uc6a9\ud560 \uad04\ud638 \uc30d \ubaa9\ub85d\uc785\ub2c8\ub2e4. (\uc608: '{}')"
+          "description": "자동 선택(Auto-selection)을 적용할 괄호 쌍 목록입니다. (예: '{}')"
         },
         "tex-machina.mathNav.skipCommands": {
           "type": "array",
@@ -324,7 +329,7 @@
             "\\log",
             "\\ln"
           ],
-          "description": "\uc810\ud504 \uc2dc \uba85\ub839\uc5b4\ub97c \uac74\ub108\ub6f0\uace0 \ubc14\ub85c \ub0b4\ubd80 \uc778\uc790\ub85c \uc774\ub3d9\ud560 LaTeX \uba85\ub839\uc5b4 \ubaa9\ub85d\uc785\ub2c8\ub2e4."
+          "description": "점프 시 명령어를 건너뛰고 바로 내부 인자로 이동할 LaTeX 명령어 목록입니다."
         },
         "tex-machina.mathNav.boundaryBehavior": {
           "type": "string",
@@ -334,12 +339,12 @@
             "both"
           ],
           "default": "both",
-          "description": "\uae30\ud638 \uc8fc\ubcc0\uc5d0\uc11c \uba48\ucd9c \uc704\uce58\ub97c \uc124\uc815\ud569\ub2c8\ub2e4. (before: \uae30\ud638 \uc55e, after: \uae30\ud638 \ub4a4, both: \uc591\ucabd \ubaa8\ub450)"
+          "description": "기호 주변에서 멈출 위치를 설정합니다. (before: 기호 앞, after: 기호 뒤, both: 양쪽 모두)"
         },
         "tex-machina.splitMath.atPlus": {
           "type": "boolean",
           "default": false,
-          "description": "\uc218\uc2dd \uc790\ub3d9 \ubd84\ud560 \uc2dc \ub4f1\ud638(=) \ubfd0\ub9cc \uc544\ub2c8\ub77c \ub367\uc148/\ube84\uc148(+, -) \uae30\ud638\uc5d0\uc11c\ub3c4 \uc904\ubc14\uafc8\uc744 \ud5c8\uc6a9\ud569\ub2c8\ub2e4."
+          "description": "수식 자동 분할 시 등호(=) 뿐만 아니라 덧셈/뺄셈(+, -) 기호에서도 줄바꿈을 허용합니다."
         },
         "tex-machina.cli.chainDelimiter": {
           "type": "string",
@@ -350,17 +355,17 @@
             "&"
           ],
           "default": "&&",
-          "description": "\uba85\ub839\uc5b4 \uccb4\uc774\ub2dd\uc744 \uc704\ud55c \uad6c\ubd84\uc790\ub97c \uc124\uc815\ud569\ub2c8\ub2e4. (\uae30\ubcf8\uac12: &&)"
+          "description": "명령어 체이닝을 위한 구분자를 설정합니다. (기본값: &&)"
         },
         "tex-machina.labelVisualization.settings": {
           "type": "object",
-          "title": "\ub77c\ubca8 \uc2dc\uac01\ud654 \uc124\uc815",
-          "description": "\ub77c\ubca8 \ub514\ud39c\ub358\uc2dc \uc2dc\uac01\ud654 \uadf8\ub798\ud504\uc758 \ubb3c\ub9ac \uc5d4\uc9c4 \ubc0f \ub178\ub4dc \uc2a4\ud0c0\uc77c\uc744 \uc124\uc815\ud569\ub2c8\ub2e4.",
+          "title": "라벨 시각화 설정",
+          "description": "라벨 디펜던시 시각화 그래프의 물리 엔진 및 노드 스타일을 설정합니다.",
           "properties": {
             "physicsEnabled": {
               "type": "boolean",
               "default": true,
-              "description": "\ubb3c\ub9ac \uc5d4\uc9c4 \uc560\ub2c8\uba54\uc774\uc158 \ud65c\uc131\ud654 \uc5ec\ubd80"
+              "description": "물리 엔진 애니메이션 활성화 여부"
             },
             "solver": {
               "type": "string",
@@ -371,39 +376,39 @@
                 "hierarchicalRepulsion"
               ],
               "default": "forceAtlas2Based",
-              "description": "\ubb3c\ub9ac \uc5d4\uc9c4 \uc194\ubc84"
+              "description": "물리 엔진 솔버"
             },
             "gravitationalConstant": {
               "type": "number",
               "default": -80,
-              "description": "\uc911\ub825 \uc0c1\uc218 (\ucc99\ub825 \uac15\ub3c4)"
+              "description": "중력 상수 (척력 강도)"
             },
             "springLength": {
               "type": "number",
               "default": 80,
-              "description": "\ub178\ub4dc \uac04 \uae30\ubcf8 \uac70\ub9ac (\uc2a4\ud504\ub9c1 \uae38\uc774)"
+              "description": "노드 간 기본 거리 (스프링 길이)"
             },
             "springConstant": {
               "type": "number",
               "default": 0.04,
-              "description": "\uc2a4\ud504\ub9c1 \uac15\uc131"
+              "description": "스프링 강성"
             },
             "avoidOverlap": {
               "type": "number",
               "default": 1,
               "minimum": 0,
               "maximum": 1,
-              "description": "\ub178\ub4dc \uacb9\uce68 \ubc29\uc9c0 \uac15\ub3c4"
+              "description": "노드 겹침 방지 강도"
             },
             "stabilizationIterations": {
               "type": "integer",
               "default": 150,
-              "description": "\ucd08\uae30 \uc548\uc815\ud654 \ubc18\ubcf5 \ud69f\uc218"
+              "description": "초기 안정화 반복 횟수"
             },
             "baseSize": {
               "type": "number",
               "default": 12,
-              "description": "\ub178\ub4dc\uc758 \uae30\ubcf8 \ud06c\uae30"
+              "description": "노드의 기본 크기"
             },
             "stabilizationFinish": {
               "type": "string",
@@ -413,7 +418,7 @@
                 "disablePhysics"
               ],
               "default": "none",
-              "description": "\uc548\uc815\ud654 \uc885\ub8cc \ud6c4 \ucc98\ub9ac \ubc29\uc2dd"
+              "description": "안정화 종료 후 처리 방식"
             }
           },
           "default": {
@@ -433,17 +438,17 @@
           "default": 10,
           "minimum": 1,
           "maximum": 3600,
-          "description": "\ud1a0\uae00 \ubaa8\ub4dc\uac00 \ud65c\uc131\ud654\ub418\uc5b4 \uc720\uc9c0\ub418\ub294 \uc2dc\uac04(\ucd08)\uc785\ub2c8\ub2e4."
+          "description": "토글 모드가 활성화되어 유지되는 시간(초)입니다."
         },
         "tex-machina.toggle.changeStatusBarColor": {
           "type": "boolean",
           "default": true,
-          "description": "\ud1a0\uae00 \ubaa8\ub4dc\uac00 \ud65c\uc131\ud654\ub418\uc5c8\uc744 \ub54c VS Code\uc758 \uc0c1\ud0dc \ud45c\uc2dc\uc904(Status Bar) \ubc30\uacbd\uc0c9\uc744 \ucd08\ub85d\uc0c9\uc73c\ub85c \ubcc0\uacbd\ud560\uc9c0 \uc5ec\ubd80\uc785\ub2c8\ub2e4."
+          "description": "토글 모드가 활성화되었을 때 VS Code의 상태 표시줄(Status Bar) 배경색을 초록색으로 변경할지 여부입니다."
         },
         "tex-machina.toggle.profiles": {
           "type": "array",
-          "title": "\ud1a0\uae00 \ud504\ub85c\ud544 \uc124\uc815",
-          "description": "\uac01 \ud504\ub85c\ud544 \ubc88\ud638(0-9)\ubcc4\ub85c \ud65c\uc131\ud654\ud560 \uae30\ub2a5 \ubaa9\ub85d\uc744 \uc124\uc815\ud569\ub2c8\ub2e4. (Settings JSON\uc5d0\uc11c \uc9c1\uc811 \uc218\uc815\ud558\ub294 \uac83\uc744 \uad8c\uc7a5\ud569\ub2c8\ub2e4)",
+          "title": "토글 프로필 설정",
+          "description": "각 프로필 번호(0-9)별로 활성화할 기능 목록을 설정합니다. (Settings JSON에서 직접 수정하는 것을 권장합니다)",
           "items": {
             "type": "object",
             "properties": {
@@ -461,7 +466,7 @@
                   9,
                   0
                 ],
-                "description": "\ud504\ub85c\ud544 \ubc88\ud638"
+                "description": "프로필 번호"
               },
               "features": {
                 "type": "array",
@@ -530,7 +535,11 @@
           "items": {
             "type": "string"
           },
-          "default": ["$", "\\[", "equation"],
+          "default": [
+            "$",
+            "\\[",
+            "equation"
+          ],
           "description": "수식 모드 전환(Math Mode Toggle) 시 순환할 환경의 순서를 설정합니다. (예: '$', '\\[', 'equation', 'align', 'gather', 'equation*' 등)"
         },
         "tex-machina.pasteExternalData.enabled": {
@@ -545,7 +554,11 @@
         },
         "tex-machina.pasteExternalData.defaultMode": {
           "type": "string",
-          "enum": ["auto", "matrix", "tabular"],
+          "enum": [
+            "auto",
+            "matrix",
+            "tabular"
+          ],
           "default": "auto",
           "description": "붙여넣기 시 기본 모드. 'auto'는 커서 위치의 수식 환경을 감지합니다."
         },
@@ -556,19 +569,34 @@
         },
         "tex-machina.pasteExternalData.matrixType": {
           "type": "string",
-          "enum": ["pmatrix", "bmatrix", "vmatrix", "Vmatrix", "Bmatrix", "matrix"],
+          "enum": [
+            "pmatrix",
+            "bmatrix",
+            "vmatrix",
+            "Vmatrix",
+            "Bmatrix",
+            "matrix"
+          ],
           "default": "bmatrix",
           "description": "Matrix 모드에서 사용할 기본 행렬 환경."
         },
         "tex-machina.pasteExternalData.tabularStyle": {
           "type": "string",
-          "enum": ["array", "booktabs"],
+          "enum": [
+            "array",
+            "booktabs"
+          ],
           "default": "array",
           "description": "Tabular 모드에서 사용할 기본 스타일."
         },
         "tex-machina.pasteExternalData.alignmentMode": {
           "type": "string",
-          "enum": ["auto", "allCenter", "allLeft", "allRight"],
+          "enum": [
+            "auto",
+            "allCenter",
+            "allLeft",
+            "allRight"
+          ],
           "default": "auto",
           "description": "열 정렬 방식. 'auto'는 데이터 타입에 따라 자동 감지합니다."
         },
@@ -579,13 +607,21 @@
         },
         "tex-machina.pasteExternalData.hasHeader": {
           "type": "string",
-          "enum": ["auto", "true", "false"],
+          "enum": [
+            "auto",
+            "true",
+            "false"
+          ],
           "default": "auto",
           "description": "첫 행을 헤더로 간주할지 여부. 'auto'는 첫 행이 텍스트일 때 자동 감지."
         },
         "tex-machina.pasteExternalData.escapeMode": {
           "type": "string",
-          "enum": ["smart", "all", "none"],
+          "enum": [
+            "smart",
+            "all",
+            "none"
+          ],
           "default": "smart",
           "description": "특수 문자 이스케이프 방식. 'smart'는 LaTeX 명령어(\\...)는 보존합니다."
         },
@@ -626,7 +662,9 @@
         },
         "tex-machina.pasteExternalData.customDelimiters": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "사용자 정의 구분자 목록입니다. 정규식(예: \\|)도 사용 가능합니다. 클립보드 데이터에 포함된 경우 자동 인식 후보에 포함됩니다."
         },
@@ -652,7 +690,10 @@
         },
         "tex-machina.structureWrap.titleBehavior": {
           "type": "string",
-          "enum": ["none", "cursor"],
+          "enum": [
+            "none",
+            "cursor"
+          ],
           "default": "none",
           "description": "Title argument behavior for environment wrapping. 'none': no title argument. 'cursor': add empty title brackets and place cursor inside."
         },
@@ -827,12 +868,30 @@
         "command": "tex-machina.wrapStructure",
         "title": "LaTeX: Wrap with Environment"
       },
-      { "command": "tex-machina.snippets.insert", "title": "LaTeX: Insert Snippet" },
-      { "command": "tex-machina.snippets.create", "title": "LaTeX: Create Snippet" },
-      { "command": "tex-machina.snippets.edit", "title": "LaTeX: Edit Snippet" },
-      { "command": "tex-machina.snippets.delete", "title": "LaTeX: Delete Snippet" },
-      { "command": "tex-machina.snippets.export", "title": "LaTeX: Export Snippets" },
-      { "command": "tex-machina.snippets.import", "title": "LaTeX: Import Snippets" }
+      {
+        "command": "tex-machina.snippets.insert",
+        "title": "LaTeX: Insert Snippet"
+      },
+      {
+        "command": "tex-machina.snippets.create",
+        "title": "LaTeX: Create Snippet"
+      },
+      {
+        "command": "tex-machina.snippets.edit",
+        "title": "LaTeX: Edit Snippet"
+      },
+      {
+        "command": "tex-machina.snippets.delete",
+        "title": "LaTeX: Delete Snippet"
+      },
+      {
+        "command": "tex-machina.snippets.export",
+        "title": "LaTeX: Export Snippets"
+      },
+      {
+        "command": "tex-machina.snippets.import",
+        "title": "LaTeX: Import Snippets"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -1074,10 +1133,12 @@
     "test:webview": "vscode-test --run out/test/webview.test.js",
     "test:perf": "vscode-test --run out/test/performance.test.js out/test/extreme.test.js",
     "test:calc": "vscode-test --run out/test/calc_engine_high_difficulty.test.js out/test/calc_engine_extreme.test.js",
-    "test:only": "vscode-test --run"
+    "test:only": "vscode-test --run",
+    "test:python-gates": "cd python_backend && python3 -m unittest discover -s tests -p \"test_levelset.py\""
   },
   "dependencies": {
-    "mathjax-full": "^3.2.1"
+    "mathjax-full": "^3.2.1",
+    "three": "0.170.0"
   },
   "devDependencies": {
     "@types/vscode": "^1.109.0",
@@ -1089,6 +1150,7 @@
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "@types/three": "^0.170.0"
   }
 }

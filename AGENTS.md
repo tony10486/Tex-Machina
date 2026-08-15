@@ -46,8 +46,6 @@ src/
 python_backend/
 ├── server.py                 # ★ stdio 서버 메인 루프 (한 줄 = JSON 요청/응답)
 ├── calc_engine.py            # ★ 수학 연산 엔진 (execute_calc, get_calc_operations) — 1305줄
-├── query_parser.py           # ★ TeX-Machina 쿼리 DSL 파서 (lexer+parser) — 315줄
-├── query_engine.py           # 쿼리 DSL 실행기 (LaTeX 문서 변환 질의)
 ├── plot_engine.py            # 플롯 생성 (pgfplots 코드 + .dat 데이터 파일) — 791줄
 ├── matrix.py                 # 행렬 생성/분석
 ├── cite_engine.py            # 논문 인용 (arXiv/DOI/Crossref/SemanticScholar)
@@ -107,7 +105,7 @@ out/                          # tsc 컴파일 결과 (테스트용) — 커밋�
 ```
 
 - 성공 시 거의 항상 `latex` 키에 결과 LaTeX 문자열이 들어간다.
-- 일부 명령은 `analysis`, `nodes`/`edges`(라벨), `fullText`(쿼리) 등 추가 키 사용.
+- 일부 명령은 `analysis`, `nodes`/`edges`(라벨) 등 추가 키 사용.
 - `server.py`의 루프는 **요청을 순차 처리**하며, 예외 발생 시 `{"status":"error","message":"Server Error: ..."}` 반환.
 
 ### 명령어 파싱 체인 (TS → Python)
@@ -130,14 +128,6 @@ cmd1 && cmd2             → splitChain으로 분리 후 순차 실행 (executeC
 - 실제 연산 디스패치 테이블은 `get_calc_operations()` — ~40개 연산자(calc, simplify, diff, int, ode, laplace, matrix, plot, cite, oeis, dimcheck, error_prop, tensor_expand ...).
 - LaTeX → SymPy 변환은 `sympy.parsing.latex.parse_latex` (공식 파서) 사용.
 - 속도 최적화: `run_fast_op()` 이 symengine으로 diff/expand/simplify/det를 시도하고 실패하면 SymPy 폴백.
-
-### 쿼리 DSL (`python_backend/query_parser.py`, `query_engine.py`)
-
-`?`/`;` 접두어 + LaTeX 문서 구조를 질의/변형하는 전용 DSL이 있다 (mainCommand `"?"`).
-`find/exchange/move/duplicate/delete/insert/extract` 명령, 태그(`#tag`/`@tag`), 변환 연산자
-(`>>`, `:=`, `+=`, `-=`, `<->` 등), 조건절(`where/without/has`), `order by`, loop 등.
-문서 수정은 `execute_query_on_text(full_text, query_str)` → `{"status":"success","fullText":...}`.
-이 DSL을 수정할 때는 `query_parser.py`(lexer/parser)와 `query_engine.py`(실행기)를 함께 봐야 한다.
 
 ---
 
@@ -220,7 +210,6 @@ npm run test:only -- out/test/파일.test.js   # 특정 테스트만
 | `src/core/latexParser.ts` | 여러 모듈(implicitSubscripts, mathRefactor 등)이 공유하는 파서. 변경 시 회귀 위험 큼 — 관련 테스트 반드시 실행. |
 | `src/ui/webviewProvider.ts` | 웹뷰 HTML은 inline JS로 구성. `enableScripts: true`. 웹뷰 메시지 → 커맨드 브리지 패턴. 보안상 웹뷰로부터 받은 내용을 `vscode.commands`에 그대로 전달하는 패턴 주의. |
 | `python_backend/calc_engine.py` | 가장 크고 복잡. `get_calc_operations()` 디스패치 테이블이 사실상의 API 명세. 연산 추가 시 여기 + QuickPick 명령 라이브러리(`extension.ts`의 `commandLib`) + README를 함께 갱신할 것. |
-| `python_backend/query_parser.py` | 휴리스틱 lexer(정규식 기반) + hand-written parser. 토큰/연산자 추가 시 `MUTATION_OPS`, `ops` 리스트, `patterns`를 모두 손봐야 한다. |
 | `python_backend/plot_engine.py` | `sympy_to_pgfplots_str`, 특이점 감지, .dat 파일 생성(`workspaceDir`에 저장). plot 명령은 선택 영역 대신 `workspaceDir`의 데이터 파일을 참조하는 TikZ 코드를 만들 수 있다. |
 | `python_backend/server.py` | Python 3.12+ 호환용 `typing.io` shim을 main() 위에 주입한다. 새 진입점/새 서버를 만들지 말고 이 파일을 그대로 유지하라. |
 
